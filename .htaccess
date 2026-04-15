@@ -1,0 +1,86 @@
+# ==========================================================================
+# Laravel on shared hosting — root .htaccess
+# Routes all traffic to /public while blocking access to framework internals.
+# ==========================================================================
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Send everything to /public
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# --------------------------------------------------------------------------
+# Block access to sensitive files and directories
+# --------------------------------------------------------------------------
+
+# Disable directory listing
+Options -Indexes
+
+# Block dotfiles (.env, .git, .htaccess siblings, etc.)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Block common sensitive files
+<FilesMatch "(?i)^(\.env.*|composer\.(json|lock)|package(-lock)?\.json|yarn\.lock|artisan|phpunit\.xml|README\.md|LICENSE|Dockerfile.*|docker-compose\.yml|webpack\.mix\.js|vite\.config\..*)$">
+    Require all denied
+</FilesMatch>
+
+# Block access to framework directories at root level
+# Note: /storage URLs are NOT blocked — Laravel serves public uploads
+# (avatars, logos, attachments) via the public/storage symlink.
+RedirectMatch 404 /\.git(/|$)
+RedirectMatch 404 /app(/|$)
+RedirectMatch 404 /bootstrap(/|$)
+RedirectMatch 404 /config(/|$)
+RedirectMatch 404 /database(/|$)
+RedirectMatch 404 /resources(/|$)
+RedirectMatch 404 /routes(/|$)
+RedirectMatch 404 /tests(/|$)
+RedirectMatch 404 /vendor(/|$)
+RedirectMatch 404 /node_modules(/|$)
+
+# Block PHP execution in upload/storage directories (belt and braces)
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7|phar)$">
+    <If "%{REQUEST_URI} =~ m#^/(storage|bootstrap/cache|vendor)/#">
+        Require all denied
+    </If>
+</FilesMatch>
+
+# --------------------------------------------------------------------------
+# Security headers
+# --------------------------------------------------------------------------
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" "expr=%{HTTPS} == 'on'"
+    Header always set X-XSS-Protection "1; mode=block"
+
+    # Remove server banner leaks
+    Header unset X-Powered-By
+    Header unset Server
+</IfModule>
+
+# Hide PHP version
+<IfModule mod_php.c>
+    php_flag expose_php off
+</IfModule>
+
+# --------------------------------------------------------------------------
+# Disable HTTP methods we don't use
+# --------------------------------------------------------------------------
+<LimitExcept GET POST HEAD PUT PATCH DELETE OPTIONS>
+    Require all denied
+</LimitExcept>
+
+# --------------------------------------------------------------------------
+# Compression
+# --------------------------------------------------------------------------
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript
+    AddOutputFilterByType DEFLATE application/javascript application/json application/xml
+    AddOutputFilterByType DEFLATE image/svg+xml application/font-woff application/font-woff2
+</IfModule>
