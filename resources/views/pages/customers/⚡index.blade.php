@@ -73,7 +73,7 @@ new #[Title('Customers')] class extends Component {
                 @endunless
             </x-ui.empty-state>
         @else
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto" x-data="tableNav">
                 <table class="w-full text-sm">
                     <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                         <tr>
@@ -85,7 +85,14 @@ new #[Title('Customers')] class extends Component {
                     </thead>
                     <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                         @foreach($this->customers as $customer)
-                            <tr class="transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5">
+                            <tr
+                                data-row-index="{{ $loop->index }}"
+                                data-view-url="{{ route('customers.show', $customer) }}"
+                                data-edit-url="{{ route('customers.edit', $customer) }}"
+                                data-delete-modal="delete-customer-{{ $customer->id }}"
+                                class="transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5"
+                                :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
+                            >
                                 <td class="px-6 py-4">
                                     <div class="flex items-center gap-3">
                                         <x-ui.avatar :name="$customer->company_name" size="sm" />

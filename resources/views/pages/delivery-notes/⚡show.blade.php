@@ -22,7 +22,13 @@ new #[Title('Delivery Note')] class extends Component {
     }
 }; ?>
 
-<div class="flex flex-col gap-8">
+<div
+    class="flex flex-col gap-8"
+    x-data="showPageKeys({
+        f8: () => Flux.modal('email-document-{{ $document->id }}').show(),
+        {{ $document->status === \App\Enums\DocumentStatus::Active ? "f7: () => Flux.modal('convert-dn-{$document->id}').show()," : '' }}
+    })"
+>
 
     {{-- Back link --}}
     <div>
@@ -91,6 +97,7 @@ new #[Title('Delivery Note')] class extends Component {
                     @endif
                     <flux:button variant="ghost" icon="envelope" size="sm" x-on:click="$flux.modal('email-document-{{ $document->id }}').show()">
                         Send Email
+                        <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F8</kbd>
                     </flux:button>
                     @if($document->status === DocumentStatus::Active)
                         <flux:button
@@ -100,6 +107,7 @@ new #[Title('Delivery Note')] class extends Component {
                             x-on:click="$flux.modal('convert-dn-{{ $document->id }}').show()"
                         >
                             Convert to Invoice
+                            <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-indigo-300 bg-indigo-50 px-1 py-0.5 text-[10px] font-mono text-indigo-600 dark:border-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">F7</kbd>
                         </flux:button>
                     @endif
                 </div>

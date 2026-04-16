@@ -3,7 +3,7 @@
     <head>
         @include('partials.head')
     </head>
-    <body class="min-h-screen bg-zinc-50 dark:bg-zinc-950 antialiased">
+    <body class="min-h-screen bg-zinc-50 dark:bg-zinc-950 antialiased" data-is-admin="{{ auth()->user()?->isAdmin() ? '1' : '0' }}">
 
         {{-- ===================== MOBILE TOPBAR ===================== --}}
         <header class="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-zinc-200/70 bg-white px-4 dark:border-white/10 dark:bg-zinc-900 lg:hidden">
@@ -34,16 +34,13 @@
                 <span class="text-sm font-semibold tracking-tight text-zinc-900 dark:text-white">DeliveryCRM</span>
             </a>
 
-            <div class="ml-auto flex items-center gap-1">
-                <flux:dropdown>
-                    <flux:button size="sm" variant="primary" icon="plus" icon-trailing="chevron-down">
-                        New
-                    </flux:button>
-                    <flux:menu>
-                        <flux:menu.item icon="users" :href="route('customers.create')" wire:navigate>Customer</flux:menu.item>
-                        <flux:menu.item icon="truck" :href="route('delivery-notes.create')" wire:navigate>Delivery Note</flux:menu.item>
-                    </flux:menu>
-                </flux:dropdown>
+            <div class="ml-auto flex items-center gap-1.5">
+                <flux:button size="sm" variant="primary" icon="plus" :href="route('customers.create')" wire:navigate>
+                    Customer <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1 rounded bg-white/20 px-1 py-0.5 text-[10px] font-mono">F1</kbd>
+                </flux:button>
+                <flux:button size="sm" variant="primary" icon="plus" :href="route('delivery-notes.create')" wire:navigate>
+                    DN <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1 rounded bg-white/20 px-1 py-0.5 text-[10px] font-mono">F2</kbd>
+                </flux:button>
             </div>
         </header>
 
@@ -60,6 +57,7 @@
             >
                 {{-- Backdrop (mobile only) --}}
                 <div
+                    x-cloak
                     x-show="open"
                     x-on:click="open = false"
                     class="fixed inset-0 z-[-1] bg-zinc-950/50 lg:hidden"
@@ -121,7 +119,8 @@
                                     ])
                                 >
                                     <flux:icon.home class="size-5 shrink-0" />
-                                    Dashboard
+                                    <span class="flex-1">Dashboard</span>
+                                    <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-auto rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F3</kbd>
                                 </a>
                             </li>
                             <li>
@@ -135,7 +134,8 @@
                                     ])
                                 >
                                     <flux:icon.users class="size-5 shrink-0" />
-                                    Customers
+                                    <span class="flex-1">Customers</span>
+                                    <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-auto rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F4</kbd>
                                 </a>
                             </li>
                             <li>
@@ -149,7 +149,8 @@
                                     ])
                                 >
                                     <flux:icon.truck class="size-5 shrink-0" />
-                                    Delivery Notes
+                                    <span class="flex-1">Delivery Notes</span>
+                                    <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-auto rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F5</kbd>
                                 </a>
                             </li>
                             <li>
@@ -163,7 +164,8 @@
                                     ])
                                 >
                                     <flux:icon.document-text class="size-5 shrink-0" />
-                                    Invoices
+                                    <span class="flex-1">Invoices</span>
+                                    <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-auto rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F6</kbd>
                                 </a>
                             </li>
                         </ul>
@@ -260,7 +262,8 @@
                                         ])
                                     >
                                         <flux:icon.cog-6-tooth class="size-5 shrink-0" />
-                                        CRM Settings
+                                        <span class="flex-1">CRM Settings</span>
+                                        <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-auto rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F11</kbd>
                                     </a>
                                 </li>
                             </ul>
@@ -345,16 +348,13 @@
                             />
                         </div>
 
-                        {{-- + New dropdown --}}
-                        <flux:dropdown>
-                            <flux:button size="sm" variant="primary" icon="plus" icon-trailing="chevron-down" class="rounded-lg">
-                                New
-                            </flux:button>
-                            <flux:menu>
-                                <flux:menu.item icon="users" :href="route('customers.create')" wire:navigate>Customer</flux:menu.item>
-                                <flux:menu.item icon="truck" :href="route('delivery-notes.create')" wire:navigate>Delivery Note</flux:menu.item>
-                            </flux:menu>
-                        </flux:dropdown>
+                        {{-- + New actions --}}
+                        <flux:button size="sm" variant="primary" icon="plus" :href="route('customers.create')" wire:navigate class="rounded-lg">
+                            Customer <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1 rounded bg-white/20 px-1 py-0.5 text-[10px] font-mono">F1</kbd>
+                        </flux:button>
+                        <flux:button size="sm" variant="primary" icon="plus" :href="route('delivery-notes.create')" wire:navigate class="rounded-lg">
+                            DN <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1 rounded bg-white/20 px-1 py-0.5 text-[10px] font-mono">F2</kbd>
+                        </flux:button>
 
                         {{-- Help --}}
                         <flux:button
@@ -385,8 +385,8 @@
                             </div>
                         @endif
 
-                        {{-- Hotkeys listener --}}
-                        <div x-data="hotkeys"></div>
+                        {{-- Hotkeys store init --}}
+                        <div x-data x-init="Alpine.store('hotkeys').init()"></div>
 
                         {{-- Hotkeys help modal --}}
                         <livewire:pages::hotkeys-help-modal />
@@ -402,6 +402,9 @@
                 <flux:toast />
             </flux:toast.group>
         @endpersist
+
+        {{-- Hidden logout form for F12 shortcut --}}
+        <form id="logout-form" method="POST" action="{{ route('logout') }}" class="hidden">@csrf</form>
 
         @fluxScripts
     </body>

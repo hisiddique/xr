@@ -20,7 +20,7 @@ new #[Title('Invoice')] class extends Component {
     }
 }; ?>
 
-<div class="flex flex-col gap-8">
+<div class="flex flex-col gap-8" x-data="showPageKeys({ f9: () => Flux.modal('email-document-{{ $document->id }}').show() })">
 
     {{-- Back link --}}
     <div>
@@ -84,6 +84,7 @@ new #[Title('Invoice')] class extends Component {
                         x-on:click="$flux.modal('email-document-{{ $document->id }}').show()"
                     >
                         Send Email
+                        <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-indigo-300 bg-indigo-50 px-1 py-0.5 text-[10px] font-mono text-indigo-600 dark:border-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">F9</kbd>
                     </flux:button>
                 </div>
             </div>

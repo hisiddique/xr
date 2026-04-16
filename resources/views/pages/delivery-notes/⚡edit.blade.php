@@ -117,7 +117,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
             <div class="grid gap-4 p-6 md:grid-cols-2">
                 <div>
                     <flux:label>{{ __('Customer') }} <span class="text-rose-500">*</span></flux:label>
-                    <flux:select wire:model.live="customer_id">
+                    <flux:select wire:model="customer_id">
                         <flux:select.option value="">{{ __('— Select customer —') }}</flux:select.option>
                         @foreach($this->customers as $c)
                             <flux:select.option :value="$c->id">{{ $c->company_name }}</flux:select.option>
