@@ -20,7 +20,12 @@ new #[Title('Invoice')] class extends Component {
     }
 }; ?>
 
-<div class="flex flex-col gap-8" x-data="showPageKeys({ f9: () => Flux.modal('email-document-{{ $document->id }}').show() })">
+<div class="flex flex-col gap-8" x-data="showPageKeys({
+    f9: () => Flux.modal('email-document-{{ $document->id }}').show(),
+    edit: () => Livewire.navigate('{{ route('invoices.edit', $document) }}'),
+    viewPdf: () => window.open('{{ route('documents.pdf', $document) }}', '_blank'),
+    downloadPdf: () => window.location.href = '{{ route('documents.pdf.download', $document) }}',
+})">
 
     {{-- Back link --}}
     <div>
@@ -70,12 +75,15 @@ new #[Title('Invoice')] class extends Component {
                 <div class="flex flex-wrap items-center gap-2">
                     <flux:button variant="ghost" icon="pencil" size="sm" :href="route('invoices.edit', $document)" wire:navigate>
                         Edit
+                        <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">e</kbd>
                     </flux:button>
                     <flux:button variant="ghost" icon="arrow-down-tray" size="sm" :href="route('documents.pdf.download', $document)">
                         Download PDF
+                        <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">⇧P</kbd>
                     </flux:button>
                     <flux:button variant="ghost" icon="document" size="sm" :href="route('documents.pdf', $document)" target="_blank">
                         View PDF
+                        <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">p</kbd>
                     </flux:button>
                     <flux:button
                         variant="primary"
@@ -117,14 +125,22 @@ new #[Title('Invoice')] class extends Component {
                         </thead>
                         <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                             @foreach($document->items as $i => $item)
-                                <tr>
-                                    <td class="px-6 py-3.5 text-zinc-400 dark:text-zinc-500">{{ $i + 1 }}</td>
-                                    <td class="px-6 py-3.5 text-zinc-900 dark:text-white">{{ $item->details }}</td>
-                                    <td class="px-6 py-3.5 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">{{ $item->quantity }}</td>
-                                    <td class="px-6 py-3.5 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">£{{ number_format($item->price, 2) }}</td>
-                                    <td class="px-6 py-3.5 text-zinc-500 dark:text-zinc-400">{{ $item->per ?? '' }}</td>
-                                    <td class="px-6 py-3.5 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($item->line_value, 2) }}</td>
-                                </tr>
+                                @if($item->is_note)
+                                    <tr class="bg-amber-50/50 dark:bg-amber-500/5">
+                                        <td colspan="6" class="px-6 py-3 italic text-zinc-600 dark:text-zinc-300">
+                                            <span class="mr-2 text-amber-600 dark:text-amber-400">—</span>{{ $item->details }}
+                                        </td>
+                                    </tr>
+                                @else
+                                    <tr>
+                                        <td class="px-6 py-3.5 text-zinc-400 dark:text-zinc-500">{{ $i + 1 }}</td>
+                                        <td class="px-6 py-3.5 text-zinc-900 dark:text-white">{{ $item->details }}</td>
+                                        <td class="px-6 py-3.5 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">{{ $item->quantity }}</td>
+                                        <td class="px-6 py-3.5 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">£{{ number_format($item->price, 2) }}</td>
+                                        <td class="px-6 py-3.5 text-zinc-500 dark:text-zinc-400">{{ $item->per ?? '' }}</td>
+                                        <td class="px-6 py-3.5 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($item->line_value, 2) }}</td>
+                                    </tr>
+                                @endif
                             @endforeach
                         </tbody>
                     </table>

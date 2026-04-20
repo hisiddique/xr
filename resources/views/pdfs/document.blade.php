@@ -212,19 +212,28 @@
                 </tr>
             </thead>
             <tbody>
+                @php $noteColspan = $isDeliveryNote ? 4 : 6; @endphp
                 @foreach($document->items as $i => $item)
-                    <tr>
-                        <td style="color:#9ca3af">{{ $i + 1 }}</td>
-                        <td>{{ $item->details }}</td>
-                        <td class="right">{{ $item->quantity }}</td>
-                        @if(! $isDeliveryNote)
-                            <td class="right">£{{ number_format($item->price, 2) }}</td>
-                        @endif
-                        <td style="color:#9ca3af">{{ $item->per ?? '' }}</td>
-                        @if(! $isDeliveryNote)
-                            <td class="right" style="font-weight:600">£{{ number_format($item->line_value, 2) }}</td>
-                        @endif
-                    </tr>
+                    @if($item->is_note)
+                        <tr>
+                            <td colspan="{{ $noteColspan }}" style="font-style:italic; color:#4b5563; background:#fffbeb">
+                                — {{ $item->details }}
+                            </td>
+                        </tr>
+                    @else
+                        <tr>
+                            <td style="color:#9ca3af">{{ $i + 1 }}</td>
+                            <td>{{ $item->details }}</td>
+                            <td class="right">{{ $item->quantity }}</td>
+                            @if(! $isDeliveryNote)
+                                <td class="right">£{{ number_format($item->price, 2) }}</td>
+                            @endif
+                            <td style="color:#9ca3af">{{ $item->per ?? '' }}</td>
+                            @if(! $isDeliveryNote)
+                                <td class="right" style="font-weight:600">£{{ number_format($item->line_value, 2) }}</td>
+                            @endif
+                        </tr>
+                    @endif
                 @endforeach
             </tbody>
         </table>

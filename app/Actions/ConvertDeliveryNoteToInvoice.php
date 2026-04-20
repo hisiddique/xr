@@ -55,6 +55,7 @@ class ConvertDeliveryNoteToInvoice
             foreach ($deliveryNote->items as $item) {
                 $invoice->items()->create([
                     'details' => $item->details,
+                    'is_note' => $item->is_note,
                     'quantity' => $item->quantity,
                     'price' => 0,
                     'per' => $item->per,

@@ -361,7 +361,7 @@
                             size="sm"
                             variant="ghost"
                             icon="question-mark-circle"
-                            x-on:click="$dispatch('open-hotkeys-help')"
+                            x-on:click="$flux.modal('hotkeys-help').show()"
                             :title="__('Keyboard shortcuts (?)')"
                         />
                     </div>
@@ -389,7 +389,7 @@
                         <div x-data x-init="Alpine.store('hotkeys').init()"></div>
 
                         {{-- Hotkeys help modal --}}
-                        <livewire:pages::hotkeys-help-modal />
+                        @include('partials.hotkeys-help-modal')
 
                         {{ $slot }}
                     </div>

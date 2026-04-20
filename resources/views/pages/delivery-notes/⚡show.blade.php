@@ -20,13 +20,23 @@ new #[Title('Delivery Note')] class extends Component {
     {
         $this->document->load('emailLogs');
     }
+
+    #[On('document-deleted')]
+    public function onDeleted(): void
+    {
+        $this->redirect(route('delivery-notes.index'), navigate: true);
+    }
 }; ?>
 
 <div
     class="flex flex-col gap-8"
     x-data="showPageKeys({
         f8: () => Flux.modal('email-document-{{ $document->id }}').show(),
-        {{ $document->status === \App\Enums\DocumentStatus::Active ? "f7: () => Flux.modal('convert-dn-{$document->id}').show()," : '' }}
+        {{ $document->status === DocumentStatus::Active ? "f7: () => Flux.modal('convert-dn-{$document->id}').show()," : '' }}
+        {{ $document->status !== DocumentStatus::Converted ? "edit: () => Livewire.navigate('".route('delivery-notes.edit', $document)."')," : '' }}
+        delete: () => $store.hotkeys.openModalWithConfirm('delete-document-{{ $document->id }}'),
+        viewPdf: () => window.open('{{ route('documents.pdf', $document) }}', '_blank'),
+        downloadPdf: () => window.location.href = '{{ route('documents.pdf.download', $document) }}',
     })"
 >
 
@@ -93,8 +103,18 @@ new #[Title('Delivery Note')] class extends Component {
                     @if($document->status !== DocumentStatus::Converted)
                         <flux:button variant="ghost" icon="pencil" size="sm" :href="route('delivery-notes.edit', $document)" wire:navigate>
                             Edit
+                            <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">e</kbd>
                         </flux:button>
                     @endif
+                    <livewire:pages::delivery-notes.delete-modal :document="$document" :key="'delete-'.$document->id" />
+                    <flux:button variant="ghost" icon="arrow-down-tray" size="sm" :href="route('documents.pdf.download', $document)">
+                        Download PDF
+                        <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">⇧P</kbd>
+                    </flux:button>
+                    <flux:button variant="ghost" icon="document" size="sm" :href="route('documents.pdf', $document)" target="_blank">
+                        View PDF
+                        <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">p</kbd>
+                    </flux:button>
                     <flux:button variant="ghost" icon="envelope" size="sm" x-on:click="$flux.modal('email-document-{{ $document->id }}').show()">
                         Send Email
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F8</kbd>
@@ -163,11 +183,19 @@ new #[Title('Delivery Note')] class extends Component {
                         </thead>
                         <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                             @foreach($document->items as $item)
-                                <tr>
-                                    <td class="px-6 py-3.5 text-zinc-900 dark:text-white">{{ $item->details }}</td>
-                                    <td class="px-6 py-3.5 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">{{ $item->quantity }}</td>
-                                    <td class="px-6 py-3.5 text-zinc-500 dark:text-zinc-400">{{ $item->per ?? '—' }}</td>
-                                </tr>
+                                @if($item->is_note)
+                                    <tr class="bg-amber-50/50 dark:bg-amber-500/5">
+                                        <td colspan="3" class="px-6 py-3 italic text-zinc-600 dark:text-zinc-300">
+                                            <span class="mr-2 text-amber-600 dark:text-amber-400">—</span>{{ $item->details }}
+                                        </td>
+                                    </tr>
+                                @else
+                                    <tr>
+                                        <td class="px-6 py-3.5 text-zinc-900 dark:text-white">{{ $item->details }}</td>
+                                        <td class="px-6 py-3.5 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">{{ $item->quantity }}</td>
+                                        <td class="px-6 py-3.5 text-zinc-500 dark:text-zinc-400">{{ $item->per ?? '—' }}</td>
+                                    </tr>
+                                @endif
                             @endforeach
                         </tbody>
                     </table>

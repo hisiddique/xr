@@ -2,17 +2,19 @@
 
 namespace App\Models;
 
+use Database\Factories\DocumentItemFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class DocumentItem extends Model
 {
-    /** @use HasFactory<\Database\Factories\DocumentItemFactory> */
+    /** @use HasFactory<DocumentItemFactory> */
     use HasFactory;
 
     protected $fillable = [
         'document_id',
         'details',
+        'is_note',
         'quantity',
         'price',
         'per',
@@ -22,6 +24,7 @@ class DocumentItem extends Model
     protected function casts(): array
     {
         return [
+            'is_note' => 'boolean',
             'quantity' => 'decimal:2',
             'price' => 'decimal:2',
             'line_value' => 'decimal:2',

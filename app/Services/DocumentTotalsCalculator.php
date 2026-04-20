@@ -17,6 +17,10 @@ class DocumentTotalsCalculator
     public function calculate(Collection $items, Customer $customer): array
     {
         $subtotal = $items->sum(function (array $item) {
+            if (! empty($item['is_note'])) {
+                return 0;
+            }
+
             return (float) $item['quantity'] * (float) $item['price'];
         });
 

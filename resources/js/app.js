@@ -89,10 +89,17 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
 
+            // ── Backspace goes back ──
+            if (key === 'Backspace') {
+                e.preventDefault();
+                window.history.back();
+                return;
+            }
+
             // ── '?' opens help modal ──
             if (key === '?') {
                 e.preventDefault();
-                window.dispatchEvent(new CustomEvent('open-hotkeys-help'));
+                if (window.Flux) Flux.modal('hotkeys-help').show();
                 return;
             }
 
@@ -141,6 +148,30 @@ document.addEventListener('alpine:init', () => {
                         this.tableActions.delete(this.selectedRow);
                         return;
                     }
+                }
+            }
+
+            // ── Context actions on show pages (e/d/p/shift+P) ──
+            if (!this.tableActions) {
+                if (lowerKey === 'e' && this.contextActions.edit) {
+                    e.preventDefault();
+                    this.contextActions.edit();
+                    return;
+                }
+                if (lowerKey === 'd' && this.contextActions.delete) {
+                    e.preventDefault();
+                    this.contextActions.delete();
+                    return;
+                }
+                if (key === 'P' && e.shiftKey && this.contextActions.downloadPdf) {
+                    e.preventDefault();
+                    this.contextActions.downloadPdf();
+                    return;
+                }
+                if (lowerKey === 'p' && !e.shiftKey && this.contextActions.viewPdf) {
+                    e.preventDefault();
+                    this.contextActions.viewPdf();
+                    return;
                 }
             }
         },

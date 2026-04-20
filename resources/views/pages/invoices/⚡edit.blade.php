@@ -23,6 +23,7 @@ new #[Title('Edit Invoice')] class extends Component {
         $this->items = $this->document->items->map(fn ($item) => [
             'id' => $item->id,
             'details' => $item->details,
+            'is_note' => (bool) $item->is_note,
             'quantity' => (string) $item->quantity,
             'price' => (string) $item->price,
             'per' => $item->per ?? '',
@@ -36,9 +37,18 @@ new #[Title('Edit Invoice')] class extends Component {
             'doc_date' => 'required|date',
             'items' => 'required|array|min:1',
             'items.*.details' => 'required|string|max:500',
-            'items.*.quantity' => 'required|numeric|min:0.01',
-            'items.*.price' => 'required|numeric|min:0',
+            'items.*.is_note' => 'boolean',
+            'items.*.quantity' => 'nullable|numeric|min:0',
+            'items.*.price' => 'nullable|numeric|min:0',
         ]);
+
+        foreach ($this->items as $i => $item) {
+            if (empty($item['is_note']) && (float) ($item['quantity'] ?? 0) < 0.01) {
+                $this->addError("items.{$i}.quantity", __('Quantity is required.'));
+
+                return;
+            }
+        }
 
         $customer = $this->document->customer;
         $calculator = new DocumentTotalsCalculator();
@@ -57,12 +67,17 @@ new #[Title('Edit Invoice')] class extends Component {
         // Sync items: delete old, create new
         $this->document->items()->delete();
         foreach ($this->items as $item) {
+            $isNote = ! empty($item['is_note']);
+            $qty = $isNote ? 0 : (float) $item['quantity'];
+            $price = $isNote ? 0 : (float) $item['price'];
+
             $this->document->items()->create([
                 'details' => $item['details'],
-                'quantity' => $item['quantity'],
-                'price' => $item['price'],
-                'per' => $item['per'] ?: null,
-                'line_value' => round((float) $item['quantity'] * (float) $item['price'], 2),
+                'is_note' => $isNote,
+                'quantity' => $qty,
+                'price' => $price,
+                'per' => $isNote ? null : ($item['per'] ?: null),
+                'line_value' => round($qty * $price, 2),
             ]);
         }
 
@@ -117,7 +132,8 @@ new #[Title('Edit Invoice')] class extends Component {
         x-data="{
             rows: @js($items),
             units: @js($this->units),
-            add() { this.rows.push({ details: '', quantity: '1', price: '0.00', per: '' }); this.$nextTick(() => this.focusLast()); },
+            add() { this.rows.push({ details: '', quantity: '1', price: '0.00', per: '', is_note: false }); this.$nextTick(() => this.focusLast()); },
+            addNote() { this.rows.push({ details: '', quantity: '0', price: '0.00', per: '', is_note: true }); this.$nextTick(() => this.focusLast()); },
             remove(i) { if (this.rows.length > 1) this.rows.splice(i, 1); },
             focusLast() {
                 const inputs = this.$refs.rowsBody.querySelectorAll('input[data-row-details]');
@@ -164,7 +180,10 @@ new #[Title('Edit Invoice')] class extends Component {
                     <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Items</p>
                     <h2 class="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-white">Line Items</h2>
                 </div>
-                <flux:button type="button" variant="ghost" icon="plus" size="sm" x-on:click="add()">Add Line</flux:button>
+                <div class="flex items-center gap-2">
+                    <flux:button type="button" variant="ghost" icon="chat-bubble-left" size="sm" x-on:click="addNote()">Add Note</flux:button>
+                    <flux:button type="button" variant="ghost" icon="plus" size="sm" x-on:click="add()">Add Line</flux:button>
+                </div>
             </div>
 
             <div class="overflow-x-auto" data-items-table>
@@ -181,48 +200,60 @@ new #[Title('Edit Invoice')] class extends Component {
                     </thead>
                     <tbody x-ref="rowsBody" class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                         <template x-for="(row, i) in rows" :key="i">
-                            <tr>
-                                <td class="px-4 py-2.5">
-                                    <input
-                                        type="text"
-                                        data-row-details
-                                        x-model="row.details"
-                                        placeholder="{{ __('Description…') }}"
-                                        class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
-                                    />
+                            <tr :class="row.is_note ? 'bg-amber-50/50 dark:bg-amber-500/5' : ''">
+                                <td class="px-4 py-2.5" :colspan="row.is_note ? 5 : 1">
+                                    <div class="flex items-center gap-2">
+                                        <flux:icon.chat-bubble-left x-show="row.is_note" class="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                                        <input
+                                            type="text"
+                                            data-row-details
+                                            x-model="row.details"
+                                            :placeholder="row.is_note ? '{{ __('Note…') }}' : '{{ __('Description…') }}'"
+                                            :class="row.is_note ? 'italic' : ''"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                        />
+                                    </div>
                                 </td>
-                                <td class="px-4 py-2.5">
-                                    <input
-                                        type="number"
-                                        min="0.01"
-                                        step="0.01"
-                                        x-model.number="row.quantity"
-                                        class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
-                                    />
-                                </td>
-                                <td class="px-4 py-2.5">
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        x-model.number="row.price"
-                                        class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
-                                    />
-                                </td>
-                                <td class="px-4 py-2.5">
-                                    <select
-                                        x-model="row.per"
-                                        class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
-                                    >
-                                        <option value=""></option>
-                                        <template x-for="unit in units" :key="unit">
-                                            <option :value="unit" x-text="unit"></option>
-                                        </template>
-                                    </select>
-                                </td>
-                                <td class="px-4 py-2.5 text-right font-mono tabular-nums font-medium text-zinc-900 dark:text-white">
-                                    £<span x-text="(Number(row.quantity) * Number(row.price)).toFixed(2)">0.00</span>
-                                </td>
+                                <template x-if="! row.is_note">
+                                    <td class="px-4 py-2.5">
+                                        <input
+                                            type="number"
+                                            min="0.01"
+                                            step="0.01"
+                                            x-model.number="row.quantity"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                        />
+                                    </td>
+                                </template>
+                                <template x-if="! row.is_note">
+                                    <td class="px-4 py-2.5">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            x-model.number="row.price"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                        />
+                                    </td>
+                                </template>
+                                <template x-if="! row.is_note">
+                                    <td class="px-4 py-2.5">
+                                        <select
+                                            x-model="row.per"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                        >
+                                            <option value=""></option>
+                                            <template x-for="unit in units" :key="unit">
+                                                <option :value="unit" x-text="unit"></option>
+                                            </template>
+                                        </select>
+                                    </td>
+                                </template>
+                                <template x-if="! row.is_note">
+                                    <td class="px-4 py-2.5 text-right font-mono tabular-nums font-medium text-zinc-900 dark:text-white">
+                                        £<span x-text="(Number(row.quantity) * Number(row.price)).toFixed(2)">0.00</span>
+                                    </td>
+                                </template>
                                 <td class="px-4 py-2.5">
                                     <flux:button size="xs" variant="ghost" icon="x-mark" type="button" x-on:click="remove(i)" x-show="rows.length > 1" />
                                 </td>
