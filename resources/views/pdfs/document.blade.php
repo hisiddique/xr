@@ -200,35 +200,44 @@
     <tr>
         <td class="items-wrap" colspan="2">
             <table class="items">
+                @php($colCount = $isDN ? 3 : 5)
                 <thead>
                     <tr>
                         <th>Details</th>
                         <th class="right" style="width:10%">Qty</th>
-                        <th class="right" style="width:12%">Price</th>
+                        @if(! $isDN)
+                            <th class="right" style="width:12%">Price</th>
+                        @endif
                         <th style="width:8%">Per</th>
-                        <th class="right" style="width:14%">Value</th>
+                        @if(! $isDN)
+                            <th class="right" style="width:14%">Value</th>
+                        @endif
                     </tr>
                 </thead>
                 <tbody>
                     @foreach($document->items as $item)
                         @if($item->is_note)
                             <tr>
-                                <td colspan="5" class="note-cell">{{ $item->details }}</td>
+                                <td colspan="{{ $colCount }}" class="note-cell">{{ $item->details }}</td>
                             </tr>
                         @else
                             <tr>
                                 <td>{{ $item->details }}</td>
                                 <td class="right">{{ rtrim(rtrim(number_format($item->quantity, 2, '.', ''), '0'), '.') }}</td>
-                                <td class="right">{{ $isDN ? '' : number_format($item->price, 2) }}</td>
+                                @if(! $isDN)
+                                    <td class="right">{{ number_format($item->price, 2) }}</td>
+                                @endif
                                 <td class="c">{{ $item->per ?? '' }}</td>
-                                <td class="right">{{ $isDN ? '' : number_format($item->line_value, 2) }}</td>
+                                @if(! $isDN)
+                                    <td class="right">{{ number_format($item->line_value, 2) }}</td>
+                                @endif
                             </tr>
                         @endif
                     @endforeach
 
                     {{-- Spacer rows to keep a consistent visual height for short line-item lists --}}
                     @for($i = $document->items->count(); $i < 6; $i++)
-                        <tr><td colspan="5" style="height: 18px">&nbsp;</td></tr>
+                        <tr><td colspan="{{ $colCount }}" style="height: 18px">&nbsp;</td></tr>
                     @endfor
                 </tbody>
             </table>
