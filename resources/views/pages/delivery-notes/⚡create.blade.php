@@ -13,6 +13,7 @@ use Livewire\Component;
 new #[Title('New Delivery Note')] class extends Component {
     public int $customer_id = 0;
     public string $doc_date = '';
+    public string $order_no = '';
     public array $items = [];
     public array $units = [];
 
@@ -35,6 +36,7 @@ new #[Title('New Delivery Note')] class extends Component {
         $this->validate([
             'customer_id' => 'required|integer|exists:customers,id',
             'doc_date' => 'required|date',
+            'order_no' => 'nullable|string|max:100',
             'items' => 'required|array|min:1',
             'items.*.details' => 'required|string|max:500',
             'items.*.is_note' => 'boolean',
@@ -57,6 +59,7 @@ new #[Title('New Delivery Note')] class extends Component {
             'type' => 'DN',
             'doc_number' => $docNumber,
             'doc_date' => $this->doc_date,
+            'order_no' => $this->order_no ?: null,
             'subtotal' => 0,
             'trade_discount' => 0,
             'discount_amount' => 0,
@@ -144,6 +147,7 @@ new #[Title('New Delivery Note')] class extends Component {
                     <flux:error name="customer_id" />
                 </div>
                 <flux:input wire:model="doc_date" type="date" :label="__('Delivery Date')" required />
+                <flux:input wire:model="order_no" :label="__('Order Reference')" :placeholder="__('Optional')" />
             </div>
         </div>
 

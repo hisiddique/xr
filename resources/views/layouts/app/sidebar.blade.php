@@ -253,6 +253,20 @@
                                 </li>
                                 <li>
                                     <a
+                                        href="{{ route('users.index') }}"
+                                        wire:navigate
+                                        @class([
+                                            'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                            'bg-indigo-50 text-indigo-700 border-l-[3px] border-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('users.*'),
+                                            'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('users.*'),
+                                        ])
+                                    >
+                                        <flux:icon.user-group class="size-5 shrink-0" />
+                                        <span class="flex-1">Users</span>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a
                                         href="{{ route('settings.crm') }}"
                                         wire:navigate
                                         @class([

@@ -13,6 +13,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
 
     public int $customer_id = 0;
     public string $doc_date = '';
+    public string $order_no = '';
     public array $items = [];
     public array $units = [];
 
@@ -20,6 +21,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
     {
         $this->customer_id = $this->document->customer_id;
         $this->doc_date = $this->document->doc_date->format('Y-m-d');
+        $this->order_no = $this->document->order_no ?? '';
         $this->items = $this->document->items->map(fn ($item) => [
             'id' => $item->id,
             'details' => $item->details,
@@ -35,6 +37,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
         $this->validate([
             'customer_id' => 'required|integer|exists:customers,id',
             'doc_date' => 'required|date',
+            'order_no' => 'nullable|string|max:100',
             'items' => 'required|array|min:1',
             'items.*.details' => 'required|string|max:500',
             'items.*.is_note' => 'boolean',
@@ -52,6 +55,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
         $this->document->update([
             'customer_id' => $this->customer_id,
             'doc_date' => $this->doc_date,
+            'order_no' => $this->order_no ?: null,
             'subtotal' => 0,
             'trade_discount' => 0,
             'discount_amount' => 0,
@@ -140,6 +144,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
                     <flux:error name="customer_id" />
                 </div>
                 <flux:input wire:model="doc_date" type="date" :label="__('Delivery Date')" required />
+                <flux:input wire:model="order_no" :label="__('Order Reference')" :placeholder="__('Optional')" />
             </div>
         </div>
 

@@ -36,6 +36,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Admin-only routes
     Route::middleware('admin')->group(function () {
         Route::livewire('settings/crm', 'pages::settings.crm')->name('settings.crm');
+
+        // Users
+        Route::livewire('users', 'pages::users.index')->name('users.index');
+        Route::livewire('users/create', 'pages::users.create')->name('users.create');
+        Route::livewire('users/{user}/edit', 'pages::users.edit')->name('users.edit');
+
+        // Reference data
         Route::livewire('reference-data/titles', 'pages::reference-data.titles')->name('reference-data.titles');
         Route::livewire('reference-data/credit-terms', 'pages::reference-data.credit-terms')->name('reference-data.credit-terms');
         Route::livewire('reference-data/credit-limits', 'pages::reference-data.credit-limits')->name('reference-data.credit-limits');
