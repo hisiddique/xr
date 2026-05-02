@@ -18,6 +18,12 @@ new #[Title('Invoice')] class extends Component {
     {
         $this->document->load('emailLogs');
     }
+
+    #[On('document-deleted')]
+    public function onDeleted(): void
+    {
+        $this->redirect(route('invoices.index'), navigate: true);
+    }
 }; ?>
 
 <div class="flex flex-col gap-8" x-data="showPageKeys({
@@ -34,14 +40,6 @@ new #[Title('Invoice')] class extends Component {
         </flux:button>
     </div>
 
-    @php
-        $statusColor = match($document->status->value) {
-            'active'    => 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400',
-            'emailed'   => 'bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-400',
-            default     => 'bg-zinc-50 text-zinc-700 ring-zinc-600/20 dark:bg-zinc-500/10 dark:text-zinc-400',
-        };
-    @endphp
-
     {{-- Hero header card --}}
     <div class="relative rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
         <div class="h-20 rounded-t-2xl bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500"></div>
@@ -56,7 +54,7 @@ new #[Title('Invoice')] class extends Component {
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="min-w-0 flex flex-wrap items-center gap-3">
                     <h1 class="font-mono text-2xl font-semibold tracking-tight text-zinc-900 dark:text-white">{{ $document->doc_number }}</h1>
-                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset {{ $statusColor }}">
+                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset {{ $document->status->ringColor() }}">
                         {{ $document->status->label() }}
                     </span>
                     <span class="text-sm text-zinc-500 dark:text-zinc-400">{{ $document->doc_date->format('d F Y') }}</span>
@@ -77,6 +75,7 @@ new #[Title('Invoice')] class extends Component {
                         Edit
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">e</kbd>
                     </flux:button>
+                    <livewire:pages::invoices.delete-modal :document="$document" :key="'delete-'.$document->id" />
                     <flux:button variant="ghost" icon="arrow-down-tray" size="sm" :href="route('documents.pdf.download', $document)">
                         Download PDF
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">⇧P</kbd>

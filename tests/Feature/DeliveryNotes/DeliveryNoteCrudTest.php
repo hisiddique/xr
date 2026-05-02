@@ -99,6 +99,34 @@ test('delivery note can be soft deleted', function () {
     $this->assertSoftDeleted('documents', ['id' => $document->id]);
 });
 
+test('delivery note saves prices and computes totals when show_pricing is on', function () {
+    Setting::set('vat_rate', '20', 'integer');
+    Setting::flushCache();
+
+    $user = User::factory()->admin()->create(['email_verified_at' => now()]);
+    $customer = Customer::factory()->create(['trade_discount' => 0]);
+
+    Livewire::actingAs($user)
+        ->test('pages::delivery-notes.create')
+        ->set('customer_id', $customer->id)
+        ->set('doc_date', '2026-04-13')
+        ->set('show_pricing', true)
+        ->set('items', [
+            ['details' => 'Widget', 'quantity' => '2', 'price' => '50', 'per' => 'each', 'is_note' => false],
+        ])
+        ->call('save')
+        ->assertHasNoErrors()
+        ->assertRedirect();
+
+    $doc = Document::first();
+    expect((bool) $doc->show_pricing)->toBeTrue()
+        ->and((float) $doc->subtotal)->toBe(100.0)
+        ->and((float) $doc->vat_amount)->toBe(20.0)
+        ->and((float) $doc->total_value)->toBe(120.0)
+        ->and((float) $doc->items->first()->price)->toBe(50.0)
+        ->and((float) $doc->items->first()->line_value)->toBe(100.0);
+});
+
 test('delivery note can be edited', function () {
     $user = User::factory()->admin()->create(['email_verified_at' => now()]);
     $customer = Customer::factory()->create(['trade_discount' => 0]);

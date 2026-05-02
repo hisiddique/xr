@@ -3,30 +3,35 @@
 use App\Models\Customer;
 use App\Models\Document;
 use App\Models\LookupUnit;
+use App\Services\DocumentTotalsCalculator;
 use Flux\Flux;
-use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('Edit Delivery Note')] class extends Component {
     public Document $document;
 
-    public int $customer_id = 0;
+    public ?int $customer_id = null;
+    public string $customerName = '';
     public string $doc_date = '';
     public string $order_no = '';
+    public bool $show_pricing = false;
     public array $items = [];
     public array $units = [];
 
     public function mount(): void
     {
         $this->customer_id = $this->document->customer_id;
+        $this->customerName = $this->document->customer?->company_name ?? '';
         $this->doc_date = $this->document->doc_date->format('Y-m-d');
         $this->order_no = $this->document->order_no ?? '';
+        $this->show_pricing = (bool) $this->document->show_pricing;
         $this->items = $this->document->items->map(fn ($item) => [
             'id' => $item->id,
             'details' => $item->details,
             'is_note' => (bool) $item->is_note,
             'quantity' => (string) $item->quantity,
+            'price' => (string) $item->price,
             'per' => $item->per ?? '',
         ])->toArray();
         $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
@@ -38,10 +43,12 @@ new #[Title('Edit Delivery Note')] class extends Component {
             'customer_id' => 'required|integer|exists:customers,id',
             'doc_date' => 'required|date',
             'order_no' => 'nullable|string|max:100',
+            'show_pricing' => 'boolean',
             'items' => 'required|array|min:1',
             'items.*.details' => 'required|string|max:500',
             'items.*.is_note' => 'boolean',
             'items.*.quantity' => 'nullable|numeric|min:0',
+            'items.*.price' => 'nullable|numeric|min:0',
         ]);
 
         foreach ($this->items as $i => $item) {
@@ -52,41 +59,43 @@ new #[Title('Edit Delivery Note')] class extends Component {
             }
         }
 
+        $customer = Customer::findOrFail($this->customer_id);
+        $totals = $this->show_pricing
+            ? (new DocumentTotalsCalculator())->calculate(collect($this->items), $customer)
+            : ['subtotal' => 0, 'discount' => 0, 'discount_amount' => 0, 'vat' => 0, 'total' => 0];
+
         $this->document->update([
             'customer_id' => $this->customer_id,
             'doc_date' => $this->doc_date,
             'order_no' => $this->order_no ?: null,
-            'subtotal' => 0,
-            'trade_discount' => 0,
-            'discount_amount' => 0,
-            'vat_amount' => 0,
-            'total_value' => 0,
+            'subtotal' => $totals['subtotal'],
+            'trade_discount' => $totals['discount'],
+            'discount_amount' => $totals['discount_amount'],
+            'vat_amount' => $totals['vat'],
+            'total_value' => $totals['total'],
+            'show_pricing' => $this->show_pricing,
         ]);
 
         // Sync items: delete old, create new
         $this->document->items()->delete();
         foreach ($this->items as $item) {
             $isNote = ! empty($item['is_note']);
+            $qty = $isNote ? 0 : (float) ($item['quantity'] ?? 0);
+            $price = ($isNote || ! $this->show_pricing) ? 0 : (float) ($item['price'] ?? 0);
 
             $this->document->items()->create([
                 'details' => $item['details'],
                 'is_note' => $isNote,
-                'quantity' => $isNote ? 0 : $item['quantity'],
-                'price' => 0,
+                'quantity' => $qty,
+                'price' => $price,
                 'per' => $isNote ? null : ($item['per'] ?: null),
-                'line_value' => 0,
+                'line_value' => round($qty * $price, 2),
             ]);
         }
 
         Flux::toast(variant: 'success', text: __('Delivery note updated.'));
 
         $this->redirect(route('delivery-notes.show', $this->document), navigate: true);
-    }
-
-    #[Computed]
-    public function customers()
-    {
-        return Customer::orderBy('company_name')->get(['id', 'company_name']);
     }
 }; ?>
 
@@ -107,8 +116,8 @@ new #[Title('Edit Delivery Note')] class extends Component {
         x-data="{
             rows: @js($items),
             units: @js($this->units),
-            add() { this.rows.push({ details: '', quantity: '1', per: '', is_note: false }); this.$nextTick(() => this.focusLast()); },
-            addNote() { this.rows.push({ details: '', quantity: '0', per: '', is_note: true }); this.$nextTick(() => this.focusLast()); },
+            add() { this.rows.push({ details: '', quantity: '', price: '', per: '', is_note: false }); this.$nextTick(() => this.focusLast()); },
+            addNote() { this.rows.push({ details: '', quantity: '0', price: '', per: '', is_note: true }); this.$nextTick(() => this.focusLast()); },
             remove(i) { if (this.rows.length > 1) this.rows.splice(i, 1); },
             focusLast() {
                 const inputs = this.$refs.rowsBody.querySelectorAll('input[data-row-details]');
@@ -133,18 +142,25 @@ new #[Title('Edit Delivery Note')] class extends Component {
                 <h2 class="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-white">Header Details</h2>
             </div>
             <div class="grid gap-4 p-6 md:grid-cols-2">
-                <div>
-                    <flux:label>{{ __('Customer') }} <span class="text-rose-500">*</span></flux:label>
-                    <flux:select wire:model="customer_id">
-                        <flux:select.option value="">{{ __('— Select customer —') }}</flux:select.option>
-                        @foreach($this->customers as $c)
-                            <flux:select.option :value="$c->id">{{ $c->company_name }}</flux:select.option>
-                        @endforeach
-                    </flux:select>
-                    <flux:error name="customer_id" />
-                </div>
+                <livewire:pages::ui.typeahead
+                    wire:model.live="customer_id"
+                    model="App\Models\Customer"
+                    column="company_name"
+                    :label="__('Customer')"
+                    :placeholder="__('Search customer (3+ letters)…')"
+                    :selected-label="$customerName"
+                    error-name="customer_id"
+                    required
+                />
                 <flux:input wire:model="doc_date" type="date" :label="__('Delivery Date')" required />
                 <flux:input wire:model="order_no" :label="__('Order Reference')" :placeholder="__('Optional')" />
+                <div class="md:col-span-2">
+                    <flux:switch
+                        wire:model.live="show_pricing"
+                        :label="__('Show pricing on this delivery note')"
+                        :description="__('Adds Price/Value columns and totals to the document and PDF.')"
+                    />
+                </div>
             </div>
         </div>
 
@@ -164,14 +180,16 @@ new #[Title('Edit Delivery Note')] class extends Component {
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Details</th>
                             <th class="w-24 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Qty</th>
-                            <th class="w-28 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Per</th>
+                            <th x-show="$wire.show_pricing" class="w-28 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Price</th>
+                            <th class="w-24 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Per</th>
+                            <th x-show="$wire.show_pricing" class="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Line Value</th>
                             <th class="w-10 px-4 py-3"></th>
                         </tr>
                     </thead>
                     <tbody x-ref="rowsBody" class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                         <template x-for="(row, i) in rows" :key="i">
                             <tr :class="row.is_note ? 'bg-amber-50/50 dark:bg-amber-500/5' : ''">
-                                <td class="px-4 py-2.5" :colspan="row.is_note ? 3 : 1">
+                                <td class="px-4 py-2.5" :colspan="row.is_note ? ($wire.show_pricing ? 5 : 3) : 1">
                                     <div class="flex items-center gap-2">
                                         <flux:icon.chat-bubble-left x-show="row.is_note" class="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
                                         <input
@@ -196,6 +214,17 @@ new #[Title('Edit Delivery Note')] class extends Component {
                                     </td>
                                 </template>
                                 <template x-if="! row.is_note">
+                                    <td x-show="$wire.show_pricing" class="px-4 py-2.5">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            x-model.number="row.price"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                        />
+                                    </td>
+                                </template>
+                                <template x-if="! row.is_note">
                                     <td class="px-4 py-2.5">
                                         <select
                                             x-model="row.per"
@@ -206,6 +235,11 @@ new #[Title('Edit Delivery Note')] class extends Component {
                                                 <option :value="unit" x-text="unit"></option>
                                             </template>
                                         </select>
+                                    </td>
+                                </template>
+                                <template x-if="! row.is_note">
+                                    <td x-show="$wire.show_pricing" class="px-4 py-2.5 text-right font-mono tabular-nums font-medium text-zinc-900 dark:text-white">
+                                        £<span x-text="(Number(row.quantity || 0) * Number(row.price || 0)).toFixed(2)">0.00</span>
                                     </td>
                                 </template>
                                 <td class="px-4 py-2.5">
@@ -219,6 +253,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
             @error('items') <p class="px-6 pb-3 text-xs text-rose-600">{{ $message }}</p> @enderror
             @error('items.*.details') <p class="px-6 pb-3 text-xs text-rose-600">{{ $message }}</p> @enderror
             @error('items.*.quantity') <p class="px-6 pb-3 text-xs text-rose-600">{{ $message }}</p> @enderror
+            @error('items.*.price') <p class="px-6 pb-3 text-xs text-rose-600">{{ $message }}</p> @enderror
         </div>
 
         {{-- Form actions --}}

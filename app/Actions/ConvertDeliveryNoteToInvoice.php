@@ -6,6 +6,7 @@ use App\DocumentStatus;
 use App\DocumentType;
 use App\Models\Document;
 use App\Services\DocumentNumberGenerator;
+use App\Services\DocumentTotalsCalculator;
 use DomainException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +15,7 @@ class ConvertDeliveryNoteToInvoice
 {
     public function __construct(
         private DocumentNumberGenerator $numberGenerator,
+        private DocumentTotalsCalculator $totalsCalculator,
     ) {}
 
     /**
@@ -34,7 +36,14 @@ class ConvertDeliveryNoteToInvoice
         return DB::transaction(function () use ($deliveryNote) {
             $docNumber = $this->numberGenerator->nextFor('INV');
 
-            $deliveryNote->loadMissing('items');
+            $deliveryNote->loadMissing(['items', 'customer']);
+
+            $itemsForCalc = $deliveryNote->items->map(fn ($item) => [
+                'is_note' => (bool) $item->is_note,
+                'quantity' => (float) $item->quantity,
+                'price' => (float) $item->price,
+            ]);
+            $totals = $this->totalsCalculator->calculate($itemsForCalc, $deliveryNote->customer);
 
             /** @var Document $invoice */
             $invoice = Document::create([
@@ -43,24 +52,29 @@ class ConvertDeliveryNoteToInvoice
                 'doc_number' => $docNumber,
                 'doc_date' => now()->toDateString(),
                 'order_no' => $deliveryNote->order_no,
-                'subtotal' => 0,
-                'trade_discount' => 0,
-                'discount_amount' => 0,
-                'vat_amount' => 0,
-                'total_value' => 0,
+                'subtotal' => $totals['subtotal'],
+                'trade_discount' => $totals['discount'],
+                'discount_amount' => $totals['discount_amount'],
+                'vat_amount' => $totals['vat'],
+                'total_value' => $totals['total'],
+                'show_pricing' => true,
                 'status' => DocumentStatus::Active,
                 'created_by' => Auth::id() ?? $deliveryNote->created_by,
                 'converted_from_id' => $deliveryNote->id,
             ]);
 
             foreach ($deliveryNote->items as $item) {
+                $isNote = (bool) $item->is_note;
+                $qty = $isNote ? 0 : (float) $item->quantity;
+                $price = $isNote ? 0 : (float) $item->price;
+
                 $invoice->items()->create([
                     'details' => $item->details,
-                    'is_note' => $item->is_note,
-                    'quantity' => $item->quantity,
-                    'price' => 0,
+                    'is_note' => $isNote,
+                    'quantity' => $qty,
+                    'price' => $price,
                     'per' => $item->per,
-                    'line_value' => 0,
+                    'line_value' => round($qty * $price, 2),
                 ]);
             }
 

@@ -3,7 +3,10 @@
 use App\DocumentStatus;
 use App\DocumentType;
 use App\Models\Document;
+use Flux\Flux;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -18,6 +21,9 @@ new #[Title('Invoices')] class extends Component {
     #[Url]
     public string $status = '';
 
+    #[Url]
+    public bool $trashed = false;
+
     public function updatedSearch(): void
     {
         $this->resetPage();
@@ -28,16 +34,52 @@ new #[Title('Invoices')] class extends Component {
         $this->resetPage();
     }
 
+    public function updatedTrashed(): void
+    {
+        $this->resetPage();
+    }
+
+    #[On('document-deleted')]
+    public function refreshList(): void
+    {
+        $this->resetPage();
+    }
+
+    public function restore(int $id): void
+    {
+        $invoice = Document::onlyTrashed()->invoices()->findOrFail($id);
+
+        DB::transaction(function () use ($invoice) {
+            $invoice->restore();
+
+            $source = $invoice->convertedFrom;
+            if ($source && $source->status === DocumentStatus::Active) {
+                $sourceHasOtherActiveInvoice = Document::invoices()
+                    ->where('converted_from_id', $source->id)
+                    ->where('id', '!=', $invoice->id)
+                    ->exists();
+
+                if (! $sourceHasOtherActiveInvoice) {
+                    $source->update(['status' => DocumentStatus::Converted]);
+                }
+            }
+        });
+
+        Flux::toast(variant: 'success', text: __('Invoice :number restored.', ['number' => $invoice->doc_number]));
+    }
+
     #[Computed]
     public function invoices()
     {
         return Document::invoices()
+            ->when($this->trashed, fn ($q) => $q->onlyTrashed())
             ->with('customer')
+            ->withExists(['emailLogs as has_been_emailed' => fn ($q) => $q->where('status', 'sent')])
             ->when($this->search, fn ($q) => $q->where(function ($q) {
                 $q->where('doc_number', 'like', "%{$this->search}%")
                     ->orWhereHas('customer', fn ($q) => $q->where('company_name', 'like', "%{$this->search}%"));
             }))
-            ->when($this->status, fn ($q) => $q->where('status', $this->status))
+            ->when($this->status && ! $this->trashed, fn ($q) => $q->where('status', $this->status))
             ->latest()
             ->paginate(15);
     }
@@ -66,16 +108,28 @@ new #[Title('Invoices')] class extends Component {
                 @foreach(['' => 'All', 'active' => 'Active', 'emailed' => 'Emailed'] as $val => $label)
                     <button
                         type="button"
-                        wire:click="$set('status', '{{ $val }}')"
+                        wire:click="$set('status', '{{ $val }}'); $set('trashed', false)"
                         @class([
                             'rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                            'bg-indigo-600 text-white shadow-sm' => $status === $val,
-                            'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/15' => $status !== $val,
+                            'bg-indigo-600 text-white shadow-sm' => ! $trashed && $status === $val,
+                            'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/15' => $trashed || $status !== $val,
                         ])
                     >
                         {{ $label }}
                     </button>
                 @endforeach
+                <button
+                    type="button"
+                    wire:click="$toggle('trashed')"
+                    @class([
+                        'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                        'bg-rose-600 text-white shadow-sm' => $trashed,
+                        'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/15' => ! $trashed,
+                    ])
+                >
+                    <flux:icon.trash class="size-3" />
+                    {{ __('Trash') }}
+                </button>
             </div>
         </div>
     </div>
@@ -85,11 +139,11 @@ new #[Title('Invoices')] class extends Component {
 
         @if($this->invoices->isEmpty())
             <x-ui.empty-state
-                icon="document-text"
-                title="No invoices found"
-                :description="($search || $status) ? 'Try adjusting your search or filters.' : 'Invoices are created by converting a delivery note.'"
+                :icon="$trashed ? 'trash' : 'document-text'"
+                :title="$trashed ? 'Trash is empty' : 'No invoices found'"
+                :description="$trashed ? 'Deleted invoices will appear here.' : (($search || $status) ? 'Try adjusting your search or filters.' : 'Invoices are created by converting a delivery note.')"
             >
-                @unless($search || $status)
+                @unless($trashed || $search || $status)
                     <x-slot:action>
                         <flux:button variant="primary" :href="route('delivery-notes.index')" wire:navigate>
                             Go to Delivery Notes
@@ -134,29 +188,39 @@ new #[Title('Invoices')] class extends Component {
                                 <td class="px-6 py-4 text-zinc-500 dark:text-zinc-400">{{ $invoice->doc_date->format('d M Y') }}</td>
                                 <td class="px-6 py-4 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($invoice->total_value, 2) }}</td>
                                 <td class="px-6 py-4">
-                                    @php
-                                        $statusColor = match($invoice->status->value) {
-                                            'active'    => 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400',
-                                            'emailed'   => 'bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-400',
-                                            default     => 'bg-zinc-50 text-zinc-700 ring-zinc-600/20 dark:bg-zinc-500/10 dark:text-zinc-400',
-                                        };
-                                    @endphp
-                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $statusColor }}">
+                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $invoice->status->ringColor() }}">
                                         {{ $invoice->status->label() }}
                                     </span>
                                 </td>
                                 <td class="px-6 py-4">
                                     <div class="flex items-center justify-end gap-1">
-                                        <flux:button size="xs" variant="ghost" icon="eye" :href="route('invoices.show', $invoice)" wire:navigate />
-                                        <flux:button size="xs" variant="ghost" icon="pencil" :href="route('invoices.edit', $invoice)" wire:navigate />
-                                        <flux:button size="xs" variant="ghost" icon="arrow-down-tray" :href="route('documents.pdf.download', $invoice)" />
-                                        <flux:button
-                                            size="xs"
-                                            variant="ghost"
-                                            icon="envelope"
-                                            x-on:click="$flux.modal('email-document-{{ $invoice->id }}').show()"
-                                        />
-                                        <livewire:pages::documents.email-modal :document="$invoice" :key="'email-'.$invoice->id" />
+                                        @if($trashed)
+                                            <flux:button
+                                                size="xs"
+                                                variant="ghost"
+                                                icon="arrow-uturn-left"
+                                                wire:click="restore({{ $invoice->id }})"
+                                                class="text-emerald-600 hover:text-emerald-700"
+                                            >
+                                                {{ __('Restore') }}
+                                            </flux:button>
+                                        @else
+                                            <flux:button size="xs" variant="ghost" icon="eye" :href="route('invoices.show', $invoice)" wire:navigate />
+                                            <flux:button size="xs" variant="ghost" icon="pencil" :href="route('invoices.edit', $invoice)" wire:navigate />
+                                            <flux:button size="xs" variant="ghost" icon="arrow-down-tray" :href="route('documents.pdf.download', $invoice)" />
+                                            <flux:button
+                                                size="xs"
+                                                variant="ghost"
+                                                icon="envelope"
+                                                x-on:click="$flux.modal('email-document-{{ $invoice->id }}').show()"
+                                                :class="$invoice->has_been_emailed
+                                                    ? '!text-emerald-600 hover:!text-emerald-700 dark:!text-emerald-400'
+                                                    : '!text-amber-500 hover:!text-amber-600 dark:!text-amber-400'"
+                                                :title="$invoice->has_been_emailed ? __('Email sent') : __('Not yet emailed')"
+                                            />
+                                            <livewire:pages::invoices.delete-modal :document="$invoice" :key="'delete-'.$invoice->id" />
+                                            <livewire:pages::documents.email-modal :document="$invoice" :key="'email-'.$invoice->id" />
+                                        @endif
                                     </div>
                                 </td>
                             </tr>

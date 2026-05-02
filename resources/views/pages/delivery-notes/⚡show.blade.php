@@ -70,15 +70,6 @@ new #[Title('Delivery Note')] class extends Component {
         </div>
     @endif
 
-    @php
-        $statusColor = match($document->status->value) {
-            'active'    => 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400',
-            'converted' => 'bg-violet-50 text-violet-700 ring-violet-600/20 dark:bg-violet-500/10 dark:text-violet-400',
-            'emailed'   => 'bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-400',
-            default     => 'bg-zinc-50 text-zinc-700 ring-zinc-600/20 dark:bg-zinc-500/10 dark:text-zinc-400',
-        };
-    @endphp
-
     {{-- Hero header card --}}
     <div class="relative rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
         <div class="h-20 rounded-t-2xl bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500"></div>
@@ -93,7 +84,7 @@ new #[Title('Delivery Note')] class extends Component {
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="min-w-0 flex flex-wrap items-center gap-3">
                     <h1 class="font-mono text-2xl font-semibold tracking-tight text-zinc-900 dark:text-white">{{ $document->doc_number }}</h1>
-                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset {{ $statusColor }}">
+                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset {{ $document->status->ringColor() }}">
                         {{ $document->status->label() }}
                     </span>
                     <span class="text-sm text-zinc-500 dark:text-zinc-400">{{ $document->doc_date->format('d F Y') }}</span>
@@ -178,14 +169,20 @@ new #[Title('Delivery Note')] class extends Component {
                             <tr>
                                 <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Details</th>
                                 <th class="w-24 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Qty</th>
+                                @if($document->show_pricing)
+                                    <th class="w-28 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Price</th>
+                                @endif
                                 <th class="w-24 px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Per</th>
+                                @if($document->show_pricing)
+                                    <th class="w-28 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Line Value</th>
+                                @endif
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                             @foreach($document->items as $item)
                                 @if($item->is_note)
                                     <tr class="bg-amber-50/50 dark:bg-amber-500/5">
-                                        <td colspan="3" class="px-6 py-3 italic text-zinc-600 dark:text-zinc-300">
+                                        <td colspan="{{ $document->show_pricing ? 5 : 3 }}" class="px-6 py-3 italic text-zinc-600 dark:text-zinc-300">
                                             <span class="mr-2 text-amber-600 dark:text-amber-400">—</span>{{ $item->details }}
                                         </td>
                                     </tr>
@@ -193,13 +190,44 @@ new #[Title('Delivery Note')] class extends Component {
                                     <tr>
                                         <td class="px-6 py-3.5 text-zinc-900 dark:text-white">{{ $item->details }}</td>
                                         <td class="px-6 py-3.5 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">{{ $item->quantity }}</td>
+                                        @if($document->show_pricing)
+                                            <td class="px-6 py-3.5 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">£{{ number_format($item->price, 2) }}</td>
+                                        @endif
                                         <td class="px-6 py-3.5 text-zinc-500 dark:text-zinc-400">{{ $item->per ?? '—' }}</td>
+                                        @if($document->show_pricing)
+                                            <td class="px-6 py-3.5 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($item->line_value, 2) }}</td>
+                                        @endif
                                     </tr>
                                 @endif
                             @endforeach
                         </tbody>
                     </table>
                 </div>
+
+                @if($document->show_pricing)
+                    <div class="flex justify-end border-t border-zinc-100 p-6 dark:border-white/[0.06]">
+                        <div class="w-72 space-y-2.5">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-zinc-500 dark:text-zinc-400">Subtotal</span>
+                                <span class="font-mono tabular-nums text-zinc-900 dark:text-white">£{{ number_format($document->subtotal, 2) }}</span>
+                            </div>
+                            @if($document->discount_amount > 0)
+                                <div class="flex justify-between text-sm">
+                                    <span class="text-zinc-500 dark:text-zinc-400">Discount ({{ $document->trade_discount }}%)</span>
+                                    <span class="font-mono tabular-nums text-rose-500">- £{{ number_format($document->discount_amount, 2) }}</span>
+                                </div>
+                            @endif
+                            <div class="flex justify-between text-sm">
+                                <span class="text-zinc-500 dark:text-zinc-400">VAT</span>
+                                <span class="font-mono tabular-nums text-zinc-900 dark:text-white">£{{ number_format($document->vat_amount, 2) }}</span>
+                            </div>
+                            <div class="flex justify-between border-t border-zinc-200 pt-3 dark:border-white/10">
+                                <span class="text-sm font-semibold text-zinc-900 dark:text-white">Total</span>
+                                <span class="text-xl font-semibold tracking-tight tabular-nums text-zinc-900 dark:text-white">£{{ number_format($document->total_value, 2) }}</span>
+                            </div>
+                        </div>
+                    </div>
+                @endif
             </x-ui.section-card>
 
         </div>

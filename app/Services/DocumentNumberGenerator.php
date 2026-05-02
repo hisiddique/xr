@@ -21,7 +21,8 @@ class DocumentNumberGenerator
             $padding = (int) Setting::get('number_padding', 4);
 
             /** @var Document|null $last */
-            $last = Document::where('type', $type)
+            $last = Document::withTrashed()
+                ->where('type', $type)
                 ->whereYear('created_at', $year)
                 ->lockForUpdate()
                 ->orderByDesc('id')

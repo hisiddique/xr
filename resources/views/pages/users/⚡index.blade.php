@@ -114,11 +114,10 @@ new #[Title('Users')] class extends Component {
                     </thead>
                     <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                         @foreach($this->users as $user)
-                            @php $isMe = $user->id === auth()->id(); @endphp
                             <tr
                                 data-row-index="{{ $loop->index }}"
                                 data-edit-url="{{ route('users.edit', $user) }}"
-                                @if(! $isMe) data-delete-modal="delete-user-{{ $user->id }}" @endif
+                                @if($user->id !== auth()->id()) data-delete-modal="delete-user-{{ $user->id }}" @endif
                                 class="transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5"
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
@@ -127,7 +126,7 @@ new #[Title('Users')] class extends Component {
                                         <x-ui.avatar :name="$user->name" size="sm" />
                                         <div>
                                             <span class="font-semibold text-zinc-900 dark:text-white">{{ $user->name }}</span>
-                                            @if($isMe)
+                                            @if($user->id === auth()->id())
                                                 <span class="ml-1.5 inline-flex rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-600/20 dark:bg-indigo-500/10 dark:text-indigo-400">You</span>
                                             @endif
                                         </div>
@@ -135,12 +134,7 @@ new #[Title('Users')] class extends Component {
                                 </td>
                                 <td class="px-6 py-4 text-zinc-600 dark:text-zinc-400">{{ $user->email }}</td>
                                 <td class="px-6 py-4">
-                                    @php
-                                        $roleColor = $user->role === UserRole::Admin
-                                            ? 'bg-violet-50 text-violet-700 ring-violet-600/20 dark:bg-violet-500/10 dark:text-violet-400'
-                                            : 'bg-zinc-50 text-zinc-700 ring-zinc-600/20 dark:bg-zinc-500/10 dark:text-zinc-400';
-                                    @endphp
-                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $roleColor }}">
+                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $user->role->ringColor() }}">
                                         {{ ucfirst($user->role->value) }}
                                     </span>
                                 </td>

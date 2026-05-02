@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\DocumentStatus;
 use App\DocumentType;
+use Database\Factories\DocumentFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Document extends Model
 {
-    /** @use HasFactory<\Database\Factories\DocumentFactory> */
+    /** @use HasFactory<DocumentFactory> */
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
@@ -28,6 +29,7 @@ class Document extends Model
         'discount_amount',
         'vat_amount',
         'total_value',
+        'show_pricing',
         'status',
         'created_by',
         'converted_from_id',
@@ -42,6 +44,7 @@ class Document extends Model
             'discount_amount' => 'decimal:2',
             'vat_amount' => 'decimal:2',
             'total_value' => 'decimal:2',
+            'show_pricing' => 'boolean',
             'type' => DocumentType::class,
             'status' => DocumentStatus::class,
         ];

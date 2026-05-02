@@ -178,15 +178,7 @@ new #[Title('Dashboard')] class extends Component {
                                         <td class="px-6 py-3.5 text-sm text-zinc-500 dark:text-zinc-400">{{ $note->doc_date->format('d M Y') }}</td>
                                         <td class="px-6 py-3.5 text-right font-mono text-sm font-medium text-zinc-900 tabular-nums dark:text-white">£{{ number_format($note->total_value, 2) }}</td>
                                         <td class="px-6 py-3.5">
-                                            @php
-                                                $statusColor = match($note->status->value) {
-                                                    'active'    => 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400',
-                                                    'converted' => 'bg-violet-50 text-violet-700 ring-violet-600/20 dark:bg-violet-500/10 dark:text-violet-400',
-                                                    'emailed'   => 'bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-400',
-                                                    default     => 'bg-zinc-50 text-zinc-700 ring-zinc-600/20 dark:bg-zinc-500/10 dark:text-zinc-400',
-                                                };
-                                            @endphp
-                                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $statusColor }}">
+                                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $note->status->ringColor() }}">
                                                 {{ $note->status->label() }}
                                             </span>
                                         </td>

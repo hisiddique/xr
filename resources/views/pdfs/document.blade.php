@@ -103,6 +103,7 @@
 
 @php
     $isDN = $document->type->value === 'DN';
+    $showPricing = ! $isDN || (bool) $document->show_pricing;
 
     $companyName         = \App\Models\Setting::get('company_name', config('app.name'));
     $companyTagline      = \App\Models\Setting::get('company_tagline', '');
@@ -200,16 +201,15 @@
     <tr>
         <td class="items-wrap" colspan="2">
             <table class="items">
-                @php($colCount = $isDN ? 3 : 5)
                 <thead>
                     <tr>
                         <th>Details</th>
                         <th class="right" style="width:10%">Qty</th>
-                        @if(! $isDN)
+                        @if($showPricing)
                             <th class="right" style="width:12%">Price</th>
                         @endif
                         <th style="width:8%">Per</th>
-                        @if(! $isDN)
+                        @if($showPricing)
                             <th class="right" style="width:14%">Value</th>
                         @endif
                     </tr>
@@ -218,17 +218,17 @@
                     @foreach($document->items as $item)
                         @if($item->is_note)
                             <tr>
-                                <td colspan="{{ $colCount }}" class="note-cell">{{ $item->details }}</td>
+                                <td colspan="{{ $showPricing ? 5 : 3 }}" class="note-cell">{{ $item->details }}</td>
                             </tr>
                         @else
                             <tr>
                                 <td>{{ $item->details }}</td>
                                 <td class="right">{{ rtrim(rtrim(number_format($item->quantity, 2, '.', ''), '0'), '.') }}</td>
-                                @if(! $isDN)
+                                @if($showPricing)
                                     <td class="right">{{ number_format($item->price, 2) }}</td>
                                 @endif
                                 <td class="c">{{ $item->per ?? '' }}</td>
-                                @if(! $isDN)
+                                @if($showPricing)
                                     <td class="right">{{ number_format($item->line_value, 2) }}</td>
                                 @endif
                             </tr>
@@ -237,7 +237,7 @@
 
                     {{-- Spacer rows to keep a consistent visual height for short line-item lists --}}
                     @for($i = $document->items->count(); $i < 6; $i++)
-                        <tr><td colspan="{{ $colCount }}" style="height: 18px">&nbsp;</td></tr>
+                        <tr><td colspan="{{ $showPricing ? 5 : 3 }}" style="height: 18px">&nbsp;</td></tr>
                     @endfor
                 </tbody>
             </table>
@@ -270,7 +270,7 @@
             </table>
         </td>
         <td class="cert-box">
-            @if($isDN)
+            @if(! $showPricing)
                 &nbsp;
             @else
                 <table class="totals-box">
@@ -289,7 +289,7 @@
                         <td class="v">£{{ number_format($document->vat_amount, 2) }}</td>
                     </tr>
                     <tr class="grand">
-                        <td class="l">Invoice Total</td>
+                        <td class="l">{{ $isDN ? 'Total' : 'Invoice Total' }}</td>
                         <td class="v">£{{ number_format($document->total_value, 2) }}</td>
                     </tr>
                 </table>

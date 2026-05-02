@@ -3,9 +3,11 @@
 use App\Actions\ConvertDeliveryNoteToInvoice;
 use App\DocumentStatus;
 use App\DocumentType;
+use App\Models\Customer;
 use App\Models\Document;
 use App\Models\DocumentItem;
 use App\Models\Setting;
+use Illuminate\Database\Eloquent\Factories\Sequence;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -49,33 +51,43 @@ it('duplicates all line items to the new invoice with details and quantity', fun
     expect($dnItems)->toEqual($invItems);
 });
 
-it('sets price to zero on all invoice line items at conversion', function () {
-    $dn = Document::factory()->deliveryNote()
-        ->has(DocumentItem::factory()->count(2), 'items')
-        ->create();
-
-    $invoice = app(ConvertDeliveryNoteToInvoice::class)->handle($dn);
-
-    foreach ($invoice->items as $item) {
-        expect((float) $item->price)->toBe(0.0)
-            ->and((float) $item->line_value)->toBe(0.0);
-    }
-});
-
-it('sets invoice totals to zero at conversion so user fills them in', function () {
-    $customer = \App\Models\Customer::factory()->create(['trade_discount' => 0]);
+it('copies prices and line values from the delivery note to the invoice', function () {
+    $customer = Customer::factory()->create(['trade_discount' => 0]);
 
     $dn = Document::factory()->deliveryNote()
         ->for($customer, 'customer')
-        ->has(DocumentItem::factory()->state(['quantity' => 1, 'price' => 0, 'line_value' => 0]), 'items')
-        ->create();
+        ->has(
+            DocumentItem::factory()->count(2)->state(new Sequence(
+                ['quantity' => 2, 'price' => 10, 'line_value' => 20],
+                ['quantity' => 1, 'price' => 5, 'line_value' => 5],
+            )),
+            'items',
+        )
+        ->create(['show_pricing' => true]);
 
     $invoice = app(ConvertDeliveryNoteToInvoice::class)->handle($dn);
 
-    expect((float) $invoice->subtotal)->toBe(0.0)
-        ->and((float) $invoice->discount_amount)->toBe(0.0)
-        ->and((float) $invoice->vat_amount)->toBe(0.0)
-        ->and((float) $invoice->total_value)->toBe(0.0);
+    $prices = $invoice->items->pluck('price')->map(fn ($p) => (float) $p)->sort()->values()->all();
+    expect($prices)->toBe([5.0, 10.0])
+        ->and($invoice->items->sum(fn ($i) => (float) $i->line_value))->toBe(25.0);
+});
+
+it('recomputes invoice totals from copied line items at conversion', function () {
+    Setting::set('vat_rate', '20', 'integer');
+    Setting::flushCache();
+
+    $customer = Customer::factory()->create(['trade_discount' => 0]);
+
+    $dn = Document::factory()->deliveryNote()
+        ->for($customer, 'customer')
+        ->has(DocumentItem::factory()->state(['quantity' => 1, 'price' => 100, 'line_value' => 100]), 'items')
+        ->create(['show_pricing' => true]);
+
+    $invoice = app(ConvertDeliveryNoteToInvoice::class)->handle($dn);
+
+    expect((float) $invoice->subtotal)->toBe(100.0)
+        ->and((float) $invoice->vat_amount)->toBe(20.0)
+        ->and((float) $invoice->total_value)->toBe(120.0);
 });
 
 it('rejects conversion of an already-converted delivery note', function () {

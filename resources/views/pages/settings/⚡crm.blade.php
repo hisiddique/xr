@@ -123,6 +123,13 @@ new #[Title('CRM Settings')] class extends Component {
 
         Flux::toast(variant: 'success', text: __('Logo removed.'));
     }
+
+    public function with(): array
+    {
+        return [
+            'currentLogoPath' => (string) Setting::get('company_logo_path'),
+        ];
+    }
 }; ?>
 
 <div class="flex flex-col gap-8">
@@ -139,8 +146,6 @@ new #[Title('CRM Settings')] class extends Component {
             <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Branding</p>
             <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Company Logo</h2>
             <div class="space-y-4">
-                @php $currentLogoPath = \App\Models\Setting::get('company_logo_path'); @endphp
-
                 @if($currentLogoPath)
                     <div class="flex items-center gap-4">
                         <img
