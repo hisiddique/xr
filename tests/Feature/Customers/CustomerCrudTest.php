@@ -89,6 +89,6 @@ test('customer list can be searched by company name', function () {
         ->test('pages::customers.index')
         ->set('search', 'Alpha');
 
-    $component->assertSee('Alpha Corp')
-        ->assertDontSee('Beta Ltd');
+    $component->assertSeeText('Alpha Corp')
+        ->assertDontSeeText('Beta Ltd');
 });

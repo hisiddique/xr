@@ -92,7 +92,7 @@ new #[Title('New Customer')] class extends Component {
     }
 }; ?>
 
-<div class="flex flex-col gap-8">
+<div class="flex flex-col gap-4">
 
     <x-ui.page-header
         title="New Customer"
@@ -108,7 +108,7 @@ new #[Title('New Customer')] class extends Component {
     <form wire:submit="save" class="flex flex-col gap-0 overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900 max-w-4xl">
 
         {{-- Section: Company --}}
-        <div class="px-6 py-6">
+        <div class="px-4 py-4">
             <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Company</p>
             <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Basic Information</h2>
             <div class="grid gap-4 md:grid-cols-2">
@@ -118,7 +118,7 @@ new #[Title('New Customer')] class extends Component {
         </div>
 
         {{-- Section: Contact --}}
-        <div class="border-t border-zinc-200/70 px-6 py-6 dark:border-white/10">
+        <div class="border-t border-zinc-200/70 px-4 py-4 dark:border-white/10">
             <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Contact</p>
             <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Contact Person</h2>
             <div class="grid gap-4 md:grid-cols-3">
@@ -134,7 +134,7 @@ new #[Title('New Customer')] class extends Component {
         </div>
 
         {{-- Section: Address --}}
-        <div class="border-t border-zinc-200/70 px-6 py-6 dark:border-white/10">
+        <div class="border-t border-zinc-200/70 px-4 py-4 dark:border-white/10">
             <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Address</p>
             <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Delivery Address</h2>
             <div class="grid gap-4 md:grid-cols-2">
@@ -146,7 +146,7 @@ new #[Title('New Customer')] class extends Component {
         </div>
 
         {{-- Section: Credit & Trading --}}
-        <div class="border-t border-zinc-200/70 px-6 py-6 dark:border-white/10">
+        <div class="border-t border-zinc-200/70 px-4 py-4 dark:border-white/10">
             <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Trading</p>
             <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Credit & Discount</h2>
             <div class="grid gap-4 md:grid-cols-3">
@@ -174,8 +174,8 @@ new #[Title('New Customer')] class extends Component {
         </div>
 
         {{-- Sticky footer actions --}}
-        <div class="sticky bottom-0 flex items-center justify-end gap-3 border-t border-zinc-200/70 bg-zinc-50 px-6 py-4 dark:border-white/10 dark:bg-zinc-900/80">
-            <flux:button variant="ghost" :href="route('customers.index')" wire:navigate>Cancel</flux:button>
+        <div class="sticky bottom-0 flex items-center justify-end gap-3 border-t border-zinc-200/70 bg-zinc-50 px-4 py-3 dark:border-white/10 dark:bg-zinc-900/80">
+            <x-ui.back-button :fallback="route('customers.index')" />
             <flux:button variant="primary" type="submit">Create Customer</flux:button>
         </div>
     </form>

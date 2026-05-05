@@ -11,7 +11,7 @@ class DocumentTotalsCalculator
     /**
      * Calculate document totals from line items and customer discount.
      *
-     * @param  Collection<int, array{quantity: float|string, price: float|string}>  $items
+     * @param  Collection<int, array{quantity?: float|string, price?: float|string, is_note?: bool}>  $items
      * @return array{subtotal: float, discount: float, discount_amount: float, vat: float, total: float}
      */
     public function calculate(Collection $items, Customer $customer): array
@@ -21,7 +21,7 @@ class DocumentTotalsCalculator
                 return 0;
             }
 
-            return (float) $item['quantity'] * (float) $item['price'];
+            return (float) ($item['quantity'] ?? 0) * (float) ($item['price'] ?? 0);
         });
 
         $discountPercent = (float) $customer->trade_discount;

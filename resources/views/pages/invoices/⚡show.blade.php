@@ -26,7 +26,7 @@ new #[Title('Invoice')] class extends Component {
     }
 }; ?>
 
-<div class="flex flex-col gap-8" x-data="showPageKeys({
+<div class="flex flex-col gap-6" x-data="showPageKeys({
     f9: () => Flux.modal('email-document-{{ $document->id }}').show(),
     edit: () => Livewire.navigate('{{ route('invoices.edit', $document) }}'),
     viewPdf: () => window.open('{{ route('documents.pdf', $document) }}', '_blank'),
@@ -35,9 +35,7 @@ new #[Title('Invoice')] class extends Component {
 
     {{-- Back link --}}
     <div>
-        <flux:button variant="ghost" icon="arrow-left" :href="route('invoices.index')" wire:navigate size="sm">
-            Back to Invoices
-        </flux:button>
+        <x-ui.back-button :fallback="route('invoices.index')" icon="arrow-left" size="sm">Back</x-ui.back-button>
     </div>
 
     {{-- Hero header card --}}
@@ -49,7 +47,7 @@ new #[Title('Invoice')] class extends Component {
             <flux:icon.document-text class="size-6 text-indigo-600 dark:text-indigo-400" />
         </div>
 
-        <div class="px-6 pb-6 pt-10">
+        <div class="px-4 pb-4 pt-10">
             {{-- Title row + actions --}}
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="min-w-0 flex flex-wrap items-center gap-3">
@@ -99,10 +97,10 @@ new #[Title('Invoice')] class extends Component {
     </div>
 
     {{-- Two-column body --}}
-    <div class="grid gap-6 lg:grid-cols-3">
+    <div class="grid gap-4 lg:grid-cols-3">
 
         {{-- Left: Line items + totals (2/3 width) --}}
-        <div class="lg:col-span-2 flex flex-col gap-6">
+        <div class="lg:col-span-2 flex flex-col gap-4">
 
             {{-- Line Items --}}
             <x-ui.section-card :padding="false">
@@ -114,8 +112,8 @@ new #[Title('Invoice')] class extends Component {
                     <table class="w-full text-sm">
                         <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                             <tr>
-                                <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">#</th>
-                                <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Description</th>
+                                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">#</th>
+                                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Description</th>
                                 <th class="w-24 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Qty</th>
                                 <th class="w-28 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Price</th>
                                 <th class="w-20 px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Per</th>
@@ -126,18 +124,18 @@ new #[Title('Invoice')] class extends Component {
                             @foreach($document->items as $i => $item)
                                 @if($item->is_note)
                                     <tr class="bg-amber-50/50 dark:bg-amber-500/5">
-                                        <td colspan="6" class="px-6 py-3 italic text-zinc-600 dark:text-zinc-300">
+                                        <td colspan="6" class="px-4 py-2 italic text-zinc-600 dark:text-zinc-300">
                                             <span class="mr-2 text-amber-600 dark:text-amber-400">—</span>{{ $item->details }}
                                         </td>
                                     </tr>
                                 @else
                                     <tr>
-                                        <td class="px-6 py-3.5 text-zinc-400 dark:text-zinc-500">{{ $i + 1 }}</td>
-                                        <td class="px-6 py-3.5 text-zinc-900 dark:text-white">{{ $item->details }}</td>
-                                        <td class="px-6 py-3.5 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">{{ $item->quantity }}</td>
-                                        <td class="px-6 py-3.5 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">£{{ number_format($item->price, 2) }}</td>
-                                        <td class="px-6 py-3.5 text-zinc-500 dark:text-zinc-400">{{ $item->per ?? '' }}</td>
-                                        <td class="px-6 py-3.5 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($item->line_value, 2) }}</td>
+                                        <td class="px-4 py-2 text-zinc-400 dark:text-zinc-500">{{ $i + 1 }}</td>
+                                        <td class="px-4 py-2 text-zinc-900 dark:text-white">{{ $item->details }}</td>
+                                        <td class="px-4 py-2 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">{{ $item->quantity }}</td>
+                                        <td class="px-4 py-2 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">£{{ number_format($item->price, 2) }}</td>
+                                        <td class="px-4 py-2 text-zinc-500 dark:text-zinc-400">{{ $item->per ?? '' }}</td>
+                                        <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($item->line_value, 2) }}</td>
                                     </tr>
                                 @endif
                             @endforeach
@@ -146,7 +144,7 @@ new #[Title('Invoice')] class extends Component {
                 </div>
 
                 {{-- Totals --}}
-                <div class="flex justify-end border-t border-zinc-100 p-6 dark:border-white/[0.06]">
+                <div class="flex justify-end border-t border-zinc-100 p-4 dark:border-white/[0.06]">
                     <div class="w-72 space-y-2.5">
                         <div class="flex justify-between text-sm">
                             <span class="text-zinc-500 dark:text-zinc-400">Subtotal</span>
@@ -173,7 +171,7 @@ new #[Title('Invoice')] class extends Component {
         </div>
 
         {{-- Right: Customer + Email log + source DN (1/3 width) --}}
-        <div class="flex flex-col gap-6">
+        <div class="flex flex-col gap-4">
 
             {{-- Customer --}}
             <x-ui.section-card title="Customer">

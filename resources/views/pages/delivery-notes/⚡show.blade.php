@@ -29,7 +29,7 @@ new #[Title('Delivery Note')] class extends Component {
 }; ?>
 
 <div
-    class="flex flex-col gap-8"
+    class="flex flex-col gap-6"
     x-data="showPageKeys({
         f8: () => Flux.modal('email-document-{{ $document->id }}').show(),
         {{ $document->status === DocumentStatus::Active ? "f7: () => Flux.modal('convert-dn-{$document->id}').show()," : '' }}
@@ -42,9 +42,7 @@ new #[Title('Delivery Note')] class extends Component {
 
     {{-- Back link --}}
     <div>
-        <flux:button variant="ghost" icon="arrow-left" :href="route('delivery-notes.index')" wire:navigate size="sm">
-            Back to Delivery Notes
-        </flux:button>
+        <x-ui.back-button :fallback="route('delivery-notes.index')" icon="arrow-left" size="sm">Back</x-ui.back-button>
     </div>
 
     {{-- Converted banner --}}
@@ -79,7 +77,7 @@ new #[Title('Delivery Note')] class extends Component {
             <flux:icon.truck class="size-6 text-indigo-600 dark:text-indigo-400" />
         </div>
 
-        <div class="px-6 pb-6 pt-10">
+        <div class="px-4 pb-4 pt-10">
             {{-- Title row + actions --}}
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="min-w-0 flex flex-wrap items-center gap-3">
@@ -152,10 +150,10 @@ new #[Title('Delivery Note')] class extends Component {
     @endif
 
     {{-- Two-column body --}}
-    <div class="grid gap-6 lg:grid-cols-3">
+    <div class="grid gap-4 lg:grid-cols-3">
 
         {{-- Left: Line items (2/3) --}}
-        <div class="lg:col-span-2 flex flex-col gap-6">
+        <div class="lg:col-span-2 flex flex-col gap-4">
 
             {{-- Line items --}}
             <x-ui.section-card :padding="false">
@@ -167,36 +165,28 @@ new #[Title('Delivery Note')] class extends Component {
                     <table class="w-full text-sm">
                         <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                             <tr>
-                                <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Details</th>
+                                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Details</th>
                                 <th class="w-24 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Qty</th>
-                                @if($document->show_pricing)
-                                    <th class="w-28 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Price</th>
-                                @endif
+                                <th class="w-28 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Price</th>
                                 <th class="w-24 px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Per</th>
-                                @if($document->show_pricing)
-                                    <th class="w-28 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Line Value</th>
-                                @endif
+                                <th class="w-28 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Line Value</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                             @foreach($document->items as $item)
                                 @if($item->is_note)
                                     <tr class="bg-amber-50/50 dark:bg-amber-500/5">
-                                        <td colspan="{{ $document->show_pricing ? 5 : 3 }}" class="px-6 py-3 italic text-zinc-600 dark:text-zinc-300">
+                                        <td colspan="5" class="px-4 py-2 italic text-zinc-600 dark:text-zinc-300">
                                             <span class="mr-2 text-amber-600 dark:text-amber-400">—</span>{{ $item->details }}
                                         </td>
                                     </tr>
                                 @else
                                     <tr>
-                                        <td class="px-6 py-3.5 text-zinc-900 dark:text-white">{{ $item->details }}</td>
-                                        <td class="px-6 py-3.5 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">{{ $item->quantity }}</td>
-                                        @if($document->show_pricing)
-                                            <td class="px-6 py-3.5 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">£{{ number_format($item->price, 2) }}</td>
-                                        @endif
-                                        <td class="px-6 py-3.5 text-zinc-500 dark:text-zinc-400">{{ $item->per ?? '—' }}</td>
-                                        @if($document->show_pricing)
-                                            <td class="px-6 py-3.5 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($item->line_value, 2) }}</td>
-                                        @endif
+                                        <td class="px-4 py-2 text-zinc-900 dark:text-white">{{ $item->details }}</td>
+                                        <td class="px-4 py-2 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">{{ $item->quantity }}</td>
+                                        <td class="px-4 py-2 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">£{{ number_format($item->price, 2) }}</td>
+                                        <td class="px-4 py-2 text-zinc-500 dark:text-zinc-400">{{ $item->per ?? '—' }}</td>
+                                        <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($item->line_value, 2) }}</td>
                                     </tr>
                                 @endif
                             @endforeach
@@ -204,8 +194,7 @@ new #[Title('Delivery Note')] class extends Component {
                     </table>
                 </div>
 
-                @if($document->show_pricing)
-                    <div class="flex justify-end border-t border-zinc-100 p-6 dark:border-white/[0.06]">
+                <div class="flex justify-end border-t border-zinc-100 p-4 dark:border-white/[0.06]">
                         <div class="w-72 space-y-2.5">
                             <div class="flex justify-between text-sm">
                                 <span class="text-zinc-500 dark:text-zinc-400">Subtotal</span>
@@ -227,13 +216,12 @@ new #[Title('Delivery Note')] class extends Component {
                             </div>
                         </div>
                     </div>
-                @endif
             </x-ui.section-card>
 
         </div>
 
         {{-- Right sidebar (1/3) --}}
-        <div class="flex flex-col gap-6">
+        <div class="flex flex-col gap-4">
 
             {{-- Customer --}}
             <x-ui.section-card title="Customer">

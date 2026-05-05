@@ -41,7 +41,7 @@ new #[Title('New User')] class extends Component {
     }
 }; ?>
 
-<div class="flex flex-col gap-8">
+<div class="flex flex-col gap-4">
 
     <x-ui.page-header
         title="New User"
@@ -54,14 +54,14 @@ new #[Title('New User')] class extends Component {
         </x-slot:action>
     </x-ui.page-header>
 
-    <form wire:submit="save" class="flex flex-col gap-6 max-w-2xl">
+    <form wire:submit="save" class="flex flex-col gap-4 max-w-2xl">
 
         <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
-            <div class="border-b border-zinc-200/70 px-6 py-4 dark:border-white/10">
+            <div class="border-b border-zinc-200/70 px-4 py-3 dark:border-white/10">
                 <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Account</p>
                 <h2 class="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-white">Profile</h2>
             </div>
-            <div class="space-y-4 p-6">
+            <div class="space-y-4 p-4">
                 <flux:input wire:model="name" :label="__('Full Name')" required autofocus />
                 <flux:input wire:model="email" type="email" :label="__('Email')" required />
 
@@ -77,18 +77,18 @@ new #[Title('New User')] class extends Component {
         </div>
 
         <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
-            <div class="border-b border-zinc-200/70 px-6 py-4 dark:border-white/10">
+            <div class="border-b border-zinc-200/70 px-4 py-3 dark:border-white/10">
                 <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Security</p>
                 <h2 class="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-white">Password</h2>
             </div>
-            <div class="space-y-4 p-6">
+            <div class="space-y-4 p-4">
                 <flux:input wire:model="password" type="password" :label="__('Password')" required viewable />
                 <flux:input wire:model="password_confirmation" type="password" :label="__('Confirm Password')" required viewable />
             </div>
         </div>
 
-        <div class="flex items-center justify-end gap-3 rounded-2xl border border-zinc-200/70 bg-white px-6 py-4 shadow-[0_1px_2px_rgba(16,24,40,0.06)] dark:border-white/10 dark:bg-zinc-900">
-            <flux:button variant="ghost" :href="route('users.index')" wire:navigate type="button">Cancel</flux:button>
+        <div class="flex items-center justify-end gap-3 rounded-2xl border border-zinc-200/70 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.06)] dark:border-white/10 dark:bg-zinc-900">
+            <x-ui.back-button :fallback="route('users.index')" />
             <flux:button variant="primary" type="submit">Create User</flux:button>
         </div>
     </form>

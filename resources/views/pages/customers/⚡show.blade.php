@@ -26,7 +26,7 @@ new #[Title('Customer Details')] class extends Component {
 }; ?>
 
 <div
-    class="flex flex-col gap-8"
+    class="flex flex-col gap-6"
     x-data="showPageKeys({
         edit: () => Livewire.navigate('{{ route('customers.edit', $customer) }}'),
         delete: () => $store.hotkeys.openModalWithConfirm('delete-customer-{{ $customer->id }}'),
@@ -35,9 +35,7 @@ new #[Title('Customer Details')] class extends Component {
 
     {{-- Back link + actions --}}
     <div class="flex items-center justify-between gap-2">
-        <flux:button variant="ghost" icon="arrow-left" :href="route('customers.index')" wire:navigate size="sm">
-            Back to Customers
-        </flux:button>
+        <x-ui.back-button :fallback="route('customers.index')" icon="arrow-left" size="sm">Back</x-ui.back-button>
         <div class="flex items-center gap-2">
             <flux:button variant="ghost" icon="pencil" size="sm" :href="route('customers.edit', $customer)" wire:navigate>
                 Edit
@@ -56,7 +54,7 @@ new #[Title('Customer Details')] class extends Component {
             <x-ui.avatar :name="$customer->company_name" size="xl" />
         </div>
 
-        <div class="px-6 pb-6 pt-14">
+        <div class="px-4 pb-4 pt-14">
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="min-w-0">
                     <h1 class="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-white">{{ $customer->company_name }}</h1>
@@ -72,7 +70,7 @@ new #[Title('Customer Details')] class extends Component {
     </div>
 
     {{-- Two-column details --}}
-    <div class="grid gap-6 md:grid-cols-2">
+    <div class="grid gap-4 md:grid-cols-2">
 
         {{-- Contact Details --}}
         <x-ui.section-card title="Contact Details">
@@ -151,21 +149,21 @@ new #[Title('Customer Details')] class extends Component {
                 <table class="w-full text-sm">
                     <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">#</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Date</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Status</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">#</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Date</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Status</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                         @foreach($this->deliveryNotes as $note)
                             <tr class="transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5">
-                                <td class="px-6 py-3.5">
+                                <td class="px-4 py-2">
                                     <a href="{{ route('delivery-notes.show', $note) }}" wire:navigate class="font-mono text-sm font-semibold text-indigo-600 hover:underline dark:text-indigo-400">
                                         {{ $note->doc_number }}
                                     </a>
                                 </td>
-                                <td class="px-6 py-3.5 text-zinc-500 dark:text-zinc-400">{{ $note->doc_date->format('d M Y') }}</td>
-                                <td class="px-6 py-3.5">
+                                <td class="px-4 py-2 text-zinc-500 dark:text-zinc-400">{{ $note->doc_date->format('d M Y') }}</td>
+                                <td class="px-4 py-2">
                                     <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $note->status->ringColor() }}">
                                         {{ $note->status->label() }}
                                     </span>

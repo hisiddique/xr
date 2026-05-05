@@ -139,19 +139,22 @@ new #[Title('CRM Settings')] class extends Component {
         subtitle="Configure your company details, tax, and document numbering."
     />
 
-    <form wire:submit="save" class="flex flex-col gap-0 overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900 max-w-2xl">
+    <form wire:submit="save" class="flex flex-col gap-0 overflow-hidden rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
 
-        {{-- Company Logo --}}
-        <div class="px-6 py-6">
-            <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Branding</p>
-            <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Company Logo</h2>
+        {{-- Branding / Logo --}}
+        <div class="grid gap-6 px-4 py-5 lg:grid-cols-[280px_1fr] lg:gap-10">
+            <div>
+                <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Branding</p>
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Company Logo</h2>
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Shown on PDFs and email templates. PNG, JPG or SVG up to 2MB.</p>
+            </div>
             <div class="space-y-4">
                 @if($currentLogoPath)
                     <div class="flex items-center gap-4">
                         <img
                             src="{{ Storage::disk('public')->url($currentLogoPath) }}"
                             alt="Company logo"
-                            class="h-16 max-w-[200px] rounded-lg border border-zinc-200 object-contain p-2 dark:border-white/10"
+                            class="h-16 max-w-[240px] rounded-lg border border-zinc-200 object-contain p-2 dark:border-white/10"
                         >
                         <flux:button
                             type="button"
@@ -168,7 +171,7 @@ new #[Title('CRM Settings')] class extends Component {
                 @if($logo && $logo->isPreviewable())
                     <div>
                         <p class="mb-2 text-xs text-zinc-500 dark:text-zinc-400">Preview:</p>
-                        <img src="{{ $logo->temporaryUrl() }}" alt="Logo preview" class="h-16 max-w-[200px] rounded-lg border border-zinc-200 object-contain p-2 dark:border-white/10">
+                        <img src="{{ $logo->temporaryUrl() }}" alt="Logo preview" class="h-16 max-w-[240px] rounded-lg border border-zinc-200 object-contain p-2 dark:border-white/10">
                     </div>
                 @endif
 
@@ -185,20 +188,24 @@ new #[Title('CRM Settings')] class extends Component {
                     @error('logo')
                         <p class="mt-1.5 text-xs text-red-500">{{ $message }}</p>
                     @enderror
-                    <p class="mt-1.5 text-xs text-zinc-400 dark:text-zinc-500">PNG, JPG or SVG. Max 2MB. Shown on invoices and emails.</p>
                 </div>
             </div>
         </div>
 
         {{-- Company --}}
-        <div class="border-t border-zinc-200/70 px-6 py-6 dark:border-white/10">
-            <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Company</p>
-            <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Company Information</h2>
+        <div class="grid gap-6 border-t border-zinc-200/70 px-4 py-5 lg:grid-cols-[280px_1fr] lg:gap-10 dark:border-white/10">
+            <div>
+                <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Company</p>
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Company Information</h2>
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Identity shown at the top of every document.</p>
+            </div>
             <div class="space-y-4">
-                <flux:input wire:model="company_name" :label="__('Company Name')" />
-                <flux:input wire:model="company_tagline" :label="__('Tagline')" :description="__('Shown below the company name on documents. e.g. “Specialists in all types of Industrial Items”.')" />
-                <flux:textarea wire:model="company_address" :label="__('Company Address')" rows="3" :description="__('Appears in the header of documents (one line per row).')" />
                 <div class="grid gap-4 md:grid-cols-2">
+                    <flux:input wire:model="company_name" :label="__('Company Name')" />
+                    <flux:input wire:model="company_tagline" :label="__('Tagline')" :placeholder="__('Specialists in all types of Industrial Items')" />
+                </div>
+                <flux:textarea wire:model="company_address" :label="__('Company Address')" rows="3" :description="__('Appears in the header of documents (one line per row).')" />
+                <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <flux:input wire:model="company_email" type="email" :label="__('Sales Email')" />
                     <flux:input wire:model="company_email_accounts" type="email" :label="__('Accounts Email')" />
                     <flux:input wire:model="company_tel_sales" :label="__('Tel Sales')" :placeholder="__('01234 567890')" />
@@ -207,57 +214,59 @@ new #[Title('CRM Settings')] class extends Component {
             </div>
         </div>
 
-        {{-- Document Branding --}}
-        <div class="border-t border-zinc-200/70 px-6 py-6 dark:border-white/10">
-            <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Documents</p>
-            <h2 class="mb-1 text-sm font-semibold text-zinc-900 dark:text-white">PDF Footer &amp; Certificate</h2>
-            <p class="mb-5 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Shown in the certificate block and footer of printed delivery notes and invoices.') }}</p>
+        {{-- Documents --}}
+        <div class="grid gap-6 border-t border-zinc-200/70 px-4 py-5 lg:grid-cols-[280px_1fr] lg:gap-10 dark:border-white/10">
+            <div>
+                <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Documents</p>
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">PDF Footer &amp; Certificate</h2>
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Shown in the certificate block and footer of printed delivery notes and invoices.</p>
+            </div>
             <div class="space-y-4">
-                <div class="grid gap-4 md:grid-cols-2">
+                <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <flux:input wire:model="company_director" :label="__('Director Name')" />
                     <flux:input wire:model="company_registration_no" :label="__('Companies House No.')" />
                     <flux:input wire:model="company_vat_no" :label="__('VAT Number')" />
                     <flux:input wire:model="company_iso_cert" :label="__('ISO Certification')" :placeholder="__('ISO 9001-A1XXXX')" />
                 </div>
-                <flux:input wire:model="certificate_of_conformity_no" :label="__('Certificate of Conformity No.')" :description="__('Appears next to “CERTIFICATE OF CONFORMITY” on delivery notes.')" />
-                <flux:textarea wire:model="company_registered_address" :label="__('Registered Address (Footer)')" rows="2" :description="__('Shown at the very bottom of the PDF (e.g. registered office address).')" />
+                <div class="grid gap-4 md:grid-cols-2">
+                    <flux:input wire:model="certificate_of_conformity_no" :label="__('Certificate of Conformity No.')" :description="__('Appears next to “CERTIFICATE OF CONFORMITY” on delivery notes.')" />
+                    <flux:textarea wire:model="company_registered_address" :label="__('Registered Address (Footer)')" rows="2" :description="__('Shown at the very bottom of the PDF.')" />
+                </div>
                 <flux:textarea wire:model="retention_of_title_clause" :label="__('Retention of Title Clause')" rows="4" :description="__('Legal terms printed on delivery notes. Text in double quotes is bolded.')" />
             </div>
         </div>
 
-        {{-- Tax --}}
-        <div class="border-t border-zinc-200/70 px-6 py-6 dark:border-white/10">
-            <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Tax</p>
-            <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">VAT Settings</h2>
-            <flux:input
-                wire:model="vat_rate"
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                :label="__('VAT Rate (%)')"
-                class="max-w-36"
-            />
-        </div>
-
-        {{-- Numbering --}}
-        <div class="border-t border-zinc-200/70 px-6 py-6 dark:border-white/10">
-            <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Numbering</p>
-            <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Document Numbering</h2>
-            <div class="grid gap-4 md:grid-cols-3">
-                <flux:input wire:model="dn_prefix" :label="__('DN Prefix')" :placeholder="__('DN')" maxlength="10" />
-                <flux:input wire:model="inv_prefix" :label="__('Invoice Prefix')" :placeholder="__('INV')" maxlength="10" />
-                <flux:input wire:model="number_padding" type="number" min="1" max="10" :label="__('Padding')" :description="__('E.g. 4 gives 0001')" />
+        {{-- Tax + Numbering combined into one row --}}
+        <div class="grid gap-6 border-t border-zinc-200/70 px-4 py-5 lg:grid-cols-[280px_1fr] lg:gap-10 dark:border-white/10">
+            <div>
+                <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Tax &amp; Numbering</p>
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">VAT &amp; Document Numbering</h2>
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Set the VAT rate and prefix/padding used to generate doc numbers.</p>
             </div>
-            <p class="mt-3 text-xs text-zinc-500 dark:text-zinc-400 font-mono">
-                Preview: {{ strtoupper($dn_prefix).'-'.now()->year.'-'.str_pad('1', (int) $number_padding, '0', STR_PAD_LEFT) }}
-                &mdash;
-                {{ strtoupper($inv_prefix).'-'.now()->year.'-'.str_pad('1', (int) $number_padding, '0', STR_PAD_LEFT) }}
-            </p>
+            <div class="space-y-3">
+                <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <flux:input
+                        wire:model="vat_rate"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        :label="__('VAT Rate (%)')"
+                    />
+                    <flux:input wire:model="dn_prefix" :label="__('DN Prefix')" :placeholder="__('DN')" maxlength="10" />
+                    <flux:input wire:model="inv_prefix" :label="__('Invoice Prefix')" :placeholder="__('INV')" maxlength="10" />
+                    <flux:input wire:model="number_padding" type="number" min="1" max="10" :label="__('Padding')" :description="__('e.g. 4 → 0001')" />
+                </div>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400 font-mono">
+                    Preview: {{ strtoupper($dn_prefix).'-'.now()->year.'-'.str_pad('1', (int) $number_padding, '0', STR_PAD_LEFT) }}
+                    &middot;
+                    {{ strtoupper($inv_prefix).'-'.now()->year.'-'.str_pad('1', (int) $number_padding, '0', STR_PAD_LEFT) }}
+                </p>
+            </div>
         </div>
 
         {{-- Footer actions --}}
-        <div class="sticky bottom-0 flex items-center justify-end gap-3 border-t border-zinc-200/70 bg-zinc-50 px-6 py-4 dark:border-white/10 dark:bg-zinc-900/80">
+        <div class="sticky bottom-0 flex items-center justify-end gap-3 border-t border-zinc-200/70 bg-zinc-50 px-4 py-3 dark:border-white/10 dark:bg-zinc-900/80">
             <flux:button variant="primary" type="submit">Save Settings</flux:button>
         </div>
     </form>

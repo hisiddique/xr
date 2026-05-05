@@ -99,7 +99,7 @@ new #[Title('Edit Invoice')] class extends Component {
 }; ?>
 
 <div
-    class="flex flex-col gap-8"
+    class="flex flex-col gap-4"
     x-data
     x-on:open-email-modal.window="$flux.modal('email-document-{{ $document->id }}').show()"
 >
@@ -129,36 +129,19 @@ new #[Title('Edit Invoice')] class extends Component {
     @endif
 
     <form
-        x-data="{
-            rows: @js($items),
-            units: @js($this->units),
-            add() { this.rows.push({ details: '', quantity: '1', price: '0.00', per: '', is_note: false }); this.$nextTick(() => this.focusLast()); },
-            addNote() { this.rows.push({ details: '', quantity: '0', price: '0.00', per: '', is_note: true }); this.$nextTick(() => this.focusLast()); },
-            remove(i) { if (this.rows.length > 1) this.rows.splice(i, 1); },
-            focusLast() {
-                const inputs = this.$refs.rowsBody.querySelectorAll('input[data-row-details]');
-                if (inputs.length) inputs[inputs.length - 1].focus();
-            },
-            submit() { $wire.set('items', this.rows, false); $wire.save(); },
-            submitAndEmail() { $wire.set('items', this.rows, false); $wire.saveAndEmail(); },
-        }"
+        x-data="lineItemForm(@js($items), @js($this->units), '{{ route('invoices.show', $document) }}', { line: { quantity: '1', price: '0.00' }, note: { price: '0.00' } })"
         x-on:submit.prevent="submit()"
-        x-on:keydown.enter="
-            if ($event.target.tagName === 'INPUT' && $event.target.closest('[data-items-table]')) {
-                $event.preventDefault();
-                add();
-            }
-        "
-        class="flex flex-col gap-6 max-w-5xl"
+        x-on:keydown="handleKey($event)"
+        class="flex flex-col gap-4 max-w-5xl"
     >
 
         {{-- Header details --}}
         <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
-            <div class="border-b border-zinc-200/70 px-6 py-4 dark:border-white/10">
+            <div class="border-b border-zinc-200/70 px-4 py-3 dark:border-white/10">
                 <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Invoice</p>
                 <h2 class="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-white">Header Details</h2>
             </div>
-            <div class="grid gap-4 p-6 md:grid-cols-2">
+            <div class="grid gap-4 p-4 md:grid-cols-2">
                 {{-- Customer read-only --}}
                 <div>
                     <flux:label>{{ __('Customer') }}</flux:label>
@@ -178,11 +161,14 @@ new #[Title('Edit Invoice')] class extends Component {
             <div class="flex items-center justify-between border-b border-zinc-200/70 px-6 py-4 dark:border-white/10">
                 <div>
                     <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Items</p>
-                    <h2 class="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-white">Line Items</h2>
+                    <h2 class="mt-0.5 flex items-center gap-3 text-sm font-semibold text-zinc-900 dark:text-white">
+                        Line Items
+                        <span class="text-xs font-normal text-zinc-400 dark:text-zinc-500">Remove line <x-ui.kbd-hint keys="Ctrl+⌫" class="ml-0" /></span>
+                    </h2>
                 </div>
                 <div class="flex items-center gap-2">
-                    <flux:button type="button" variant="ghost" icon="chat-bubble-left" size="sm" x-on:click="addNote()">Add Note</flux:button>
-                    <flux:button type="button" variant="ghost" icon="plus" size="sm" x-on:click="add()">Add Line</flux:button>
+                    <flux:button type="button" variant="ghost" icon="chat-bubble-left" size="sm" x-on:click="addNote()">Add Note <x-ui.kbd-hint keys="Shift+↵" /></flux:button>
+                    <flux:button type="button" variant="ghost" icon="plus" size="sm" x-on:click="add()">Add Line <x-ui.kbd-hint keys="↵" /></flux:button>
                 </div>
             </div>
 
@@ -200,7 +186,7 @@ new #[Title('Edit Invoice')] class extends Component {
                     </thead>
                     <tbody x-ref="rowsBody" class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                         <template x-for="(row, i) in rows" :key="i">
-                            <tr :class="row.is_note ? 'bg-amber-50/50 dark:bg-amber-500/5' : ''">
+                            <tr :data-row-idx="i" :class="row.is_note ? 'bg-amber-50/50 dark:bg-amber-500/5' : ''">
                                 <td class="px-4 py-2.5" :colspan="row.is_note ? 5 : 1">
                                     <div class="flex items-center gap-2">
                                         <flux:icon.chat-bubble-left x-show="row.is_note" class="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
@@ -270,9 +256,9 @@ new #[Title('Edit Invoice')] class extends Component {
         </div>
 
         {{-- Sticky footer bar --}}
-        <div class="sticky bottom-0 z-10 flex items-center justify-end gap-3 rounded-2xl border border-zinc-200/70 bg-white/95 px-6 py-4 shadow-[0_-1px_4px_rgba(16,24,40,0.06)] backdrop-blur dark:border-white/10 dark:bg-zinc-900/95">
-            <flux:button variant="ghost" :href="route('invoices.show', $document)" wire:navigate type="button">Cancel</flux:button>
-            <flux:button variant="filled" type="submit">Save Changes</flux:button>
+        <div class="sticky bottom-0 z-10 flex items-center justify-end gap-3 rounded-2xl border border-zinc-200/70 bg-white/95 px-4 py-3 shadow-[0_-1px_4px_rgba(16,24,40,0.06)] backdrop-blur dark:border-white/10 dark:bg-zinc-900/95">
+            <x-ui.back-button :fallback="route('invoices.show', $document)" />
+            <flux:button variant="filled" type="submit">Save Changes <x-ui.kbd-hint keys="Ctrl+↵" /></flux:button>
             <flux:button variant="primary" type="button" x-on:click.prevent="submitAndEmail()" icon="envelope">
                 Save &amp; Email
             </flux:button>

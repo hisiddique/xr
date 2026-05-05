@@ -85,7 +85,7 @@ new #[Title('Invoices')] class extends Component {
     }
 }; ?>
 
-<div class="flex flex-col gap-8">
+<div class="flex flex-col gap-4">
 
     <x-ui.page-header
         title="Invoices"
@@ -93,22 +93,27 @@ new #[Title('Invoices')] class extends Component {
     />
 
     {{-- Toolbar card --}}
-    <div class="rounded-2xl border border-zinc-200/70 bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <flux:input
-                wire:model.live.debounce.300ms="search"
-                icon="magnifying-glass"
-                :placeholder="__('Search by invoice number or customer…')"
-                clearable
-                class="flex-1 max-w-sm"
-            />
+    <div class="rounded-2xl border border-zinc-200/70 bg-white p-3 dark:border-white/10 dark:bg-zinc-900">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div x-data="zoneNav('search')" data-zone="search" tabindex="-1" class="outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 rounded-lg flex-1 max-w-sm">
+                <flux:input
+                    wire:model.live.debounce.300ms="search"
+                    data-search-input
+                    autocomplete="off"
+                    icon="magnifying-glass"
+                    :placeholder="__('Search by invoice number or customer…')"
+                    clearable
+                    class="flex-1 max-w-sm"
+                />
+            </div>
 
             {{-- Status filter pills --}}
-            <div class="flex flex-wrap gap-1.5">
+            <div x-data="zoneNav('filters')" data-zone="filters" tabindex="-1" class="outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 rounded-lg flex flex-wrap gap-1.5">
                 @foreach(['' => 'All', 'active' => 'Active', 'emailed' => 'Emailed'] as $val => $label)
                     <button
                         type="button"
                         wire:click="$set('status', '{{ $val }}'); $set('trashed', false)"
+                        data-filter-pill
                         @class([
                             'rounded-full px-3 py-1 text-xs font-medium transition-colors',
                             'bg-indigo-600 text-white shadow-sm' => ! $trashed && $status === $val,
@@ -121,6 +126,7 @@ new #[Title('Invoices')] class extends Component {
                 <button
                     type="button"
                     wire:click="$toggle('trashed')"
+                    data-filter-pill
                     @class([
                         'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors',
                         'bg-rose-600 text-white shadow-sm' => $trashed,
@@ -135,7 +141,7 @@ new #[Title('Invoices')] class extends Component {
     </div>
 
     {{-- Table card --}}
-    <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
+    <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
 
         @if($this->invoices->isEmpty())
             <x-ui.empty-state
@@ -152,16 +158,16 @@ new #[Title('Invoices')] class extends Component {
                 @endunless
             </x-ui.empty-state>
         @else
-            <div class="overflow-x-auto" x-data="tableNav">
+            <div class="overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 rounded-lg" x-data="zoneNav('table')" data-zone="table" tabindex="-1">
                 <table class="w-full text-sm">
                     <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">#</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Date</th>
-                            <th class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Amount</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Status</th>
-                            <th class="px-6 py-3"></th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">#</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Date</th>
+                            <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Amount</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Status</th>
+                            <th class="px-4 py-2"></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
@@ -174,25 +180,25 @@ new #[Title('Invoices')] class extends Component {
                                 class="transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5"
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
-                                <td class="px-6 py-4">
+                                <td class="px-4 py-2">
                                     <a href="{{ route('invoices.show', $invoice) }}" wire:navigate class="font-mono text-sm font-semibold text-indigo-600 hover:underline dark:text-indigo-400">
-                                        {{ $invoice->doc_number }}
+                                        <x-ui.highlight :text="$invoice->doc_number" :term="$search" />
                                     </a>
                                 </td>
-                                <td class="px-6 py-4">
+                                <td class="px-4 py-2">
                                     <div class="flex items-center gap-2.5">
                                         <x-ui.avatar :name="$invoice->customer->company_name" size="xs" />
-                                        <span class="font-medium text-zinc-900 dark:text-white">{{ $invoice->customer->company_name }}</span>
+                                        <span class="font-medium text-zinc-900 dark:text-white"><x-ui.highlight :text="$invoice->customer->company_name" :term="$search" /></span>
                                     </div>
                                 </td>
                                 <td class="px-6 py-4 text-zinc-500 dark:text-zinc-400">{{ $invoice->doc_date->format('d M Y') }}</td>
                                 <td class="px-6 py-4 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($invoice->total_value, 2) }}</td>
-                                <td class="px-6 py-4">
+                                <td class="px-4 py-2">
                                     <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $invoice->status->ringColor() }}">
                                         {{ $invoice->status->label() }}
                                     </span>
                                 </td>
-                                <td class="px-6 py-4">
+                                <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
                                         @if($trashed)
                                             <flux:button
@@ -201,13 +207,14 @@ new #[Title('Invoices')] class extends Component {
                                                 icon="arrow-uturn-left"
                                                 wire:click="restore({{ $invoice->id }})"
                                                 class="text-emerald-600 hover:text-emerald-700"
+                                                data-row-action="restore"
                                             >
                                                 {{ __('Restore') }}
                                             </flux:button>
                                         @else
-                                            <flux:button size="xs" variant="ghost" icon="eye" :href="route('invoices.show', $invoice)" wire:navigate />
-                                            <flux:button size="xs" variant="ghost" icon="pencil" :href="route('invoices.edit', $invoice)" wire:navigate />
-                                            <flux:button size="xs" variant="ghost" icon="arrow-down-tray" :href="route('documents.pdf.download', $invoice)" />
+                                            <flux:button size="xs" variant="ghost" icon="eye" :href="route('invoices.show', $invoice)" wire:navigate data-row-action="view" />
+                                            <flux:button size="xs" variant="ghost" icon="pencil" :href="route('invoices.edit', $invoice)" wire:navigate data-row-action="edit" />
+                                            <flux:button size="xs" variant="ghost" icon="arrow-down-tray" :href="route('documents.pdf.download', $invoice)" data-row-action="download" />
                                             <flux:button
                                                 size="xs"
                                                 variant="ghost"
@@ -217,6 +224,7 @@ new #[Title('Invoices')] class extends Component {
                                                     ? '!text-emerald-600 hover:!text-emerald-700 dark:!text-emerald-400'
                                                     : '!text-amber-500 hover:!text-amber-600 dark:!text-amber-400'"
                                                 :title="$invoice->has_been_emailed ? __('Email sent') : __('Not yet emailed')"
+                                                data-row-action="email"
                                             />
                                             <livewire:pages::invoices.delete-modal :document="$invoice" :key="'delete-'.$invoice->id" />
                                             <livewire:pages::documents.email-modal :document="$invoice" :key="'email-'.$invoice->id" />
@@ -229,10 +237,12 @@ new #[Title('Invoices')] class extends Component {
                 </table>
             </div>
 
-            <div class="border-t border-zinc-100 px-6 py-4 dark:border-white/[0.06]">
+            <div class="border-t border-zinc-100 px-4 py-2 dark:border-white/[0.06] outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30" x-data="zoneNav('pagination')" data-zone="pagination" tabindex="-1">
                 {{ $this->invoices->links() }}
             </div>
         @endif
     </div>
+
+    <div x-data x-init="$nextTick(() => Alpine.store('hotkeys').focusZone('table'))"></div>
 
 </div>

@@ -107,7 +107,7 @@ new #[Title('Delivery Notes')] class extends Component {
     }
 }; ?>
 
-<div class="flex flex-col gap-8">
+<div class="flex flex-col gap-4">
 
     <x-ui.page-header
         title="Delivery Notes"
@@ -121,22 +121,27 @@ new #[Title('Delivery Notes')] class extends Component {
     </x-ui.page-header>
 
     {{-- Toolbar card --}}
-    <div class="rounded-2xl border border-zinc-200/70 bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <flux:input
-                wire:model.live.debounce.300ms="search"
-                icon="magnifying-glass"
-                :placeholder="__('Search by doc number or customer…')"
-                clearable
-                class="flex-1 max-w-sm"
-            />
+    <div class="rounded-2xl border border-zinc-200/70 bg-white p-3 dark:border-white/10 dark:bg-zinc-900">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div x-data="zoneNav('search')" data-zone="search" tabindex="-1" class="outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 rounded-lg flex-1 max-w-sm">
+                <flux:input
+                    wire:model.live.debounce.300ms="search"
+                    data-search-input
+                    autocomplete="off"
+                    icon="magnifying-glass"
+                    :placeholder="__('Search by doc number or customer…')"
+                    clearable
+                    class="flex-1 max-w-sm"
+                />
+            </div>
 
             {{-- Status filter pills --}}
-            <div class="flex flex-wrap gap-1.5">
+            <div x-data="zoneNav('filters')" data-zone="filters" tabindex="-1" class="outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 rounded-lg flex flex-wrap gap-1.5">
                 @foreach(['' => 'All', 'active' => 'Active', 'converted' => 'Converted', 'emailed' => 'Emailed'] as $val => $label)
                     <button
                         type="button"
                         wire:click="$set('status', '{{ $val }}')"
+                        data-filter-pill
                         @class([
                             'rounded-full px-3 py-1 text-xs font-medium transition-colors',
                             'bg-indigo-600 text-white shadow-sm' => $status === $val,
@@ -204,7 +209,7 @@ new #[Title('Delivery Notes')] class extends Component {
     @endif
 
     {{-- Table card --}}
-    <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
+    <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
 
         @if($this->deliveryNotes->isEmpty())
             <x-ui.empty-state
@@ -221,11 +226,11 @@ new #[Title('Delivery Notes')] class extends Component {
                 @endunless
             </x-ui.empty-state>
         @else
-            <div class="overflow-x-auto" x-data="tableNav">
+            <div class="overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 rounded-lg" x-data="zoneNav('table')" data-zone="table" tabindex="-1">
                 <table class="w-full text-sm">
                     <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                         <tr>
-                            <th class="w-10 px-4 py-3">
+                            <th class="w-10 px-4 py-2">
                                 @if(count($this->selectableIdsOnPage) > 0)
                                     <input
                                         type="checkbox"
@@ -236,11 +241,11 @@ new #[Title('Delivery Notes')] class extends Component {
                                     />
                                 @endif
                             </th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">#</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Date</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Status</th>
-                            <th class="px-6 py-3"></th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">#</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Date</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Status</th>
+                            <th class="px-4 py-2"></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
@@ -255,7 +260,7 @@ new #[Title('Delivery Notes')] class extends Component {
                                 class="transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5"
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
-                                <td class="px-4 py-4">
+                                <td class="px-4 py-2">
                                     @if($note->status === DocumentStatus::Active)
                                         <input
                                             type="checkbox"
@@ -265,27 +270,27 @@ new #[Title('Delivery Notes')] class extends Component {
                                         />
                                     @endif
                                 </td>
-                                <td class="px-6 py-4">
+                                <td class="px-4 py-2">
                                     <a href="{{ route('delivery-notes.show', $note) }}" wire:navigate class="font-mono text-sm font-semibold text-indigo-600 hover:underline dark:text-indigo-400">
-                                        {{ $note->doc_number }}
+                                        <x-ui.highlight :text="$note->doc_number" :term="$search" />
                                     </a>
                                 </td>
-                                <td class="px-6 py-4">
+                                <td class="px-4 py-2">
                                     <div class="flex items-center gap-2.5">
                                         <x-ui.avatar :name="$note->customer->company_name" size="xs" />
-                                        <span class="font-medium text-zinc-900 dark:text-white">{{ $note->customer->company_name }}</span>
+                                        <span class="font-medium text-zinc-900 dark:text-white"><x-ui.highlight :text="$note->customer->company_name" :term="$search" /></span>
                                     </div>
                                 </td>
                                 <td class="px-6 py-4 text-zinc-500 dark:text-zinc-400">{{ $note->doc_date->format('d M Y') }}</td>
-                                <td class="px-6 py-4">
+                                <td class="px-4 py-2">
                                     <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $note->status->ringColor() }}">
                                         {{ $note->status->label() }}
                                     </span>
                                 </td>
-                                <td class="px-6 py-4">
+                                <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
-                                        <flux:button size="xs" variant="ghost" icon="eye" :href="route('delivery-notes.show', $note)" wire:navigate />
-                                        <flux:button size="xs" variant="ghost" icon="pencil" :href="route('delivery-notes.edit', $note)" wire:navigate />
+                                        <flux:button size="xs" variant="ghost" icon="eye" :href="route('delivery-notes.show', $note)" wire:navigate data-row-action="view" />
+                                        <flux:button size="xs" variant="ghost" icon="pencil" :href="route('delivery-notes.edit', $note)" wire:navigate data-row-action="edit" />
                                         <flux:button
                                             size="xs"
                                             variant="ghost"
@@ -295,6 +300,7 @@ new #[Title('Delivery Notes')] class extends Component {
                                                 ? '!text-emerald-600 hover:!text-emerald-700 dark:!text-emerald-400'
                                                 : '!text-amber-500 hover:!text-amber-600 dark:!text-amber-400'"
                                             :title="$note->has_been_emailed ? __('Email sent') : __('Not yet emailed')"
+                                            data-row-action="email"
                                         />
                                         @if($note->status === DocumentStatus::Active)
                                             <flux:button
@@ -303,6 +309,7 @@ new #[Title('Delivery Notes')] class extends Component {
                                                 icon="arrow-path"
                                                 class="text-violet-600 dark:text-violet-400"
                                                 x-on:click="$flux.modal('convert-dn-index-{{ $note->id }}').show()"
+                                                data-row-action="convert"
                                             />
                                             <flux:modal name="convert-dn-index-{{ $note->id }}" focusable class="max-w-md">
                                                 <div class="space-y-6">
@@ -336,10 +343,12 @@ new #[Title('Delivery Notes')] class extends Component {
                 </table>
             </div>
 
-            <div class="border-t border-zinc-100 px-6 py-4 dark:border-white/[0.06]">
+            <div class="border-t border-zinc-100 px-4 py-2 dark:border-white/[0.06] outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30" x-data="zoneNav('pagination')" data-zone="pagination" tabindex="-1">
                 {{ $this->deliveryNotes->links() }}
             </div>
         @endif
     </div>
+
+    <div x-data x-init="$nextTick(() => Alpine.store('hotkeys').focusZone('table'))"></div>
 
 </div>

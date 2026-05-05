@@ -35,9 +35,9 @@ new class extends Component {
         icon="trash"
         x-on:click="$flux.modal('delete-document-{{ $document->id }}').show()"
         class="text-red-500 hover:text-red-700"
-    >
-        {{ __('Delete') }}
-    </flux:button>
+        :title="__('Delete')"
+        data-row-action="delete"
+    />
 
     <flux:modal name="delete-document-{{ $document->id }}" focusable class="max-w-md">
         <div class="space-y-6">
