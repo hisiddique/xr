@@ -19,10 +19,15 @@ new #[Title('Titles')] class extends Component {
         Flux::toast(variant: 'success', text: __('Title added.'));
     }
 
-    public function deleteTitle(int $id): void
+    public function deleteTitle(): void
     {
-        LookupTitle::findOrFail($id)->delete();
+        if (! $this->deletingTitleId) {
+            return;
+        }
+
+        LookupTitle::findOrFail($this->deletingTitleId)->delete();
         $this->deletingTitleId = null;
+        Flux::modal('delete-title')->close();
         Flux::toast(variant: 'success', text: __('Title deleted.'));
     }
 
@@ -30,6 +35,14 @@ new #[Title('Titles')] class extends Component {
     public function titles()
     {
         return LookupTitle::orderBy('name')->get();
+    }
+
+    #[Computed]
+    public function deletingTitle(): ?LookupTitle
+    {
+        return $this->deletingTitleId
+            ? LookupTitle::find($this->deletingTitleId)
+            : null;
     }
 }; ?>
 
@@ -68,16 +81,14 @@ new #[Title('Titles')] class extends Component {
                             <tr>
                                 <td class="px-6 py-3 text-sm text-zinc-900 dark:text-white">{{ $title->name }}</td>
                                 <td class="px-6 py-3 text-right">
-                                    <flux:button size="xs" variant="ghost" icon="trash" x-on:click="$flux.modal('delete-title-{{ $title->id }}').show()" class="text-rose-500 hover:text-rose-600" />
-                                    <flux:modal name="delete-title-{{ $title->id }}" focusable class="max-w-sm">
-                                        <div class="space-y-4">
-                                            <flux:heading>{{ __('Delete ":name"?', ['name' => $title->name]) }}</flux:heading>
-                                            <div class="flex justify-end gap-2">
-                                                <flux:modal.close><flux:button variant="filled">Cancel</flux:button></flux:modal.close>
-                                                <flux:button variant="danger" wire:click="deleteTitle({{ $title->id }})">Delete</flux:button>
-                                            </div>
-                                        </div>
-                                    </flux:modal>
+                                    <flux:button
+                                        size="xs"
+                                        variant="ghost"
+                                        icon="trash"
+                                        wire:click="$set('deletingTitleId', {{ $title->id }})"
+                                        x-on:click="$flux.modal('delete-title').show()"
+                                        class="text-rose-500 hover:text-rose-600"
+                                    />
                                 </td>
                             </tr>
                         @endforeach
@@ -86,5 +97,20 @@ new #[Title('Titles')] class extends Component {
             @endif
         </div>
     </div>
+
+    {{-- Modals --}}
+    <flux:modal name="delete-title" focusable class="max-w-sm" @close="$wire.set('deletingTitleId', null)">
+        <div class="space-y-4">
+            <flux:heading>
+                @if($this->deletingTitle)
+                    {{ __('Delete ":name"?', ['name' => $this->deletingTitle->name]) }}
+                @endif
+            </flux:heading>
+            <div class="flex justify-end gap-2">
+                <flux:modal.close><flux:button variant="filled">Cancel</flux:button></flux:modal.close>
+                <flux:button variant="danger" wire:click="deleteTitle">Delete</flux:button>
+            </div>
+        </div>
+    </flux:modal>
 
 </div>

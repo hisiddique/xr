@@ -3,6 +3,8 @@
 use App\DocumentStatus;
 use App\DocumentType;
 use App\Models\Document;
+use App\Models\DocumentEmailLog;
+use App\Services\DocumentEmailService;
 use Flux\Flux;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Computed;
@@ -23,6 +25,14 @@ new #[Title('Invoices')] class extends Component {
 
     #[Url]
     public bool $trashed = false;
+
+    /** @var array<int, int> */
+    public array $selectedIds = [];
+
+    public function clearSelection(): void
+    {
+        $this->selectedIds = [];
+    }
 
     public function updatedSearch(): void
     {
@@ -68,13 +78,81 @@ new #[Title('Invoices')] class extends Component {
         Flux::toast(variant: 'success', text: __('Invoice :number restored.', ['number' => $invoice->doc_number]));
     }
 
+    /** @return \Illuminate\Support\Collection<int, Document> */
+    #[Computed]
+    public function selectedForEmail()
+    {
+        if (empty($this->selectedIds)) {
+            return collect();
+        }
+
+        return Document::invoices()
+            ->with('customer')
+            ->whereIn('id', $this->selectedIds)
+            ->get();
+    }
+
+    public function bulkEmail(DocumentEmailService $service): void
+    {
+        if (empty($this->selectedIds)) {
+            return;
+        }
+
+        $invoices = Document::invoices()
+            ->with('customer')
+            ->whereIn('id', $this->selectedIds)
+            ->get();
+
+        $sent = 0;
+        $skipped = 0;
+        $failed = 0;
+
+        foreach ($invoices as $invoice) {
+            $email = $invoice->customer?->email_1;
+
+            if (! $email) {
+                $skipped++;
+
+                continue;
+            }
+
+            try {
+                $service->send($invoice, $email);
+                $sent++;
+            } catch (\Throwable) {
+                $failed++;
+            }
+        }
+
+        $this->selectedIds = [];
+
+        Flux::modal('bulk-email-invoices')->close();
+
+        $message = match (true) {
+            $sent > 0 && ($skipped > 0 || $failed > 0) => __(':n sent, :s skipped, :f failed.', ['n' => $sent, 's' => $skipped, 'f' => $failed]),
+            $sent > 0 => __(':n email(s) sent.', ['n' => $sent]),
+            default => __('No emails sent.'),
+        };
+
+        Flux::toast(variant: $sent > 0 ? 'success' : 'warning', text: $message);
+    }
+
     #[Computed]
     public function invoices()
     {
         return Document::invoices()
             ->when($this->trashed, fn ($q) => $q->onlyTrashed())
             ->with('customer')
-            ->withExists(['emailLogs as has_been_emailed' => fn ($q) => $q->where('status', 'sent')])
+            ->addSelect([
+                'last_email_status' => DocumentEmailLog::select('status')
+                    ->whereColumn('document_id', 'documents.id')
+                    ->latest('id')
+                    ->limit(1),
+                'last_email_error' => DocumentEmailLog::select('error_message')
+                    ->whereColumn('document_id', 'documents.id')
+                    ->latest('id')
+                    ->limit(1),
+            ])
             ->when($this->search, fn ($q) => $q->where(function ($q) {
                 $q->where('doc_number', 'like', "%{$this->search}%")
                     ->orWhereHas('customer', fn ($q) => $q->where('company_name', 'like', "%{$this->search}%"));
@@ -82,6 +160,25 @@ new #[Title('Invoices')] class extends Component {
             ->when($this->status && ! $this->trashed, fn ($q) => $q->where('status', $this->status))
             ->latest()
             ->paginate(15);
+    }
+
+    /** @return array<int, int> */
+    #[Computed]
+    public function selectableIdsOnPage(): array
+    {
+        if ($this->trashed) {
+            return [];
+        }
+
+        return $this->invoices->pluck('id')->all();
+    }
+
+    #[Computed]
+    public function pageFullySelected(): bool
+    {
+        $ids = $this->selectableIdsOnPage;
+
+        return ! empty($ids) && empty(array_diff($ids, $this->selectedIds));
     }
 }; ?>
 
@@ -140,6 +237,31 @@ new #[Title('Invoices')] class extends Component {
         </div>
     </div>
 
+    {{-- Bulk action bar --}}
+    @if(! $trashed && count($selectedIds) > 0)
+        <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.06)] dark:border-indigo-500/20 dark:bg-indigo-500/10">
+            <div class="flex items-center gap-2 text-sm">
+                <flux:icon.check-circle class="size-4 text-indigo-600 dark:text-indigo-400" />
+                <span class="font-medium text-indigo-900 dark:text-indigo-200">
+                    {{ trans_choice(':count invoice selected|:count invoices selected', count($selectedIds), ['count' => count($selectedIds)]) }}
+                </span>
+            </div>
+            <div class="flex items-center gap-2">
+                <flux:button size="sm" variant="ghost" wire:click="clearSelection">
+                    {{ __('Clear') }}
+                </flux:button>
+                <flux:button
+                    size="sm"
+                    variant="primary"
+                    icon="envelope"
+                    x-on:click="$flux.modal('bulk-email-invoices').show()"
+                >
+                    {{ __('Email Selected') }}
+                </flux:button>
+            </div>
+        </div>
+    @endif
+
     {{-- Table card --}}
     <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
 
@@ -162,6 +284,17 @@ new #[Title('Invoices')] class extends Component {
                 <table class="w-full text-sm">
                     <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                         <tr>
+                            <th class="w-10 px-4 py-2">
+                                @if(! $trashed && count($this->selectableIdsOnPage) > 0)
+                                    <input
+                                        type="checkbox"
+                                        @checked($this->pageFullySelected)
+                                        x-on:change="$wire.set('selectedIds', $event.target.checked ? Array.from(new Set([...$wire.selectedIds, ...{{ json_encode($this->selectableIdsOnPage) }}])) : $wire.selectedIds.filter(id => !{{ json_encode($this->selectableIdsOnPage) }}.includes(id)))"
+                                        class="size-4 cursor-pointer rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
+                                        title="{{ __('Select all on this page') }}"
+                                    />
+                                @endif
+                            </th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">#</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Date</th>
@@ -181,7 +314,22 @@ new #[Title('Invoices')] class extends Component {
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
                                 <td class="px-4 py-2">
-                                    <a href="{{ route('invoices.show', $invoice) }}" wire:navigate class="font-mono text-sm font-semibold text-indigo-600 hover:underline dark:text-indigo-400">
+                                    @if(! $trashed)
+                                        <input
+                                            type="checkbox"
+                                            value="{{ $invoice->id }}"
+                                            wire:model.live="selectedIds"
+                                            class="size-4 cursor-pointer rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
+                                        />
+                                    @endif
+                                </td>
+                                <td class="px-4 py-2">
+                                    <a href="{{ route('invoices.show', $invoice) }}" wire:navigate @class([
+                                        'inline-flex items-center rounded-md px-2 py-0.5 font-mono text-sm font-semibold text-indigo-700 hover:underline dark:text-indigo-300',
+                                        'bg-emerald-100 dark:bg-emerald-500/20' => $invoice->last_email_status === 'sent',
+                                        'bg-rose-100 dark:bg-rose-500/20' => $invoice->last_email_status === 'failed',
+                                        'bg-amber-100 dark:bg-amber-500/20' => $invoice->last_email_status === null,
+                                    ])>
                                         <x-ui.highlight :text="$invoice->doc_number" :term="$search" />
                                     </a>
                                 </td>
@@ -215,17 +363,31 @@ new #[Title('Invoices')] class extends Component {
                                             <flux:button size="xs" variant="ghost" icon="eye" :href="route('invoices.show', $invoice)" wire:navigate data-row-action="view" />
                                             <flux:button size="xs" variant="ghost" icon="pencil" :href="route('invoices.edit', $invoice)" wire:navigate data-row-action="edit" />
                                             <flux:button size="xs" variant="ghost" icon="arrow-down-tray" :href="route('documents.pdf.download', $invoice)" data-row-action="download" />
-                                            <flux:button
-                                                size="xs"
-                                                variant="ghost"
-                                                icon="envelope"
-                                                x-on:click="$flux.modal('email-document-{{ $invoice->id }}').show()"
-                                                :class="$invoice->has_been_emailed
-                                                    ? '!text-emerald-600 hover:!text-emerald-700 dark:!text-emerald-400'
-                                                    : '!text-amber-500 hover:!text-amber-600 dark:!text-amber-400'"
-                                                :title="$invoice->has_been_emailed ? __('Email sent') : __('Not yet emailed')"
-                                                data-row-action="email"
-                                            />
+                                            <span class="relative inline-flex">
+                                                <flux:button
+                                                    size="xs"
+                                                    variant="ghost"
+                                                    icon="envelope"
+                                                    x-on:click="$flux.modal('email-document-{{ $invoice->id }}').show()"
+                                                    @class([
+                                                        '!text-emerald-600 hover:!text-emerald-700 dark:!text-emerald-400' => $invoice->last_email_status === 'sent',
+                                                        '!text-rose-600 hover:!text-rose-700 dark:!text-rose-400' => $invoice->last_email_status === 'failed',
+                                                        '!text-amber-500 hover:!text-amber-600 dark:!text-amber-400' => $invoice->last_email_status === null,
+                                                    ])
+                                                    title="{{ match($invoice->last_email_status) {
+                                                        'sent' => __('Email sent'),
+                                                        'failed' => __('Last send failed: :msg', ['msg' => $invoice->last_email_error ?? 'unknown error']),
+                                                        default => __('Not yet emailed'),
+                                                    } }}"
+                                                    data-row-action="email"
+                                                />
+                                                @if($invoice->last_email_status === 'failed')
+                                                    <span class="pointer-events-none absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                                                        <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75"></span>
+                                                        <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-900"></span>
+                                                    </span>
+                                                @endif
+                                            </span>
                                             <livewire:pages::invoices.delete-modal :document="$invoice" :key="'delete-'.$invoice->id" />
                                             <livewire:pages::documents.email-modal :document="$invoice" :key="'email-'.$invoice->id" />
                                         @endif
@@ -244,5 +406,49 @@ new #[Title('Invoices')] class extends Component {
     </div>
 
     <div x-data x-init="$nextTick(() => Alpine.store('hotkeys').focusZone('table'))"></div>
+
+    {{-- Modals --}}
+    @if(! $trashed && count($selectedIds) > 0)
+        <flux:modal name="bulk-email-invoices" focusable class="max-w-lg">
+            <div class="flex max-h-[80vh] flex-col gap-4">
+                <div class="shrink-0">
+                    <flux:heading size="lg">
+                        {{ trans_choice('Send :count email?|Send :count emails?', count($selectedIds), ['count' => count($selectedIds)]) }}
+                    </flux:heading>
+                    <flux:subheading>
+                        {{ __('Each selected invoice will be emailed to the customer below. Rows without a customer email are skipped.') }}
+                    </flux:subheading>
+                </div>
+                <ul class="min-h-0 flex-1 overflow-y-auto rounded-lg border border-zinc-200 divide-y divide-zinc-100 dark:border-white/10 dark:divide-white/[0.06]">
+                    @foreach($this->selectedForEmail as $doc)
+                        <li class="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                            <span class="font-mono text-zinc-900 dark:text-white">{{ $doc->doc_number }}</span>
+                            <span class="flex-1 truncate text-zinc-600 dark:text-zinc-300">{{ $doc->customer?->company_name ?? '—' }}</span>
+                            @if($doc->customer?->email_1)
+                                <span class="text-xs text-zinc-500 dark:text-zinc-400">{{ $doc->customer->email_1 }}</span>
+                            @else
+                                <span class="text-xs font-medium text-amber-600 dark:text-amber-400">{{ __('no email — skipped') }}</span>
+                            @endif
+                        </li>
+                    @endforeach
+                </ul>
+                <div class="flex shrink-0 justify-end gap-3">
+                    <flux:modal.close>
+                        <flux:button variant="ghost" type="button">{{ __('Cancel') }}</flux:button>
+                    </flux:modal.close>
+                    <flux:button
+                        variant="primary"
+                        icon="envelope"
+                        wire:click="bulkEmail"
+                        wire:loading.attr="disabled"
+                        wire:target="bulkEmail"
+                    >
+                        <span wire:loading.remove wire:target="bulkEmail">{{ __('Send All') }}</span>
+                        <span wire:loading wire:target="bulkEmail">{{ __('Sending…') }}</span>
+                    </flux:button>
+                </div>
+            </div>
+        </flux:modal>
+    @endif
 
 </div>

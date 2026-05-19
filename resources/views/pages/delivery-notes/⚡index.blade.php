@@ -4,6 +4,8 @@ use App\Actions\ConvertDeliveryNoteToInvoice;
 use App\DocumentStatus;
 use App\DocumentType;
 use App\Models\Document;
+use App\Models\DocumentEmailLog;
+use App\Services\DocumentEmailService;
 use Flux\Flux;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -23,6 +25,17 @@ new #[Title('Delivery Notes')] class extends Component {
     /** @var array<int, int> */
     public array $selectedIds = [];
 
+    public ?int $convertingNoteId = null;
+
+    /** @return Document|null */
+    #[Computed]
+    public function convertingNote()
+    {
+        return $this->convertingNoteId
+            ? Document::deliveryNotes()->with('customer')->find($this->convertingNoteId)
+            : null;
+    }
+
     public function updatedSearch(): void
     {
         $this->resetPage();
@@ -36,6 +49,25 @@ new #[Title('Delivery Notes')] class extends Component {
     public function clearSelection(): void
     {
         $this->selectedIds = [];
+    }
+
+    public function convertSingle(ConvertDeliveryNoteToInvoice $action): void
+    {
+        $note = $this->convertingNote;
+
+        if (! $note) {
+            return;
+        }
+
+        try {
+            $action->handle($note);
+            Flux::toast(variant: 'success', text: __('Delivery note :number converted.', ['number' => $note->doc_number]));
+        } catch (\DomainException $e) {
+            Flux::toast(variant: 'warning', text: $e->getMessage());
+        }
+
+        $this->convertingNoteId = null;
+        Flux::modal('convert-dn')->close();
     }
 
     public function bulkConvert(ConvertDeliveryNoteToInvoice $action): void
@@ -73,12 +105,80 @@ new #[Title('Delivery Notes')] class extends Component {
         Flux::toast(variant: $converted > 0 ? 'success' : 'warning', text: $message);
     }
 
+    /** @return \Illuminate\Support\Collection<int, Document> */
+    #[Computed]
+    public function selectedForEmail()
+    {
+        if (empty($this->selectedIds)) {
+            return collect();
+        }
+
+        return Document::deliveryNotes()
+            ->with('customer')
+            ->whereIn('id', $this->selectedIds)
+            ->get();
+    }
+
+    public function bulkEmail(DocumentEmailService $service): void
+    {
+        if (empty($this->selectedIds)) {
+            return;
+        }
+
+        $notes = Document::deliveryNotes()
+            ->with('customer')
+            ->whereIn('id', $this->selectedIds)
+            ->get();
+
+        $sent = 0;
+        $skipped = 0;
+        $failed = 0;
+
+        foreach ($notes as $note) {
+            $email = $note->customer?->email_1;
+
+            if (! $email) {
+                $skipped++;
+
+                continue;
+            }
+
+            try {
+                $service->send($note, $email);
+                $sent++;
+            } catch (\Throwable) {
+                $failed++;
+            }
+        }
+
+        $this->selectedIds = [];
+
+        Flux::modal('bulk-email-dns')->close();
+
+        $message = match (true) {
+            $sent > 0 && ($skipped > 0 || $failed > 0) => __(':n sent, :s skipped, :f failed.', ['n' => $sent, 's' => $skipped, 'f' => $failed]),
+            $sent > 0 => __(':n email(s) sent.', ['n' => $sent]),
+            default => __('No emails sent.'),
+        };
+
+        Flux::toast(variant: $sent > 0 ? 'success' : 'warning', text: $message);
+    }
+
     #[Computed]
     public function deliveryNotes()
     {
         return Document::deliveryNotes()
             ->with('customer')
-            ->withExists(['emailLogs as has_been_emailed' => fn ($q) => $q->where('status', 'sent')])
+            ->addSelect([
+                'last_email_status' => DocumentEmailLog::select('status')
+                    ->whereColumn('document_id', 'documents.id')
+                    ->latest('id')
+                    ->limit(1),
+                'last_email_error' => DocumentEmailLog::select('error_message')
+                    ->whereColumn('document_id', 'documents.id')
+                    ->latest('id')
+                    ->limit(1),
+            ])
             ->when($this->search, fn ($q) => $q->where(function ($q) {
                 $q->where('doc_number', 'like', "%{$this->search}%")
                     ->orWhereHas('customer', fn ($q) => $q->where('company_name', 'like', "%{$this->search}%"));
@@ -92,10 +192,7 @@ new #[Title('Delivery Notes')] class extends Component {
     #[Computed]
     public function selectableIdsOnPage(): array
     {
-        return $this->deliveryNotes
-            ->where('status', DocumentStatus::Active)
-            ->pluck('id')
-            ->all();
+        return $this->deliveryNotes->pluck('id')->all();
     }
 
     #[Computed]
@@ -170,6 +267,14 @@ new #[Title('Delivery Notes')] class extends Component {
                 </flux:button>
                 <flux:button
                     size="sm"
+                    variant="ghost"
+                    icon="envelope"
+                    x-on:click="$flux.modal('bulk-email-dns').show()"
+                >
+                    {{ __('Email Selected') }}
+                </flux:button>
+                <flux:button
+                    size="sm"
                     variant="primary"
                     icon="arrow-path"
                     x-on:click="$flux.modal('bulk-convert-dns').show()"
@@ -178,34 +283,6 @@ new #[Title('Delivery Notes')] class extends Component {
                 </flux:button>
             </div>
         </div>
-
-        <flux:modal name="bulk-convert-dns" focusable class="max-w-md">
-            <div class="space-y-6">
-                <div>
-                    <flux:heading size="lg">
-                        {{ trans_choice('Convert :count delivery note to an invoice?|Convert :count delivery notes to invoices?', count($selectedIds), ['count' => count($selectedIds)]) }}
-                    </flux:heading>
-                    <flux:subheading>
-                        {{ __('Each selected delivery note will become its own invoice. Already-converted or ineligible delivery notes will be skipped.') }}
-                    </flux:subheading>
-                </div>
-                <div class="flex justify-end gap-3">
-                    <flux:modal.close>
-                        <flux:button variant="ghost" type="button">{{ __('Cancel') }}</flux:button>
-                    </flux:modal.close>
-                    <flux:button
-                        variant="primary"
-                        icon="arrow-path"
-                        wire:click="bulkConvert"
-                        wire:loading.attr="disabled"
-                        wire:target="bulkConvert"
-                    >
-                        <span wire:loading.remove wire:target="bulkConvert">{{ __('Convert') }}</span>
-                        <span wire:loading wire:target="bulkConvert">{{ __('Converting…') }}</span>
-                    </flux:button>
-                </div>
-            </div>
-        </flux:modal>
     @endif
 
     {{-- Table card --}}
@@ -244,6 +321,7 @@ new #[Title('Delivery Notes')] class extends Component {
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">#</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Date</th>
+                            <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Amount</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Status</th>
                             <th class="px-4 py-2"></th>
                         </tr>
@@ -255,23 +333,26 @@ new #[Title('Delivery Notes')] class extends Component {
                                 data-view-url="{{ route('delivery-notes.show', $note) }}"
                                 data-edit-url="{{ route('delivery-notes.edit', $note) }}"
                                 data-email-modal="email-document-{{ $note->id }}"
-                                @if($note->status === DocumentStatus::Active) data-convert-modal="convert-dn-index-{{ $note->id }}" @endif
+                                @if($note->status === DocumentStatus::Active) data-convert-modal="convert-dn" data-convert-id="{{ $note->id }}" @endif
                                 data-delete-modal="delete-document-{{ $note->id }}"
                                 class="transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5"
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
                                 <td class="px-4 py-2">
-                                    @if($note->status === DocumentStatus::Active)
-                                        <input
-                                            type="checkbox"
-                                            value="{{ $note->id }}"
-                                            wire:model.live="selectedIds"
-                                            class="size-4 cursor-pointer rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
-                                        />
-                                    @endif
+                                    <input
+                                        type="checkbox"
+                                        value="{{ $note->id }}"
+                                        wire:model.live="selectedIds"
+                                        class="size-4 cursor-pointer rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
+                                    />
                                 </td>
                                 <td class="px-4 py-2">
-                                    <a href="{{ route('delivery-notes.show', $note) }}" wire:navigate class="font-mono text-sm font-semibold text-indigo-600 hover:underline dark:text-indigo-400">
+                                    <a href="{{ route('delivery-notes.show', $note) }}" wire:navigate @class([
+                                        'inline-flex items-center rounded-md px-2 py-0.5 font-mono text-sm font-semibold text-indigo-700 hover:underline dark:text-indigo-300',
+                                        'bg-emerald-100 dark:bg-emerald-500/20' => $note->last_email_status === 'sent',
+                                        'bg-rose-100 dark:bg-rose-500/20' => $note->last_email_status === 'failed',
+                                        'bg-amber-100 dark:bg-amber-500/20' => $note->last_email_status === null,
+                                    ])>
                                         <x-ui.highlight :text="$note->doc_number" :term="$search" />
                                     </a>
                                 </td>
@@ -282,6 +363,7 @@ new #[Title('Delivery Notes')] class extends Component {
                                     </div>
                                 </td>
                                 <td class="px-6 py-4 text-zinc-500 dark:text-zinc-400">{{ $note->doc_date->format('d M Y') }}</td>
+                                <td class="px-6 py-4 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($note->total_value, 2) }}</td>
                                 <td class="px-4 py-2">
                                     <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $note->status->ringColor() }}">
                                         {{ $note->status->label() }}
@@ -291,47 +373,41 @@ new #[Title('Delivery Notes')] class extends Component {
                                     <div class="flex items-center justify-end gap-1">
                                         <flux:button size="xs" variant="ghost" icon="eye" :href="route('delivery-notes.show', $note)" wire:navigate data-row-action="view" />
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('delivery-notes.edit', $note)" wire:navigate data-row-action="edit" />
-                                        <flux:button
-                                            size="xs"
-                                            variant="ghost"
-                                            icon="envelope"
-                                            x-on:click="$flux.modal('email-document-{{ $note->id }}').show()"
-                                            :class="$note->has_been_emailed
-                                                ? '!text-emerald-600 hover:!text-emerald-700 dark:!text-emerald-400'
-                                                : '!text-amber-500 hover:!text-amber-600 dark:!text-amber-400'"
-                                            :title="$note->has_been_emailed ? __('Email sent') : __('Not yet emailed')"
-                                            data-row-action="email"
-                                        />
+                                        <span class="relative inline-flex">
+                                            <flux:button
+                                                size="xs"
+                                                variant="ghost"
+                                                icon="envelope"
+                                                x-on:click="$flux.modal('email-document-{{ $note->id }}').show()"
+                                                @class([
+                                                    '!text-emerald-600 hover:!text-emerald-700 dark:!text-emerald-400' => $note->last_email_status === 'sent',
+                                                    '!text-rose-600 hover:!text-rose-700 dark:!text-rose-400' => $note->last_email_status === 'failed',
+                                                    '!text-amber-500 hover:!text-amber-600 dark:!text-amber-400' => $note->last_email_status === null,
+                                                ])
+                                                title="{{ match($note->last_email_status) {
+                                                    'sent' => __('Email sent'),
+                                                    'failed' => __('Last send failed: :msg', ['msg' => $note->last_email_error ?? 'unknown error']),
+                                                    default => __('Not yet emailed'),
+                                                } }}"
+                                                data-row-action="email"
+                                            />
+                                            @if($note->last_email_status === 'failed')
+                                                <span class="pointer-events-none absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                                                    <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75"></span>
+                                                    <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-900"></span>
+                                                </span>
+                                            @endif
+                                        </span>
                                         @if($note->status === DocumentStatus::Active)
                                             <flux:button
                                                 size="xs"
                                                 variant="ghost"
                                                 icon="arrow-path"
                                                 class="text-violet-600 dark:text-violet-400"
-                                                x-on:click="$flux.modal('convert-dn-index-{{ $note->id }}').show()"
+                                                wire:click="$set('convertingNoteId', {{ $note->id }})"
+                                                x-on:click="$flux.modal('convert-dn').show()"
                                                 data-row-action="convert"
                                             />
-                                            <flux:modal name="convert-dn-index-{{ $note->id }}" focusable class="max-w-md">
-                                                <div class="space-y-6">
-                                                    <div>
-                                                        <flux:heading size="lg">{{ __('Convert to Invoice') }}</flux:heading>
-                                                        <flux:subheading>
-                                                            {{ __('This will create a new invoice from :number and mark this delivery note as converted.', ['number' => $note->doc_number]) }}
-                                                        </flux:subheading>
-                                                    </div>
-                                                    <div class="flex justify-end gap-3">
-                                                        <flux:modal.close>
-                                                            <flux:button variant="ghost" type="button">{{ __('Cancel') }}</flux:button>
-                                                        </flux:modal.close>
-                                                        <form method="POST" action="{{ route('delivery-notes.convert', $note) }}">
-                                                            @csrf
-                                                            <flux:button variant="primary" type="submit" icon="arrow-path">
-                                                                {{ __('Convert') }}
-                                                            </flux:button>
-                                                        </form>
-                                                    </div>
-                                                </div>
-                                            </flux:modal>
                                         @endif
                                         <livewire:pages::delivery-notes.delete-modal :document="$note" :key="'delete-'.$note->id" />
                                         <livewire:pages::documents.email-modal :document="$note" :key="'email-'.$note->id" />
@@ -350,5 +426,105 @@ new #[Title('Delivery Notes')] class extends Component {
     </div>
 
     <div x-data x-init="$nextTick(() => Alpine.store('hotkeys').focusZone('table'))"></div>
+
+    {{-- Modals --}}
+    @if(count($selectedIds) > 0)
+        <flux:modal name="bulk-convert-dns" focusable class="max-w-md">
+            <div class="space-y-6">
+                <div>
+                    <flux:heading size="lg">
+                        {{ trans_choice('Convert :count delivery note to an invoice?|Convert :count delivery notes to invoices?', count($selectedIds), ['count' => count($selectedIds)]) }}
+                    </flux:heading>
+                    <flux:subheading>
+                        {{ __('Each selected delivery note will become its own invoice. Already-converted or ineligible delivery notes will be skipped.') }}
+                    </flux:subheading>
+                </div>
+                <div class="flex justify-end gap-3">
+                    <flux:modal.close>
+                        <flux:button variant="ghost" type="button">{{ __('Cancel') }}</flux:button>
+                    </flux:modal.close>
+                    <flux:button
+                        variant="primary"
+                        icon="arrow-path"
+                        wire:click="bulkConvert"
+                        wire:loading.attr="disabled"
+                        wire:target="bulkConvert"
+                    >
+                        <span wire:loading.remove wire:target="bulkConvert">{{ __('Convert') }}</span>
+                        <span wire:loading wire:target="bulkConvert">{{ __('Converting…') }}</span>
+                    </flux:button>
+                </div>
+            </div>
+        </flux:modal>
+
+        <flux:modal name="bulk-email-dns" focusable class="max-w-lg">
+            <div class="flex max-h-[80vh] flex-col gap-4">
+                <div class="shrink-0">
+                    <flux:heading size="lg">
+                        {{ trans_choice('Send :count email?|Send :count emails?', count($selectedIds), ['count' => count($selectedIds)]) }}
+                    </flux:heading>
+                    <flux:subheading>
+                        {{ __('Each selected delivery note will be emailed to the customer below. Rows without a customer email are skipped.') }}
+                    </flux:subheading>
+                </div>
+                <ul class="min-h-0 flex-1 overflow-y-auto rounded-lg border border-zinc-200 divide-y divide-zinc-100 dark:border-white/10 dark:divide-white/[0.06]">
+                    @foreach($this->selectedForEmail as $doc)
+                        <li class="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                            <span class="font-mono text-zinc-900 dark:text-white">{{ $doc->doc_number }}</span>
+                            <span class="flex-1 truncate text-zinc-600 dark:text-zinc-300">{{ $doc->customer?->company_name ?? '—' }}</span>
+                            @if($doc->customer?->email_1)
+                                <span class="text-xs text-zinc-500 dark:text-zinc-400">{{ $doc->customer->email_1 }}</span>
+                            @else
+                                <span class="text-xs font-medium text-amber-600 dark:text-amber-400">{{ __('no email — skipped') }}</span>
+                            @endif
+                        </li>
+                    @endforeach
+                </ul>
+                <div class="flex shrink-0 justify-end gap-3">
+                    <flux:modal.close>
+                        <flux:button variant="ghost" type="button">{{ __('Cancel') }}</flux:button>
+                    </flux:modal.close>
+                    <flux:button
+                        variant="primary"
+                        icon="envelope"
+                        wire:click="bulkEmail"
+                        wire:loading.attr="disabled"
+                        wire:target="bulkEmail"
+                    >
+                        <span wire:loading.remove wire:target="bulkEmail">{{ __('Send All') }}</span>
+                        <span wire:loading wire:target="bulkEmail">{{ __('Sending…') }}</span>
+                    </flux:button>
+                </div>
+            </div>
+        </flux:modal>
+    @endif
+
+    <flux:modal name="convert-dn" focusable class="max-w-md" @close="$wire.set('convertingNoteId', null)">
+        <div class="space-y-6">
+            <div>
+                <flux:heading size="lg">{{ __('Convert to Invoice') }}</flux:heading>
+                <flux:subheading>
+                    @if($this->convertingNote)
+                        {{ __('This will create a new invoice from :number and mark this delivery note as converted.', ['number' => $this->convertingNote->doc_number]) }}
+                    @endif
+                </flux:subheading>
+            </div>
+            <div class="flex justify-end gap-3">
+                <flux:modal.close>
+                    <flux:button variant="ghost" type="button">{{ __('Cancel') }}</flux:button>
+                </flux:modal.close>
+                <flux:button
+                    variant="primary"
+                    icon="arrow-path"
+                    wire:click="convertSingle"
+                    wire:loading.attr="disabled"
+                    wire:target="convertSingle"
+                >
+                    <span wire:loading.remove wire:target="convertSingle">{{ __('Convert') }}</span>
+                    <span wire:loading wire:target="convertSingle">{{ __('Converting…') }}</span>
+                </flux:button>
+            </div>
+        </div>
+    </flux:modal>
 
 </div>

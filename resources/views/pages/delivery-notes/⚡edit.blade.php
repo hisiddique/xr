@@ -80,14 +80,15 @@ new #[Title('Edit Delivery Note')] class extends Component {
             $isNote = ! empty($item['is_note']);
             $qty = $isNote ? 0 : (float) ($item['quantity'] ?? 0);
             $price = $isNote ? 0 : (float) ($item['price'] ?? 0);
+            $per = $isNote ? null : ($item['per'] ?: null);
 
             $this->document->items()->create([
                 'details' => $item['details'],
                 'is_note' => $isNote,
                 'quantity' => $qty,
                 'price' => $price,
-                'per' => $isNote ? null : ($item['per'] ?: null),
-                'line_value' => round($qty * $price, 2),
+                'per' => $per,
+                'line_value' => $isNote ? 0 : round(\App\Services\DocumentTotalsCalculator::lineValue(['quantity' => $qty, 'price' => $price, 'per' => $per]), 2),
             ]);
         }
 
@@ -159,6 +160,11 @@ new #[Title('Edit Delivery Note')] class extends Component {
                 </div>
             </div>
 
+            <datalist id="units-options">
+                <template x-for="unit in units" :key="unit">
+                    <option :value="unit"></option>
+                </template>
+            </datalist>
             <div class="overflow-x-auto" data-items-table>
                 <table class="w-full text-sm">
                     <thead class="bg-zinc-50 dark:bg-zinc-800/50">
@@ -211,20 +217,18 @@ new #[Title('Edit Delivery Note')] class extends Component {
                                 </template>
                                 <template x-if="! row.is_note">
                                     <td class="px-4 py-2.5">
-                                        <select
+                                        <input
+                                            type="text"
                                             x-model="row.per"
+                                            list="units-options"
+                                            placeholder="e.g. kg or 1000"
                                             class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
-                                        >
-                                            <option value=""></option>
-                                            <template x-for="unit in units" :key="unit">
-                                                <option :value="unit" x-text="unit"></option>
-                                            </template>
-                                        </select>
+                                        />
                                     </td>
                                 </template>
                                 <template x-if="! row.is_note">
                                     <td class="px-4 py-2.5 text-right font-mono tabular-nums font-medium text-zinc-900 dark:text-white">
-                                        £<span x-text="(Number(row.quantity || 0) * Number(row.price || 0)).toFixed(2)">0.00</span>
+                                        £<span x-text="lineValue(row).toFixed(2)">0.00</span>
                                     </td>
                                 </template>
                                 <td class="px-4 py-2.5">

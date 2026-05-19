@@ -12,7 +12,7 @@ new #[Title('Delivery Note')] class extends Component {
 
     public function mount(): void
     {
-        $this->document->load(['customer', 'items', 'emailLogs', 'convertedTo']);
+        $this->document->load(['customer', 'items', 'emailLogs', 'convertedTo', 'creator']);
     }
 
     #[On('email-log-updated')]
@@ -86,6 +86,9 @@ new #[Title('Delivery Note')] class extends Component {
                         {{ $document->status->label() }}
                     </span>
                     <span class="text-sm text-zinc-500 dark:text-zinc-400">{{ $document->doc_date->format('d F Y') }}</span>
+                    @if($document->creator)
+                        <span class="text-sm text-zinc-500 dark:text-zinc-400">· {{ __('Created by :name', ['name' => $document->creator->name]) }}</span>
+                    @endif
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
@@ -123,31 +126,6 @@ new #[Title('Delivery Note')] class extends Component {
             </div>
         </div>
     </div>
-
-    {{-- Convert confirm modal --}}
-    @if($document->status === DocumentStatus::Active)
-        <flux:modal name="convert-dn-{{ $document->id }}" focusable class="max-w-md">
-            <div class="space-y-6">
-                <div>
-                    <flux:heading size="lg">{{ __('Convert to Invoice') }}</flux:heading>
-                    <flux:subheading>
-                        {{ __('This will create a new invoice from :number and mark this delivery note as converted.', ['number' => $document->doc_number]) }}
-                    </flux:subheading>
-                </div>
-                <div class="flex justify-end gap-3">
-                    <flux:modal.close>
-                        <flux:button variant="ghost" type="button">{{ __('Cancel') }}</flux:button>
-                    </flux:modal.close>
-                    <form method="POST" action="{{ route('delivery-notes.convert', $document) }}">
-                        @csrf
-                        <flux:button variant="primary" type="submit" icon="arrow-path">
-                            {{ __('Convert to Invoice') }}
-                        </flux:button>
-                    </form>
-                </div>
-            </div>
-        </flux:modal>
-    @endif
 
     {{-- Two-column body --}}
     <div class="grid gap-4 lg:grid-cols-3">
@@ -262,7 +240,10 @@ new #[Title('Delivery Note')] class extends Component {
                                 ])></div>
                                 <div class="min-w-0 flex-1">
                                     <p class="truncate text-sm text-zinc-900 dark:text-white">{{ $log->recipient_email }}</p>
-                                    <p class="text-xs text-zinc-400 dark:text-zinc-500">{{ $log->sent_at?->diffForHumans() ?? 'Unknown' }}</p>
+                                    <p class="text-xs text-zinc-400 dark:text-zinc-500">{{ $log->sent_at?->diffForHumans() ?? $log->created_at?->diffForHumans() ?? 'Unknown' }}</p>
+                                    @if($log->status !== 'sent' && $log->error_message)
+                                        <p class="mt-1 text-xs text-rose-600 dark:text-rose-400">{{ $log->error_message }}</p>
+                                    @endif
                                 </div>
                                 <span @class([
                                     'shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset',
@@ -278,6 +259,31 @@ new #[Title('Delivery Note')] class extends Component {
         </div>
     </div>
 
+    {{-- Modals --}}
     <livewire:pages::documents.email-modal :document="$document" :key="'email-'.$document->id" />
+
+    @if($document->status === DocumentStatus::Active)
+        <flux:modal name="convert-dn-{{ $document->id }}" focusable class="max-w-md">
+            <div class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ __('Convert to Invoice') }}</flux:heading>
+                    <flux:subheading>
+                        {{ __('This will create a new invoice from :number and mark this delivery note as converted.', ['number' => $document->doc_number]) }}
+                    </flux:subheading>
+                </div>
+                <div class="flex justify-end gap-3">
+                    <flux:modal.close>
+                        <flux:button variant="ghost" type="button">{{ __('Cancel') }}</flux:button>
+                    </flux:modal.close>
+                    <form method="POST" action="{{ route('delivery-notes.convert', $document) }}">
+                        @csrf
+                        <flux:button variant="primary" type="submit" icon="arrow-path">
+                            {{ __('Convert to Invoice') }}
+                        </flux:button>
+                    </form>
+                </div>
+            </div>
+        </flux:modal>
+    @endif
 
 </div>

@@ -19,10 +19,15 @@ new #[Title('Credit Limits')] class extends Component {
         Flux::toast(variant: 'success', text: __('Credit limit added.'));
     }
 
-    public function deleteCreditLimit(int $id): void
+    public function deleteCreditLimit(): void
     {
-        LookupCreditLimit::findOrFail($id)->delete();
+        if (! $this->deletingCreditLimitId) {
+            return;
+        }
+
+        LookupCreditLimit::findOrFail($this->deletingCreditLimitId)->delete();
         $this->deletingCreditLimitId = null;
+        Flux::modal('delete-limit')->close();
         Flux::toast(variant: 'success', text: __('Credit limit deleted.'));
     }
 
@@ -30,6 +35,14 @@ new #[Title('Credit Limits')] class extends Component {
     public function creditLimits()
     {
         return LookupCreditLimit::orderBy('amount')->get();
+    }
+
+    #[Computed]
+    public function deletingCreditLimit(): ?LookupCreditLimit
+    {
+        return $this->deletingCreditLimitId
+            ? LookupCreditLimit::find($this->deletingCreditLimitId)
+            : null;
     }
 }; ?>
 
@@ -68,16 +81,14 @@ new #[Title('Credit Limits')] class extends Component {
                             <tr>
                                 <td class="px-6 py-3 font-mono text-sm text-zinc-900 dark:text-white">£{{ number_format($limit->amount, 2) }}</td>
                                 <td class="px-6 py-3 text-right">
-                                    <flux:button size="xs" variant="ghost" icon="trash" x-on:click="$flux.modal('delete-limit-{{ $limit->id }}').show()" class="text-rose-500 hover:text-rose-600" />
-                                    <flux:modal name="delete-limit-{{ $limit->id }}" focusable class="max-w-sm">
-                                        <div class="space-y-4">
-                                            <flux:heading>{{ __('Delete £:amount?', ['amount' => number_format($limit->amount, 2)]) }}</flux:heading>
-                                            <div class="flex justify-end gap-2">
-                                                <flux:modal.close><flux:button variant="filled">Cancel</flux:button></flux:modal.close>
-                                                <flux:button variant="danger" wire:click="deleteCreditLimit({{ $limit->id }})">Delete</flux:button>
-                                            </div>
-                                        </div>
-                                    </flux:modal>
+                                    <flux:button
+                                        size="xs"
+                                        variant="ghost"
+                                        icon="trash"
+                                        wire:click="$set('deletingCreditLimitId', {{ $limit->id }})"
+                                        x-on:click="$flux.modal('delete-limit').show()"
+                                        class="text-rose-500 hover:text-rose-600"
+                                    />
                                 </td>
                             </tr>
                         @endforeach
@@ -86,5 +97,20 @@ new #[Title('Credit Limits')] class extends Component {
             @endif
         </div>
     </div>
+
+    {{-- Modals --}}
+    <flux:modal name="delete-limit" focusable class="max-w-sm" @close="$wire.set('deletingCreditLimitId', null)">
+        <div class="space-y-4">
+            <flux:heading>
+                @if($this->deletingCreditLimit)
+                    {{ __('Delete £:amount?', ['amount' => number_format($this->deletingCreditLimit->amount, 2)]) }}
+                @endif
+            </flux:heading>
+            <div class="flex justify-end gap-2">
+                <flux:modal.close><flux:button variant="filled">Cancel</flux:button></flux:modal.close>
+                <flux:button variant="danger" wire:click="deleteCreditLimit">Delete</flux:button>
+            </div>
+        </div>
+    </flux:modal>
 
 </div>

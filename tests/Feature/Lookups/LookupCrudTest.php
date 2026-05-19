@@ -1,7 +1,5 @@
 <?php
 
-use App\Models\LookupCreditLimit;
-use App\Models\LookupCreditTerm;
 use App\Models\LookupTitle;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -43,7 +41,8 @@ test('admin can delete a title', function () {
 
     Livewire::actingAs($admin)
         ->test('pages::reference-data.titles')
-        ->call('deleteTitle', $title->id);
+        ->set('deletingTitleId', $title->id)
+        ->call('deleteTitle');
 
     $this->assertDatabaseMissing('lookup_titles', ['id' => $title->id]);
 });

@@ -690,6 +690,7 @@ document.addEventListener('alpine:init', () => {
                 editUrl: tr.dataset.editUrl || null,
                 emailModal: tr.dataset.emailModal || null,
                 convertModal: tr.dataset.convertModal || null,
+                convertId: tr.dataset.convertId ? Number(tr.dataset.convertId) : null,
                 deleteModal: tr.dataset.deleteModal || null,
                 actions: Array.from(tr.querySelectorAll('[data-row-action]')).map((el) => ({
                     kind: el.dataset.rowAction,
@@ -717,7 +718,11 @@ document.addEventListener('alpine:init', () => {
 
         convertRow(i) {
             const row = this._zoneRows[i];
-            if (row?.convertModal) {
+            if (!row?.convertModal) return;
+            const trigger = row.actions?.find((a) => a.kind === 'convert')?.el;
+            if (trigger) {
+                trigger.click();
+            } else {
                 Alpine.store('hotkeys').openModalWithConfirm(row.convertModal);
             }
         },
@@ -776,6 +781,17 @@ document.addEventListener('alpine:init', () => {
             // Sticky save-bar overlays the bottom of the page, so the new row
             // can be technically "in view" but visually obscured. Force-center it.
             last.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        },
+
+        lineValue(row) {
+            const q = Number(row.quantity || 0);
+            const p = Number(row.price || 0);
+            const per = String(row.per ?? '').trim();
+            const n = Number(per);
+            if (per !== '' && Number.isFinite(n) && n > 0) {
+                return (q / n) * p;
+            }
+            return q * p;
         },
 
         submit() {

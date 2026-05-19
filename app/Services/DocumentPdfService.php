@@ -20,7 +20,8 @@ class DocumentPdfService
             'items',
         ]);
 
-        return Pdf::loadView('pdfs.document', ['document' => $document])->output();
+        return Pdf::loadView('pdfs.document', ['document' => $document])
+            ->setOption('isPhpEnabled', true)->output();
     }
 
     /**
@@ -36,6 +37,7 @@ class DocumentPdfService
         ]);
 
         return Pdf::loadView('pdfs.document', ['document' => $document])
+            ->setOption('isPhpEnabled', true)
             ->stream("{$document->doc_number}.pdf");
     }
 
@@ -52,6 +54,7 @@ class DocumentPdfService
         ]);
 
         return Pdf::loadView('pdfs.document', ['document' => $document])
+            ->setOption('isPhpEnabled', true)
             ->download("{$document->doc_number}.pdf");
     }
 }

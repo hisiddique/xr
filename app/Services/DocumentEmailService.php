@@ -44,6 +44,7 @@ class DocumentEmailService
                 'recipient_email' => $recipient,
                 'sent_at' => null,
                 'status' => 'failed',
+                'error_message' => $e->getMessage(),
             ]);
 
             throw $e;

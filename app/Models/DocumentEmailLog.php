@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use Database\Factories\DocumentEmailLogFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class DocumentEmailLog extends Model
 {
-    /** @use HasFactory<\Database\Factories\DocumentEmailLogFactory> */
+    /** @use HasFactory<DocumentEmailLogFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -15,6 +16,7 @@ class DocumentEmailLog extends Model
         'recipient_email',
         'sent_at',
         'status',
+        'error_message',
     ];
 
     protected function casts(): array

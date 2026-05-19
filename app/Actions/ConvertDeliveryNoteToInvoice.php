@@ -67,14 +67,15 @@ class ConvertDeliveryNoteToInvoice
                 $isNote = (bool) $item->is_note;
                 $qty = $isNote ? 0 : (float) $item->quantity;
                 $price = $isNote ? 0 : (float) $item->price;
+                $per = $item->per;
 
                 $invoice->items()->create([
                     'details' => $item->details,
                     'is_note' => $isNote,
                     'quantity' => $qty,
                     'price' => $price,
-                    'per' => $item->per,
-                    'line_value' => round($qty * $price, 2),
+                    'per' => $per,
+                    'line_value' => $isNote ? 0 : round(DocumentTotalsCalculator::lineValue(['quantity' => $qty, 'price' => $price, 'per' => $per]), 2),
                 ]);
             }
 
