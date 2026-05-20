@@ -31,7 +31,7 @@
 
         .kv { width: 100%; border-collapse: collapse; }
         .kv td { border: none; padding: 1px 0; font-size: 10.5px; line-height: 1.2; }
-        .kv td.k { width: 78px; font-weight: bold; }
+        .kv td.k { width: 112px; font-weight: bold; white-space: nowrap; }
         .kv td.c { width: 8px; }
 
         /* Customer + doc-meta band */
@@ -127,7 +127,7 @@
         .totals-box tr.grand td { border-top: 1.5px solid #111827 !important; padding-top: 4px !important; font-size: 12px; font-weight: bold; }
 
         .sig-grid-title { text-align: center; font-weight: bold; font-size: 10.5px; }
-        .retention-text { font-size: 10.5px; line-height: 1.2; }
+        .retention-text { font-size: 10.5px; line-height: 1.2; text-align: justify; }
         .retention-text strong { font-weight: bold; }
 
         /* Bottom block — cert/sigs/totals glued to bottom on every page. */
@@ -204,7 +204,7 @@
         $cust->post_code,
     ])->filter()->values();
 
-    $pageNumX = 369;
+    $pageNumX = 393;
     $pageNumY = 197 + ($document->order_no ? 11 : 0);
 @endphp
 
