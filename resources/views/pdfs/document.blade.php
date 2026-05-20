@@ -166,8 +166,6 @@
         .page-footer .director { font-weight: bold; margin-bottom: 2px; }
     </style>
 </head>
-<body>
-
 @php
     $isDN = $document->type->value === 'DN';
     $showPricing = ! $isDN || (bool) $document->show_pricing;
@@ -206,7 +204,17 @@
 
     $pageNumX = 393;
     $pageNumY = 197 + ($document->order_no ? 11 : 0);
+
+    $metaCharsPerLine = 56;
+    $visualLines = fn (?string $text) => $text ? max(1, (int) ceil(mb_strlen($text) / $metaCharsPerLine)) : 0;
+    $leftMetaLines = $visualLines($cust->company_name)
+        + $visualLines($custPerson)
+        + $custAddressLines->sum($visualLines);
+    $rightMetaLines = 6 + ($document->order_no ? 1 : 0);
+    $headerTopMm = 77 + max(0, max($leftMetaLines, $rightMetaLines) - 6) * 3.4;
 @endphp
+
+<body style="padding: {{ $headerTopMm }}mm 10mm 88mm 10mm">
 
 {{-- Fixed page header: company chrome + customer/meta bands --}}
 <div class="page-header">
@@ -279,7 +287,7 @@
 </div>
 
 {{-- Content box rails — fill the area down to the footer on every page --}}
-<div class="content-frame"></div>
+<div class="content-frame" style="top: {{ $headerTopMm }}mm"></div>
 
 {{-- Standalone items table; thead repeats on every page --}}
 <table class="items">
