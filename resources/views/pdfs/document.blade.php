@@ -62,6 +62,8 @@
         .chrome > tbody > tr:last-child > td { border-bottom: 1.25px solid #111827; }
         .chrome > tbody > tr > td:first-child { border-left: 1.25px solid #111827; }
         .chrome > tbody > tr > td:last-child { border-right: 1.25px solid #111827; }
+        .chrome > tbody > tr.headline > td { border: none !important; }
+        .chrome > tbody > tr.headline .split td.left { border-right: none !important; }
 
         /* Content box rails — fills the area from items down to the footer on
            every page so short docs show no gap. No top border (the items
@@ -201,13 +203,16 @@
         $cust->town,
         $cust->post_code,
     ])->filter()->values();
+
+    $pageNumX = 369;
+    $pageNumY = 197 + ($document->order_no ? 11 : 0);
 @endphp
 
 {{-- Fixed page header: company chrome + customer/meta bands --}}
 <div class="page-header">
     <table class="chrome">
         <tbody>
-            <tr>
+            <tr class="headline">
                 <td>
                     <table class="split"><tr>
                         <td class="left">
@@ -443,7 +448,7 @@
 <script type="text/php">
 if (isset($pdf)) {
     $font = $fontMetrics->getFont("DejaVu Sans", "normal");
-    $pdf->page_text(380, 195, "{PAGE_NUM}", $font, 7.875);
+    $pdf->page_text({{ $pageNumX }}, {{ $pageNumY }}, "{PAGE_NUM}", $font, 7.875);
 }
 </script>
 
