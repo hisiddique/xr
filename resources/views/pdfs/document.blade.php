@@ -294,8 +294,8 @@
 <table class="items">
     <thead>
         <tr>
-            <th>Details</th>
             <th class="right" style="width:10%">Qty</th>
+            <th>Details</th>
             @if($showPricing)
                 <th class="right" style="width:12%">Price</th>
             @endif
@@ -313,8 +313,8 @@
                 </tr>
             @else
                 <tr>
-                    <td class="item-cell">{{ $item->details }}</td>
                     <td class="item-cell right">{{ rtrim(rtrim(number_format($item->quantity, 2, '.', ''), '0'), '.') }}</td>
+                    <td class="item-cell">{{ $item->details }}</td>
                     @if($showPricing)
                         <td class="item-cell right">{{ number_format($item->price, 2) }}</td>
                     @endif

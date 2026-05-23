@@ -13,6 +13,8 @@ new #[Title('Edit Delivery Note')] class extends Component {
 
     public ?int $customer_id = null;
     public string $customerName = '';
+    public ?int $assigned_to = null;
+    public string $assigneeName = '';
     public string $doc_date = '';
     public string $due_by = '';
     public string $order_no = '';
@@ -24,6 +26,8 @@ new #[Title('Edit Delivery Note')] class extends Component {
     {
         $this->customer_id = $this->document->customer_id;
         $this->customerName = $this->document->customer?->company_name ?? '';
+        $this->assigned_to = $this->document->assigned_to ?? $this->document->created_by;
+        $this->assigneeName = $this->document->assignee?->name ?? $this->document->creator?->name ?? '';
         $this->doc_date = $this->document->doc_date->format('Y-m-d');
         $this->due_by = $this->document->due_by?->format('Y-m-d') ?? '';
         $this->order_no = $this->document->order_no ?? '';
@@ -43,6 +47,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
     {
         $this->validate([
             'customer_id' => 'required|integer|exists:customers,id',
+            'assigned_to' => 'nullable|integer|exists:users,id',
             'doc_date' => 'required|date',
             'due_by' => 'nullable|date',
             'order_no' => 'nullable|string|max:100',
@@ -76,6 +81,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
             'vat_amount' => $totals['vat'],
             'total_value' => $totals['total'],
             'show_pricing' => $this->show_pricing,
+            'assigned_to' => $this->assigned_to,
         ]);
 
         // Sync items: delete old, create new
@@ -115,21 +121,26 @@ new #[Title('Edit Delivery Note')] class extends Component {
         </x-slot:action>
     </x-ui.page-header>
 
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
+
     <form
         x-data="lineItemForm(@js($items), @js($this->units), '{{ route('delivery-notes.show', $document) }}')"
         x-on:submit.prevent="submit()"
         x-on:keydown="handleKey($event)"
-        class="flex flex-col gap-4 max-w-5xl"
+        x-on:exit-confirm-discard.window="cancel()"
+        x-on:exit-confirm-save.window="submit()"
+        class="flex min-w-0 flex-1 flex-col gap-4"
     >
 
         {{-- Header details --}}
-        <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
+        <div class="rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
             <div class="border-b border-zinc-200/70 px-4 py-3 dark:border-white/10">
                 <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Document</p>
                 <h2 class="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-white">Header Details</h2>
             </div>
-            <div class="grid gap-4 p-4 md:grid-cols-2">
+            <div data-form-grid class="grid gap-4 p-4 md:grid-cols-2">
                 <livewire:pages::ui.typeahead
+                    :key="'typeahead-customer'"
                     wire:model.live="customer_id"
                     model="App\Models\Customer"
                     column="company_name"
@@ -142,13 +153,20 @@ new #[Title('Edit Delivery Note')] class extends Component {
                 <flux:input wire:model="doc_date" type="date" :label="__('Delivery Date')" required />
                 <flux:input wire:model="due_by" type="date" :label="__('Due By')" />
                 <flux:input wire:model="order_no" :label="__('Order Reference')" :placeholder="__('Optional')" />
-                <div class="md:col-span-2">
-                    <flux:switch
-                        wire:model.live="show_pricing"
-                        :label="__('Show prices on PDF / email')"
-                        :description="__('Prices are always recorded. This controls whether they appear on the printed PDF and emailed copy.')"
-                    />
-                </div>
+                <livewire:pages::ui.typeahead
+                    :key="'typeahead-assignee'"
+                    wire:model.live="assigned_to"
+                    model="App\Models\User"
+                    column="name"
+                    :label="__('Assigned To')"
+                    :placeholder="__('Search user (3+ letters)…')"
+                    :selected-label="$assigneeName"
+                    error-name="assigned_to"
+                />
+                <label class="flex items-center gap-3 pt-7">
+                    <flux:switch wire:model.live="show_pricing" />
+                    <span class="text-sm font-medium text-zinc-900 dark:text-white">{{ __('Show prices on PDF / email') }}</span>
+                </label>
             </div>
         </div>
 
@@ -157,11 +175,10 @@ new #[Title('Edit Delivery Note')] class extends Component {
             <div class="flex items-center justify-between border-b border-zinc-200/70 px-6 py-4 dark:border-white/10">
                 <div class="flex items-center gap-3">
                     <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Items</h2>
-                    <span class="text-xs text-zinc-400 dark:text-zinc-500">Remove line <x-ui.kbd-hint keys="Ctrl+⌫" class="ml-0" /></span>
                 </div>
                 <div class="flex items-center gap-2">
                     <flux:button type="button" variant="ghost" icon="chat-bubble-left" size="sm" x-on:click="addNote()">Add Note <x-ui.kbd-hint keys="Shift+↵" /></flux:button>
-                    <flux:button type="button" variant="ghost" icon="plus" size="sm" x-on:click="add()">Add Item <x-ui.kbd-hint keys="↵" /></flux:button>
+                    <flux:button type="button" variant="ghost" icon="plus" size="sm" x-on:click="add()">Add Item</flux:button>
                 </div>
             </div>
 
@@ -175,9 +192,9 @@ new #[Title('Edit Delivery Note')] class extends Component {
                     <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Details</th>
-                            <th class="w-24 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Qty</th>
-                            <th class="w-28 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Price</th>
-                            <th class="w-24 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Per</th>
+                            <th class="w-36 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Qty</th>
+                            <th class="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Price</th>
+                            <th class="w-36 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Per</th>
                             <th class="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Line Value</th>
                             <th class="w-10 px-4 py-3"></th>
                         </tr>
@@ -256,5 +273,11 @@ new #[Title('Edit Delivery Note')] class extends Component {
             <flux:button variant="primary" type="submit">Save Changes <x-ui.kbd-hint keys="Ctrl+↵" /></flux:button>
         </div>
     </form>
+
+        <x-ui.form-shortcuts />
+
+    </div>
+
+    <x-ui.exit-confirm-modal />
 
 </div>

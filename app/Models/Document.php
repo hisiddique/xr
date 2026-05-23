@@ -33,6 +33,7 @@ class Document extends Model
         'show_pricing',
         'status',
         'created_by',
+        'assigned_to',
         'converted_from_id',
     ];
 
@@ -60,6 +61,11 @@ class Document extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function assignee(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_to');
     }
 
     public function items(): HasMany

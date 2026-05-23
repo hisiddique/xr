@@ -773,6 +773,71 @@ document.addEventListener('alpine:init', () => {
             if (Number.isInteger(idx)) this.remove(idx);
         },
 
+        insertAt(target, offset) {
+            const tr = target?.closest('tr[data-row-idx]');
+            if (!tr) return;
+            const idx = parseInt(tr.dataset.rowIdx, 10);
+            if (!Number.isInteger(idx)) return;
+            const at = idx + offset;
+            this.rows.splice(at, 0, { ...this._lineDefault });
+            this.$nextTick(() => this.focusRowDetails(at));
+        },
+
+        focusRowDetails(idx) {
+            const tr = this.$refs.rowsBody?.querySelector(`tr[data-row-idx="${idx}"]`);
+            const input = tr?.querySelector('input[data-row-details]');
+            if (input) {
+                input.focus();
+                input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            }
+        },
+
+        moveVertical(target, dir) {
+            const tr = target.closest('tr[data-row-idx]');
+            if (!tr) return;
+            const rowIdx = parseInt(tr.dataset.rowIdx, 10);
+            const rowInputs = Array.from(tr.querySelectorAll('input'));
+            const colIdx = rowInputs.indexOf(target);
+            const targetTr = this.$refs.rowsBody?.querySelector(`tr[data-row-idx="${rowIdx + dir}"]`);
+            if (!targetTr) {
+                this.moveFormField(target, 'y', dir);
+                return;
+            }
+            const targetInputs = Array.from(targetTr.querySelectorAll('input'));
+            const next = targetInputs[colIdx] ?? targetInputs[0];
+            if (next) {
+                next.focus();
+                if (typeof next.select === 'function' && next.type !== 'number') next.select();
+            }
+        },
+
+        moveHorizontal(target, dir) {
+            const inputs = Array.from(this.$refs.rowsBody?.querySelectorAll('input') ?? []);
+            const idx = inputs.indexOf(target);
+            if (idx < 0) return;
+            const next = inputs[idx + dir];
+            if (next) {
+                next.focus();
+                if (typeof next.select === 'function' && next.type !== 'number') next.select();
+            }
+        },
+
+        atTextBoundary(input, dir) {
+            // Anything that isn't a regular text-bearing input (number, date, switch, focusable card)
+            // has no cursor to honor — treat as always-at-boundary so arrow keys move focus.
+            if (input.type === 'number') return true;
+            if (typeof input.value !== 'string') return true;
+            try {
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                if (start === null || end === null || start === undefined || end === undefined) return true;
+                if (dir > 0) return start === input.value.length && end === input.value.length;
+                return start === 0 && end === 0;
+            } catch (_) {
+                return true;
+            }
+        },
+
         focusLast() {
             const inputs = this.$refs.rowsBody?.querySelectorAll('input[data-row-details]');
             if (!inputs || !inputs.length) return;
@@ -809,17 +874,122 @@ document.addEventListener('alpine:init', () => {
             else Livewire.navigate(this.fallback);
         },
 
+        confirmExit() {
+            if (window.Flux) {
+                Flux.modal('exit-confirm').show();
+            } else {
+                this.cancel();
+            }
+        },
+
         handleKey(e) {
             const tag = e.target.tagName;
-            const inItems = (tag === 'INPUT' || tag === 'SELECT') && e.target.closest('[data-items-table]');
+            const isFormInput = (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA')
+                || e.target.hasAttribute?.('data-form-stop')
+                || e.target.hasAttribute?.('data-flux-switch');
+            const inItems = isFormInput && e.target.closest?.('[data-items-table]');
             const ctrl = e.ctrlKey || e.metaKey;
+            const stop = () => { e.preventDefault(); e.stopPropagation(); };
 
             if (ctrl && e.key === 'Enter')                       { e.preventDefault(); this.submit(); return; }
-            if (e.key === 'Escape')                              { e.preventDefault(); this.cancel(); return; }
-            if (!inItems) return;
-            if (e.key === 'Enter' && e.shiftKey)                 { e.preventDefault(); this.addNote(); return; }
-            if (e.key === 'Enter')                               { e.preventDefault(); this.add(); return; }
-            if (ctrl && e.key === 'Backspace')                   { e.preventDefault(); this.removeFocused(e.target); return; }
+            if (e.key === 'Escape')                              { e.preventDefault(); this.confirmExit(); return; }
+
+            if (inItems) {
+                if (e.key === 'Enter' && e.shiftKey)                 { stop(); this.addNote(); return; }
+                if (ctrl && e.key === 'Backspace')                   { stop(); this.removeFocused(e.target); return; }
+                if (ctrl && e.key === 'Delete')                      { stop(); this.removeFocused(e.target); return; }
+                if (ctrl && e.key === 'Insert')                      { stop(); this.insertAt(e.target, 1); return; }
+                if (e.key === 'Insert')                              { stop(); this.insertAt(e.target, 0); return; }
+                if (e.key === 'ArrowDown')                           { stop(); this.moveVertical(e.target, 1); return; }
+                if (e.key === 'ArrowUp')                             { stop(); this.moveVertical(e.target, -1); return; }
+                if (e.key === 'ArrowRight' && this.atTextBoundary(e.target, 1))  { stop(); this.moveHorizontal(e.target, 1); return; }
+                if (e.key === 'ArrowLeft' && this.atTextBoundary(e.target, -1))  { stop(); this.moveHorizontal(e.target, -1); return; }
+                return;
+            }
+
+            if (isFormInput) {
+                if (e.key === 'ArrowDown')                           { stop(); this.moveFormField(e.target, 'y', 1); return; }
+                if (e.key === 'ArrowUp')                             { stop(); this.moveFormField(e.target, 'y', -1); return; }
+                if (e.key === 'ArrowRight' && this.atTextBoundary(e.target, 1))  { stop(); this.moveFormField(e.target, 'x', 1); return; }
+                if (e.key === 'ArrowLeft' && this.atTextBoundary(e.target, -1))  { stop(); this.moveFormField(e.target, 'x', -1); return; }
+            }
+        },
+
+        _formFieldSelector: 'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [data-flux-switch], [data-form-stop]',
+
+        _focusField(el) {
+            if (!el) return;
+            el.focus();
+            if (typeof el.select === 'function' && el.type !== 'number' && el.type !== 'date') el.select();
+        },
+
+        moveFormField(input, axis, dir) {
+            const itemsTable = input.closest('[data-items-table]');
+            if (itemsTable) {
+                // Exiting items table — walk linearly to nearest focusable outside it.
+                const all = Array.from(this.$el.querySelectorAll(this._formFieldSelector))
+                    .filter((el) => el.offsetParent !== null && !itemsTable.contains(el));
+                const target = dir > 0
+                    ? all.find((el) => itemsTable.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)
+                    : [...all].reverse().find((el) => itemsTable.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING);
+                this._focusField(target);
+                return;
+            }
+
+            const grid = input.closest('[data-form-grid]');
+            if (grid) {
+                // Read column count from the grid's computed style (respects responsive classes).
+                const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length;
+                // Direct grid children that hold our focusable fields, in order.
+                const cells = Array.from(grid.children).filter((c) => c.querySelector(this._formFieldSelector));
+                let cell = input;
+                while (cell.parentElement !== grid) cell = cell.parentElement;
+                const idx = cells.indexOf(cell);
+                if (idx < 0) return;
+
+                // Compute (row, col, span) for each cell using col-span-N classes.
+                const spanFor = (c) => {
+                    const cs = getComputedStyle(c).gridColumnEnd;
+                    const m = /span (\d+)/.exec(cs);
+                    return m ? Math.min(parseInt(m[1], 10), cols) : 1;
+                };
+                const layout = [];
+                let r = 0, col = 0;
+                for (const c of cells) {
+                    const span = spanFor(c);
+                    if (col + span > cols) { r++; col = 0; }
+                    layout.push({ row: r, col, span });
+                    col += span;
+                    if (col >= cols) { r++; col = 0; }
+                }
+
+                const cur = layout[idx];
+                let targetIdx = -1;
+                if (axis === 'y') {
+                    const targetRow = cur.row + dir;
+                    targetIdx = layout.findIndex((p) =>
+                        p.row === targetRow &&
+                        p.col + p.span > cur.col &&
+                        p.col < cur.col + cur.span
+                    );
+                } else {
+                    targetIdx = idx + dir;
+                    if (targetIdx < 0 || targetIdx >= cells.length) targetIdx = -1;
+                }
+
+                if (targetIdx >= 0) {
+                    this._focusField(cells[targetIdx].querySelector(this._formFieldSelector));
+                    return;
+                }
+                // No target in this grid — fall through to linear walk across grids.
+            }
+
+            // Linear DOM-order walk between separate sections (or single-column mobile).
+            const all = Array.from(this.$el.querySelectorAll(this._formFieldSelector))
+                .filter((el) => el.offsetParent !== null);
+            const i = all.indexOf(input);
+            if (i < 0) return;
+            this._focusField(all[i + dir]);
         },
     }));
 

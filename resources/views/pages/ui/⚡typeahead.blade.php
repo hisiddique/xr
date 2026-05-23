@@ -33,6 +33,7 @@ new class extends Component {
         $this->value = $id;
         $this->selectedLabel = $label;
         $this->search = '';
+        $this->dispatch('typeahead-selected');
     }
 
     public function clearSelection(): void
@@ -40,6 +41,7 @@ new class extends Component {
         $this->value = null;
         $this->selectedLabel = '';
         $this->search = '';
+        $this->dispatch('typeahead-cleared');
     }
 
     #[Computed]
@@ -75,7 +77,46 @@ new class extends Component {
     }
 }; ?>
 
-<div x-data="{ open: false }" x-on:click.outside="open = false">
+<div
+    x-data="{
+        open: false,
+        focusResult(dir) {
+            const opts = Array.from(this.$el.querySelectorAll('[data-typeahead-option]'));
+            if (! opts.length) return false;
+            const i = opts.indexOf(document.activeElement);
+            let next;
+            if (i === -1) {
+                next = dir > 0 ? opts[0] : opts[opts.length - 1];
+            } else {
+                next = opts[i + dir];
+            }
+            if (next) { next.focus(); return true; }
+            return false;
+        },
+    }"
+    x-on:click.outside="open = false"
+    x-on:typeahead-cleared="$nextTick(() => $el.querySelector('input')?.focus())"
+    x-on:typeahead-selected="$nextTick(() => $el.querySelector('[data-form-stop]')?.focus())"
+    x-on:keydown="
+        if (! open) return;
+        if ($event.key === 'ArrowDown') {
+            if (focusResult(1)) { $event.preventDefault(); $event.stopPropagation(); }
+        } else if ($event.key === 'ArrowUp') {
+            const opts = Array.from($el.querySelectorAll('[data-typeahead-option]'));
+            const i = opts.indexOf(document.activeElement);
+            if (i === 0) {
+                $event.preventDefault(); $event.stopPropagation();
+                $el.querySelector('input')?.focus();
+            } else if (i > 0) {
+                $event.preventDefault(); $event.stopPropagation();
+                opts[i - 1].focus();
+            }
+        } else if ($event.key === 'Escape') {
+            open = false;
+            $el.querySelector('input')?.focus();
+        }
+    "
+>
     @if($label !== '')
         <flux:label>
             {{ $label }}
@@ -85,7 +126,12 @@ new class extends Component {
 
     <div class="relative">
         @if($value && $selectedLabel !== '')
-            <div class="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm dark:border-white/10 dark:bg-zinc-800">
+            <div
+                tabindex="0"
+                data-form-stop
+                x-on:keydown.enter.prevent.stop="$el.querySelector('button')?.click()"
+                class="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-white/10 dark:bg-zinc-800"
+            >
                 <span class="font-medium text-zinc-900 dark:text-white">{{ $selectedLabel }}</span>
                 <flux:button size="xs" variant="ghost" icon="x-mark" type="button" wire:click="clearSelection" />
             </div>
@@ -114,9 +160,10 @@ new class extends Component {
                         @foreach($this->suggestions as $opt)
                             <button
                                 type="button"
+                                data-typeahead-option
                                 wire:click="selectOption({{ json_encode($opt['id']) }}, @js($opt['label']))"
                                 x-on:click="open = false"
-                                class="block w-full cursor-pointer px-3 py-2 text-left text-sm text-zinc-900 transition-colors hover:bg-indigo-50 hover:text-indigo-700 dark:text-white dark:hover:bg-indigo-500/10 dark:hover:text-indigo-300"
+                                class="block w-full cursor-pointer px-3 py-2 text-left text-sm text-zinc-900 transition-colors hover:bg-indigo-50 hover:text-indigo-700 focus:bg-indigo-50 focus:text-indigo-700 focus:outline-none dark:text-white dark:hover:bg-indigo-500/10 dark:hover:text-indigo-300 dark:focus:bg-indigo-500/10 dark:focus:text-indigo-300"
                             >
                                 {{ $opt['label'] }}
                             </button>
