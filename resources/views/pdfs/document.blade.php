@@ -203,6 +203,10 @@
         $cust->post_code,
     ])->filter()->values();
 
+    $bottomPaddingMm = $isDN ? 88 : 65;
+    $bottomBlockBottomMm = $isDN ? 22 : 26;
+    $bottomBlockHeightMm = $isDN ? 65 : 38;
+
     $pageNumX = 393;
     $pageNumY = 197 + ($document->order_no ? 14 : 0);
 
@@ -215,7 +219,7 @@
     $headerTopMm = 77 + max(0, max($leftMetaLines, $rightMetaLines) - 6) * 4.0;
 @endphp
 
-<body style="padding: {{ $headerTopMm }}mm 10mm 88mm 10mm">
+<body style="padding: {{ $headerTopMm }}mm 10mm {{ $bottomPaddingMm }}mm 10mm">
 
 {{-- Fixed page header: company chrome + customer/meta bands --}}
 <div class="page-header">
@@ -288,7 +292,7 @@
 </div>
 
 {{-- Content box rails — fill the area down to the footer on every page --}}
-<div class="content-frame" style="top: {{ $headerTopMm }}mm"></div>
+<div class="content-frame" style="top: {{ $headerTopMm }}mm; bottom: {{ $bottomPaddingMm }}mm"></div>
 
 {{-- Standalone items table; thead repeats on every page --}}
 <table class="items">
@@ -330,7 +334,7 @@
 
 {{-- End-of-document block — glued to page bottom via position:fixed,
      paints on every page above the legal footer. --}}
-<div class="bottom-block">
+<div class="bottom-block" style="bottom: {{ $bottomBlockBottomMm }}mm; height: {{ $bottomBlockHeightMm }}mm">
 @if($isDN)
     <table class="doc-bottom">
         <tbody>

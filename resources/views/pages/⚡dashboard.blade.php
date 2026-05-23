@@ -95,8 +95,8 @@ new #[Title('Dashboard')] class extends Component {
         </div>
     </div>
 
-    {{-- KPI Cards (compact, 3 across) --}}
-    <div class="grid gap-3 sm:grid-cols-3">
+    {{-- KPI Cards --}}
+    <div class="grid gap-4 sm:grid-cols-3">
         @foreach([
             ['label' => 'Customers',      'value' => $this->customerCount,      'icon' => 'users',         'bar' => 'bg-indigo-500',  'iconBg' => 'bg-indigo-50 dark:bg-indigo-500/10',   'iconText' => 'text-indigo-600 dark:text-indigo-400',   'href' => route('customers.index')],
             ['label' => 'Delivery Notes', 'value' => $this->deliveryNoteCount,  'icon' => 'truck',         'bar' => 'bg-emerald-500', 'iconBg' => 'bg-emerald-50 dark:bg-emerald-500/10', 'iconText' => 'text-emerald-600 dark:text-emerald-400', 'href' => route('delivery-notes.index')],
@@ -105,22 +105,22 @@ new #[Title('Dashboard')] class extends Component {
             <a
                 href="{{ $kpi['href'] }}"
                 wire:navigate
-                class="relative flex items-center gap-3 overflow-hidden rounded-xl border border-zinc-200/70 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.06)] transition-colors hover:bg-zinc-50 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
+                class="relative flex items-center gap-4 overflow-hidden rounded-xl border border-zinc-200/70 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(16,24,40,0.06)] transition-colors hover:bg-zinc-50 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
             >
                 <div class="absolute inset-y-0 left-0 w-1 {{ $kpi['bar'] }}"></div>
-                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {{ $kpi['iconBg'] }} ml-1">
-                    <flux:icon :icon="$kpi['icon']" class="size-4 {{ $kpi['iconText'] }}" />
+                <div class="ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg {{ $kpi['iconBg'] }}">
+                    <flux:icon :icon="$kpi['icon']" class="size-5 {{ $kpi['iconText'] }}" />
                 </div>
                 <div class="min-w-0 flex-1">
-                    <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ $kpi['label'] }}</p>
-                    <p class="text-xl font-semibold leading-tight tracking-tight text-zinc-900 dark:text-white">{{ $kpi['value'] }}</p>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ $kpi['label'] }}</p>
+                    <p class="text-2xl font-semibold leading-tight tracking-tight text-zinc-900 dark:text-white">{{ $kpi['value'] }}</p>
                 </div>
             </a>
         @endforeach
     </div>
 
     {{-- Quick Actions (formal-system tile grid) --}}
-    <div class="mx-auto w-full max-w-4xl">
+    <div class="w-full">
         <div class="mb-3 flex items-center justify-between">
             <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Quick Actions</p>
             <p class="text-[11px] text-zinc-400 dark:text-zinc-500">Press the highlighted letter to jump</p>
@@ -138,7 +138,7 @@ new #[Title('Dashboard')] class extends Component {
                         <button type="button" data-shortcut="{{ $tile['key'] }}" class="{{ $tileClasses }} w-full cursor-pointer">
                             <span class="{{ $badgeClasses }}">{{ $tile['key'] }}</span>
                             <flux:icon :icon="$tile['icon']" class="size-6 text-indigo-600 dark:text-indigo-400" />
-                            <p class="text-xs font-medium text-zinc-900 dark:text-white">{{ $tile['label'] }}</p>
+                            <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ $tile['label'] }}</p>
                         </button>
                         <flux:menu>
                             @foreach($tile['menu'] as $item)
@@ -157,7 +157,7 @@ new #[Title('Dashboard')] class extends Component {
                     >
                         <span class="{{ $badgeClasses }}">{{ $tile['key'] }}</span>
                         <flux:icon :icon="$tile['icon']" class="size-6 text-indigo-600 dark:text-indigo-400" />
-                        <p class="text-xs font-medium text-zinc-900 dark:text-white">{{ $tile['label'] }}</p>
+                        <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ $tile['label'] }}</p>
                     </a>
                 @endif
             @endforeach
@@ -169,7 +169,7 @@ new #[Title('Dashboard')] class extends Component {
                     class="relative flex cursor-not-allowed flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-200 bg-zinc-50/60 px-3 py-5 text-center opacity-60 dark:border-white/5 dark:bg-zinc-900/40"
                 >
                     <flux:icon :icon="$tile['icon']" class="size-6 text-zinc-400 dark:text-zinc-600" />
-                    <p class="text-xs font-medium text-zinc-500 dark:text-zinc-500">{{ $tile['label'] }}</p>
+                    <p class="text-sm font-medium text-zinc-500 dark:text-zinc-500">{{ $tile['label'] }}</p>
                 </div>
             @endforeach
         </div>

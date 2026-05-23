@@ -374,7 +374,7 @@
 
         {{-- ===================== MAIN CONTENT ===================== --}}
         <main class="bg-zinc-50 dark:bg-zinc-950">
-            <div class="mx-auto max-w-[1600px] px-4 py-4">
+            <div class="mx-auto max-w-[1600px] px-6 py-6 md:px-8 md:py-8">
 
                 @if (session('error'))
                     <div
