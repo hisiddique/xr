@@ -203,7 +203,7 @@
     ])->filter()->values();
 
     $pageNumX = 393;
-    $pageNumY = 197 + ($document->order_no ? 11 : 0);
+    $pageNumY = 197 + ($document->order_no ? 14 : 0);
 
     $metaCharsPerLine = 56;
     $visualLines = fn (?string $text) => $text ? max(1, (int) ceil(mb_strlen($text) / $metaCharsPerLine)) : 0;
@@ -211,7 +211,7 @@
         + $visualLines($custPerson)
         + $custAddressLines->sum($visualLines);
     $rightMetaLines = 6 + ($document->order_no ? 1 : 0);
-    $headerTopMm = 77 + max(0, max($leftMetaLines, $rightMetaLines) - 6) * 3.4;
+    $headerTopMm = 77 + max(0, max($leftMetaLines, $rightMetaLines) - 6) * 4.0;
 @endphp
 
 <body style="padding: {{ $headerTopMm }}mm 10mm 88mm 10mm">
