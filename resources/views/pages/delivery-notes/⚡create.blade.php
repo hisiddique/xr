@@ -14,6 +14,7 @@ new #[Title('New Delivery Note')] class extends Component {
     public ?int $customer_id = null;
     public string $customerName = '';
     public string $doc_date = '';
+    public string $due_by = '';
     public string $order_no = '';
     public bool $show_pricing = false;
     public array $items = [];
@@ -22,6 +23,7 @@ new #[Title('New Delivery Note')] class extends Component {
     public function mount(): void
     {
         $this->doc_date = now()->format('Y-m-d');
+        $this->due_by = now()->format('Y-m-d');
         $this->items = [
             ['details' => '', 'quantity' => '', 'price' => '', 'per' => '', 'is_note' => false],
         ];
@@ -41,6 +43,7 @@ new #[Title('New Delivery Note')] class extends Component {
         $this->validate([
             'customer_id' => 'required|integer|exists:customers,id',
             'doc_date' => 'required|date',
+            'due_by' => 'nullable|date',
             'order_no' => 'nullable|string|max:100',
             'show_pricing' => 'boolean',
             'items' => 'required|array|min:1',
@@ -69,6 +72,7 @@ new #[Title('New Delivery Note')] class extends Component {
             'type' => 'DN',
             'doc_number' => $docNumber,
             'doc_date' => $this->doc_date,
+            'due_by' => $this->due_by ?: null,
             'order_no' => $this->order_no ?: null,
             'subtotal' => $totals['subtotal'],
             'trade_discount' => $totals['discount'],
@@ -139,6 +143,7 @@ new #[Title('New Delivery Note')] class extends Component {
                     required
                 />
                 <flux:input wire:model="doc_date" type="date" :label="__('Delivery Date')" required />
+                <flux:input wire:model="due_by" type="date" :label="__('Due By')" />
                 <flux:input wire:model="order_no" :label="__('Order Reference')" :placeholder="__('Optional')" />
                 <div class="md:col-span-2">
                     <flux:switch

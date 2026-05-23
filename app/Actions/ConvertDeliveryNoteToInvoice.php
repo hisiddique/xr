@@ -51,6 +51,7 @@ class ConvertDeliveryNoteToInvoice
                 'type' => DocumentType::Invoice,
                 'doc_number' => $docNumber,
                 'doc_date' => now()->toDateString(),
+                'due_by' => $deliveryNote->due_by,
                 'order_no' => $deliveryNote->order_no,
                 'subtotal' => $totals['subtotal'],
                 'trade_discount' => $totals['discount'],

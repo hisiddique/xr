@@ -11,6 +11,7 @@ new #[Title('Edit Invoice')] class extends Component {
     public Document $document;
 
     public string $doc_date = '';
+    public string $due_by = '';
     public string $order_no = '';
     public array $items = [];
     public array $units = [];
@@ -19,6 +20,7 @@ new #[Title('Edit Invoice')] class extends Component {
     public function mount(): void
     {
         $this->doc_date = $this->document->doc_date->format('Y-m-d');
+        $this->due_by = $this->document->due_by?->format('Y-m-d') ?? '';
         $this->order_no = $this->document->order_no ?? '';
         $this->items = $this->document->items->map(fn ($item) => [
             'id' => $item->id,
@@ -35,6 +37,7 @@ new #[Title('Edit Invoice')] class extends Component {
     {
         $this->validate([
             'doc_date' => 'required|date',
+            'due_by' => 'nullable|date',
             'items' => 'required|array|min:1',
             'items.*.details' => 'required|string|max:500',
             'items.*.is_note' => 'boolean',
@@ -56,6 +59,7 @@ new #[Title('Edit Invoice')] class extends Component {
 
         $this->document->update([
             'doc_date' => $this->doc_date,
+            'due_by' => $this->due_by ?: null,
             'order_no' => $this->order_no ?: null,
             'subtotal' => $totals['subtotal'],
             'trade_discount' => $totals['discount'],
@@ -153,6 +157,7 @@ new #[Title('Edit Invoice')] class extends Component {
                     </div>
                 </div>
                 <flux:input wire:model="doc_date" type="date" :label="__('Invoice Date')" required />
+                <flux:input wire:model="due_by" type="date" :label="__('Due By')" />
                 <flux:input wire:model="order_no" :label="__('Order Reference')" :placeholder="__('Optional')" />
             </div>
         </div>

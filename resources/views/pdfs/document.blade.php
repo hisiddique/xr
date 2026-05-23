@@ -129,6 +129,7 @@
         .sig-grid-title { text-align: center; font-weight: bold; font-size: 10.5px; }
         .retention-text { font-size: 10.5px; line-height: 1.2; text-align: justify; }
         .retention-text strong { font-weight: bold; }
+        .property-text { font-size: 10.5px; line-height: 1.2; font-weight: bold; }
 
         /* Bottom block — cert/sigs/totals glued to bottom on every page. */
         .bottom-block {
@@ -330,6 +331,7 @@
 {{-- End-of-document block — glued to page bottom via position:fixed,
      paints on every page above the legal footer. --}}
 <div class="bottom-block">
+@if($isDN)
     <table class="doc-bottom">
         <tbody>
             <tr>
@@ -447,6 +449,47 @@
             </tr>
         </tbody>
     </table>
+@else
+    <table class="doc-bottom">
+        <tbody>
+            <tr>
+                <td colspan="2" class="split-cell">
+                    <table class="split"><tr>
+                        <td class="left cert-box">
+                            <div class="cert-title">Payment terms:</div>
+                            @if($document->due_by)
+                                <div>Due by {{ $document->due_by->format('d/m/Y') }}</div>
+                            @endif
+                        </td>
+                        <td class="right cert-box">
+                            <table class="totals-box">
+                                <tr>
+                                    <td class="l">Total Value</td>
+                                    <td class="v">£{{ number_format($document->subtotal, 2) }}</td>
+                                </tr>
+                                @if($document->discount_amount > 0)
+                                    <tr>
+                                        <td class="l">Discount ({{ $document->trade_discount }}%)</td>
+                                        <td class="v">-£{{ number_format($document->discount_amount, 2) }}</td>
+                                    </tr>
+                                @endif
+                                <tr>
+                                    <td class="l">VAT @ {{ number_format((float) \App\Models\Setting::get('vat_rate', 20), 2) }}%</td>
+                                    <td class="v">£{{ number_format($document->vat_amount, 2) }}</td>
+                                </tr>
+                                <tr class="grand">
+                                    <td class="l">Invoice Total</td>
+                                    <td class="v">£{{ number_format($document->total_value, 2) }}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr></table>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+    <div class="property-text">This goods remain the property of {{ $companyName }}, until paid in full and the customer shall remain a bailee only until payment is made.</div>
+@endif
 </div>
 
 {{-- Per-page Sheet No. drawn via inline PHP script (dompdf's only reliable
