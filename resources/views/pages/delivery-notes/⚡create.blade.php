@@ -261,7 +261,7 @@ new #[Title('New Delivery Note')] class extends Component {
                                     </td>
                                 </template>
                                 <td class="px-4 py-2.5">
-                                    <flux:button size="xs" variant="ghost" icon="x-mark" type="button" x-on:click="remove(i)" x-show="rows.length > 1" />
+                                    <flux:button size="xs" variant="ghost" icon="x-mark" type="button" x-on:click="remove(i)" x-show="rows.length > 1" data-row-remove />
                                 </td>
                             </tr>
                         </template>
@@ -276,8 +276,8 @@ new #[Title('New Delivery Note')] class extends Component {
 
         {{-- Form actions --}}
         <div class="flex items-center justify-end gap-3 rounded-2xl border border-zinc-200/70 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.06)] dark:border-white/10 dark:bg-zinc-900">
-            <x-ui.back-button :fallback="route('delivery-notes.index')" />
-            <flux:button variant="primary" type="submit">Create Delivery Note <x-ui.kbd-hint keys="Ctrl+↵" /></flux:button>
+            <x-ui.back-button :fallback="route('delivery-notes.index')" confirm data-form-nav />
+            <flux:button variant="primary" type="submit" data-form-nav>Create Delivery Note <x-ui.kbd-hint keys="Ctrl+↵" /></flux:button>
         </div>
     </form>
 

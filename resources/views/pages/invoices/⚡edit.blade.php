@@ -270,7 +270,7 @@ new #[Title('Edit Invoice')] class extends Component {
                                     </td>
                                 </template>
                                 <td class="px-4 py-2.5">
-                                    <flux:button size="xs" variant="ghost" icon="x-mark" type="button" x-on:click="remove(i)" x-show="rows.length > 1" />
+                                    <flux:button size="xs" variant="ghost" icon="x-mark" type="button" x-on:click="remove(i)" x-show="rows.length > 1" data-row-remove />
                                 </td>
                             </tr>
                         </template>
@@ -286,9 +286,9 @@ new #[Title('Edit Invoice')] class extends Component {
 
         {{-- Sticky footer bar --}}
         <div class="sticky bottom-0 z-10 flex items-center justify-end gap-3 rounded-2xl border border-zinc-200/70 bg-white/95 px-4 py-3 shadow-[0_-1px_4px_rgba(16,24,40,0.06)] backdrop-blur dark:border-white/10 dark:bg-zinc-900/95">
-            <x-ui.back-button :fallback="route('invoices.show', $document)" />
-            <flux:button variant="filled" type="submit">Save Changes <x-ui.kbd-hint keys="Ctrl+↵" /></flux:button>
-            <flux:button variant="primary" type="button" x-on:click.prevent="submitAndEmail()" icon="envelope">
+            <x-ui.back-button :fallback="route('invoices.show', $document)" confirm data-form-nav />
+            <flux:button variant="filled" type="submit" data-form-nav>Save Changes <x-ui.kbd-hint keys="Ctrl+↵" /></flux:button>
+            <flux:button variant="primary" type="button" x-on:click.prevent="submitAndEmail()" icon="envelope" data-form-nav>
                 Save &amp; Email
             </flux:button>
         </div>

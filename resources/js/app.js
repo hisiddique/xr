@@ -770,7 +770,22 @@ document.addEventListener('alpine:init', () => {
             const tr = target?.closest('tr[data-row-idx]');
             if (!tr) return;
             const idx = parseInt(tr.dataset.rowIdx, 10);
-            if (Number.isInteger(idx)) this.remove(idx);
+            if (!Number.isInteger(idx)) return;
+            if (this.rows.length <= 1) return;
+            const rowInputs = Array.from(tr.querySelectorAll('input'));
+            const colIdx = Math.max(0, rowInputs.indexOf(target));
+            const nextIdx = idx === this.rows.length - 1 ? idx - 1 : idx;
+            this.remove(idx);
+            this.$nextTick(() => {
+                const nextTr = this.$refs.rowsBody?.querySelector(`tr[data-row-idx="${nextIdx}"]`);
+                if (!nextTr) return;
+                const inputs = Array.from(nextTr.querySelectorAll('input'));
+                const next = inputs[colIdx] ?? inputs[0];
+                if (next) {
+                    next.focus();
+                    if (typeof next.select === 'function') next.select();
+                }
+            });
         },
 
         insertAt(target, offset) {
@@ -778,9 +793,21 @@ document.addEventListener('alpine:init', () => {
             if (!tr) return;
             const idx = parseInt(tr.dataset.rowIdx, 10);
             if (!Number.isInteger(idx)) return;
+            const rowInputs = Array.from(tr.querySelectorAll('input'));
+            const colIdx = Math.max(0, rowInputs.indexOf(target));
             const at = idx + offset;
             this.rows.splice(at, 0, { ...this._lineDefault });
-            this.$nextTick(() => this.focusRowDetails(at));
+            this.$nextTick(() => {
+                const newTr = this.$refs.rowsBody?.querySelector(`tr[data-row-idx="${at}"]`);
+                if (!newTr) return;
+                const inputs = Array.from(newTr.querySelectorAll('input'));
+                const next = inputs[colIdx] ?? inputs[0];
+                if (next) {
+                    next.focus();
+                    if (typeof next.select === 'function') next.select();
+                    next.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                }
+            });
         },
 
         focusRowDetails(idx) {
@@ -792,19 +819,22 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
+        _rowCells: 'input, button[data-row-remove]:not([hidden]):not([style*="display: none"])',
+
         moveVertical(target, dir) {
-            const tr = target.closest('tr[data-row-idx]');
+            const cell = target.closest('input, button[data-row-remove]') ?? target;
+            const tr = cell.closest('tr[data-row-idx]');
             if (!tr) return;
             const rowIdx = parseInt(tr.dataset.rowIdx, 10);
-            const rowInputs = Array.from(tr.querySelectorAll('input'));
-            const colIdx = rowInputs.indexOf(target);
+            const rowCells = Array.from(tr.querySelectorAll(this._rowCells));
+            const colIdx = rowCells.indexOf(cell);
             const targetTr = this.$refs.rowsBody?.querySelector(`tr[data-row-idx="${rowIdx + dir}"]`);
             if (!targetTr) {
-                this.moveFormField(target, 'y', dir);
+                this.moveFormField(cell, 'y', dir);
                 return;
             }
-            const targetInputs = Array.from(targetTr.querySelectorAll('input'));
-            const next = targetInputs[colIdx] ?? targetInputs[0];
+            const targetCells = Array.from(targetTr.querySelectorAll(this._rowCells));
+            const next = targetCells[colIdx] ?? targetCells[0];
             if (next) {
                 next.focus();
                 if (typeof next.select === 'function' && next.type !== 'number') next.select();
@@ -812,10 +842,11 @@ document.addEventListener('alpine:init', () => {
         },
 
         moveHorizontal(target, dir) {
-            const inputs = Array.from(this.$refs.rowsBody?.querySelectorAll('input') ?? []);
-            const idx = inputs.indexOf(target);
+            const cell = target.closest('input, button[data-row-remove]') ?? target;
+            const cells = Array.from(this.$refs.rowsBody?.querySelectorAll(this._rowCells) ?? []);
+            const idx = cells.indexOf(cell);
             if (idx < 0) return;
-            const next = inputs[idx + dir];
+            const next = cells[idx + dir];
             if (next) {
                 next.focus();
                 if (typeof next.select === 'function' && next.type !== 'number') next.select();
@@ -886,13 +917,17 @@ document.addEventListener('alpine:init', () => {
             const tag = e.target.tagName;
             const isFormInput = (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA')
                 || e.target.hasAttribute?.('data-form-stop')
-                || e.target.hasAttribute?.('data-flux-switch');
+                || e.target.hasAttribute?.('data-flux-switch')
+                || e.target.hasAttribute?.('data-form-nav')
+                || e.target.hasAttribute?.('data-row-remove')
+                || e.target.closest?.('[data-row-remove]');
             const inItems = isFormInput && e.target.closest?.('[data-items-table]');
             const ctrl = e.ctrlKey || e.metaKey;
             const stop = () => { e.preventDefault(); e.stopPropagation(); };
 
             if (ctrl && e.key === 'Enter')                       { e.preventDefault(); this.submit(); return; }
             if (e.key === 'Escape')                              { e.preventDefault(); this.confirmExit(); return; }
+            if (e.key === 'Insert' && !inItems)                  { stop(); this.add(); return; }
 
             if (inItems) {
                 if (e.key === 'Enter' && e.shiftKey)                 { stop(); this.addNote(); return; }
@@ -915,7 +950,7 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        _formFieldSelector: 'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [data-flux-switch], [data-form-stop]',
+        _formFieldSelector: 'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [data-flux-switch], [data-form-stop], button[data-form-nav]:not([disabled])',
 
         _focusField(el) {
             if (!el) return;
@@ -990,6 +1025,34 @@ document.addEventListener('alpine:init', () => {
             const i = all.indexOf(input);
             if (i < 0) return;
             this._focusField(all[i + dir]);
+        },
+    }));
+
+    // ─── Exit-Confirm Modal Button Navigation ───────────────────────
+    window.Alpine.data('exitConfirmNav', (modalName = 'exit-confirm') => ({
+        selected: 0,
+
+        init() {
+            document.addEventListener('modal-show', (e) => {
+                if (e.detail?.name !== modalName) return;
+                this.selected = 0;
+                setTimeout(() => this.focusSelected(), 60);
+            });
+        },
+
+        _buttons() {
+            return this.$refs.buttons?.querySelectorAll('button') ?? [];
+        },
+
+        focusSelected() {
+            this._buttons()[this.selected]?.focus();
+        },
+
+        move(dir) {
+            const btns = this._buttons();
+            if (!btns.length) return;
+            this.selected = (this.selected + dir + btns.length) % btns.length;
+            this.focusSelected();
         },
     }));
 

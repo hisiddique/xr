@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithSorting;
 use App\Models\Customer;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -8,7 +9,9 @@ use Livewire\Component;
 use Livewire\WithPagination;
 
 new #[Title('Customers')] class extends Component {
-    use WithPagination;
+    use WithPagination, WithSorting;
+
+    protected array $sortable = ['company_name', 'reference', 'email_1', 'created_at'];
 
     #[Url]
     public string $search = '';
@@ -21,13 +24,15 @@ new #[Title('Customers')] class extends Component {
     #[Computed]
     public function customers()
     {
-        return Customer::query()
+        $query = Customer::query()
             ->when($this->search, fn ($q) => $q->where('company_name', 'like', "%{$this->search}%")
                 ->orWhere('reference', 'like', "%{$this->search}%")
                 ->orWhere('email_1', 'like', "%{$this->search}%")
-            )
-            ->latest()
-            ->paginate(15);
+            );
+
+        return $this->sortColumn === ''
+            ? $this->applySort($query)->latest()->paginate(15)
+            : $this->applySort($query)->paginate(15);
     }
 }; ?>
 
@@ -81,9 +86,9 @@ new #[Title('Customers')] class extends Component {
                 <table class="w-full text-sm">
                     <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                         <tr>
-                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Company</th>
+                            <x-ui.sortable-header column="company_name" :state="$this->sortStateFor('company_name')">Company</x-ui.sortable-header>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Contact</th>
-                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Email</th>
+                            <x-ui.sortable-header column="email_1" :state="$this->sortStateFor('email_1')">Email</x-ui.sortable-header>
                             <th class="px-4 py-2"></th>
                         </tr>
                     </thead>

@@ -3,6 +3,7 @@
 use App\Actions\ConvertDeliveryNoteToInvoice;
 use App\DocumentStatus;
 use App\DocumentType;
+use App\Livewire\Concerns\WithSorting;
 use App\Models\Document;
 use App\Models\DocumentEmailLog;
 use App\Services\DocumentEmailService;
@@ -14,7 +15,9 @@ use Livewire\Component;
 use Livewire\WithPagination;
 
 new #[Title('Delivery Notes')] class extends Component {
-    use WithPagination;
+    use WithPagination, WithSorting;
+
+    protected array $sortable = ['doc_number', 'doc_date', 'status', 'created_at'];
 
     #[Url]
     public string $search = '';
@@ -184,7 +187,8 @@ new #[Title('Delivery Notes')] class extends Component {
                     ->orWhereHas('customer', fn ($q) => $q->where('company_name', 'like', "%{$this->search}%"));
             }))
             ->when($this->status, fn ($q) => $q->where('status', $this->status))
-            ->latest()
+            ->tap(fn ($q) => $this->applySort($q))
+            ->when($this->sortColumn === '', fn ($q) => $q->latest())
             ->paginate(15);
     }
 
@@ -318,11 +322,11 @@ new #[Title('Delivery Notes')] class extends Component {
                                     />
                                 @endif
                             </th>
-                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">#</th>
+                            <x-ui.sortable-header column="doc_number" :state="$this->sortStateFor('doc_number')">#</x-ui.sortable-header>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
-                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Date</th>
+                            <x-ui.sortable-header column="doc_date" :state="$this->sortStateFor('doc_date')">Date</x-ui.sortable-header>
                             <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Amount</th>
-                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Status</th>
+                            <x-ui.sortable-header column="status" :state="$this->sortStateFor('status')">Status</x-ui.sortable-header>
                             <th class="px-4 py-2"></th>
                         </tr>
                     </thead>
