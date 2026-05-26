@@ -179,7 +179,9 @@
     $companyEmailAcc     = \App\Models\Setting::get('company_email_accounts', '');
     $companyTelSales     = \App\Models\Setting::get('company_tel_sales', '');
     $companyTelAcc       = \App\Models\Setting::get('company_tel_accounts', '');
-    $companyDirector     = \App\Models\Setting::get('company_director', '');
+    $companyDirector     = $isDN
+        ? \App\Models\Setting::get('company_director_dn', \App\Models\Setting::get('company_director', ''))
+        : \App\Models\Setting::get('company_director', '');
     $companyRegNo        = \App\Models\Setting::get('company_registration_no', '');
     $companyVatNo        = \App\Models\Setting::get('company_vat_no', '');
     $companyIso          = \App\Models\Setting::get('company_iso_cert', '');

@@ -19,6 +19,8 @@ new #[Title('CRM Settings')] class extends Component {
     public string $company_tel_sales = '';
     public string $company_tel_accounts = '';
     public string $company_director = '';
+
+    public string $company_director_dn = '';
     public string $company_registration_no = '';
     public string $company_vat_no = '';
     public string $company_iso_cert = '';
@@ -41,6 +43,7 @@ new #[Title('CRM Settings')] class extends Component {
         $this->company_tel_sales = (string) Setting::get('company_tel_sales', '');
         $this->company_tel_accounts = (string) Setting::get('company_tel_accounts', '');
         $this->company_director = (string) Setting::get('company_director', '');
+        $this->company_director_dn = (string) Setting::get('company_director_dn', '');
         $this->company_registration_no = (string) Setting::get('company_registration_no', '');
         $this->company_vat_no = (string) Setting::get('company_vat_no', '');
         $this->company_iso_cert = (string) Setting::get('company_iso_cert', '');
@@ -65,6 +68,7 @@ new #[Title('CRM Settings')] class extends Component {
             'company_tel_sales' => 'nullable|string|max:100',
             'company_tel_accounts' => 'nullable|string|max:100',
             'company_director' => 'nullable|string|max:255',
+            'company_director_dn' => 'nullable|string|max:255',
             'company_registration_no' => 'nullable|string|max:100',
             'company_vat_no' => 'nullable|string|max:100',
             'company_iso_cert' => 'nullable|string|max:100',
@@ -98,6 +102,7 @@ new #[Title('CRM Settings')] class extends Component {
         Setting::set('company_tel_sales', $this->company_tel_sales);
         Setting::set('company_tel_accounts', $this->company_tel_accounts);
         Setting::set('company_director', $this->company_director);
+        Setting::set('company_director_dn', $this->company_director_dn);
         Setting::set('company_registration_no', $this->company_registration_no);
         Setting::set('company_vat_no', $this->company_vat_no);
         Setting::set('company_iso_cert', $this->company_iso_cert);
@@ -222,8 +227,11 @@ new #[Title('CRM Settings')] class extends Component {
                 <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Shown in the certificate block and footer of printed delivery notes and invoices.</p>
             </div>
             <div class="space-y-4">
-                <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <flux:input wire:model="company_director" :label="__('Director Name')" />
+                <div class="grid gap-4 md:grid-cols-2">
+                    <flux:input wire:model="company_director" :label="__('Director Name (Invoices)')" :description="__('Shown on invoice PDF footer.')" />
+                    <flux:input wire:model="company_director_dn" :label="__('Director Name (Delivery Notes)')" :description="__('Shown on delivery note PDF footer.')" />
+                </div>
+                <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     <flux:input wire:model="company_registration_no" :label="__('Companies House No.')" />
                     <flux:input wire:model="company_vat_no" :label="__('VAT Number')" />
                     <flux:input wire:model="company_iso_cert" :label="__('ISO Certification')" :placeholder="__('ISO 9001-A1XXXX')" />

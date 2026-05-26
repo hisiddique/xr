@@ -18,7 +18,48 @@ use Livewire\WithPagination;
 new #[Title('Invoices')] class extends Component {
     use WithPagination, WithSorting;
 
-    protected array $sortable = ['doc_number', 'doc_date', 'status', 'created_at'];
+    protected array $sortable = ['doc_number', 'doc_date', 'status', 'total_value', 'created_at'];
+
+    #[Url(as: 'from', except: '')]
+    public string $dateFrom = '';
+
+    #[Url(as: 'to', except: '')]
+    public string $dateTo = '';
+
+    #[Url(as: 'min', except: '')]
+    public string $amountMin = '';
+
+    #[Url(as: 'max', except: '')]
+    public string $amountMax = '';
+
+    public function updatedDateFrom(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedDateTo(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedAmountMin(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedAmountMax(): void
+    {
+        $this->resetPage();
+    }
+
+    public function clearFilters(): void
+    {
+        $this->dateFrom = '';
+        $this->dateTo = '';
+        $this->amountMin = '';
+        $this->amountMax = '';
+        $this->resetPage();
+    }
 
     #[Url]
     public string $search = '';
@@ -161,6 +202,10 @@ new #[Title('Invoices')] class extends Component {
                     ->orWhereHas('customer', fn ($q) => $q->where('company_name', 'like', "%{$this->search}%"));
             }))
             ->when($this->status && ! $this->trashed, fn ($q) => $q->where('status', $this->status))
+            ->when($this->dateFrom !== '', fn ($q) => $q->whereDate('doc_date', '>=', $this->dateFrom))
+            ->when($this->dateTo !== '', fn ($q) => $q->whereDate('doc_date', '<=', $this->dateTo))
+            ->when($this->amountMin !== '' && is_numeric($this->amountMin), fn ($q) => $q->where('total_value', '>=', (float) $this->amountMin))
+            ->when($this->amountMax !== '' && is_numeric($this->amountMax), fn ($q) => $q->where('total_value', '<=', (float) $this->amountMax))
             ->tap(fn ($q) => $this->applySort($q))
             ->when($this->sortColumn === '', fn ($q) => $q->latest())
             ->paginate(15);
@@ -194,7 +239,7 @@ new #[Title('Invoices')] class extends Component {
     />
 
     {{-- Toolbar card --}}
-    <div class="rounded-2xl border border-zinc-200/70 bg-white p-3 dark:border-white/10 dark:bg-zinc-900">
+    <div class="rounded-2xl border border-zinc-200/70 bg-white p-3 dark:border-white/10 dark:bg-zinc-900 flex flex-col gap-3">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div x-data="zoneNav('search')" data-zone="search" tabindex="-1" class="outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 rounded-lg flex-1 max-w-sm">
                 <flux:input
@@ -239,6 +284,13 @@ new #[Title('Invoices')] class extends Component {
                 </button>
             </div>
         </div>
+
+        <x-ui.range-filters
+            :date-from="$dateFrom"
+            :date-to="$dateTo"
+            :amount-min="$amountMin"
+            :amount-max="$amountMax"
+        />
     </div>
 
     {{-- Bulk action bar --}}
@@ -302,7 +354,7 @@ new #[Title('Invoices')] class extends Component {
                             <x-ui.sortable-header column="doc_number" :state="$this->sortStateFor('doc_number')">#</x-ui.sortable-header>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
                             <x-ui.sortable-header column="doc_date" :state="$this->sortStateFor('doc_date')">Date</x-ui.sortable-header>
-                            <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Amount</th>
+                            <x-ui.sortable-header column="total_value" align="right" :state="$this->sortStateFor('total_value')">Amount</x-ui.sortable-header>
                             <x-ui.sortable-header column="status" :state="$this->sortStateFor('status')">Status</x-ui.sortable-header>
                             <th class="px-4 py-2"></th>
                         </tr>

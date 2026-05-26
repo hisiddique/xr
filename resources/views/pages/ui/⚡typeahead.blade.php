@@ -136,14 +136,38 @@ new class extends Component {
                 <flux:button size="xs" variant="ghost" icon="x-mark" type="button" wire:click="clearSelection" />
             </div>
         @else
-            <flux:input
-                wire:model.live.debounce.300ms="search"
-                x-on:focus="open = true"
-                x-on:input="open = true"
-                icon="magnifying-glass"
-                :placeholder="$placeholder !== '' ? $placeholder : __('Type at least :n letters…', ['n' => $minChars])"
-                autocomplete="off"
-            />
+            @php
+                $firstSuggestion = $this->suggestions[0] ?? null;
+                $ghostSuffix = '';
+                if ($firstSuggestion && $search !== '' && mb_stripos((string) $firstSuggestion['label'], $search) === 0) {
+                    $ghostSuffix = mb_substr((string) $firstSuggestion['label'], mb_strlen($search));
+                }
+            @endphp
+
+            <div class="relative">
+                <flux:input
+                    wire:model.live.debounce.300ms="search"
+                    x-on:focus="open = true"
+                    x-on:input="open = true"
+                    x-on:keydown.enter="if ($refs.acceptGhost) { $event.preventDefault(); $event.stopPropagation(); $refs.acceptGhost.click(); }"
+                    icon="magnifying-glass"
+                    :placeholder="$placeholder !== '' ? $placeholder : __('Type at least :n letters…', ['n' => $minChars])"
+                    autocomplete="off"
+                />
+
+                @if($ghostSuffix !== '')
+                    <div class="pointer-events-none absolute inset-y-0 left-0 right-0 flex items-center ps-10 pe-3 text-base sm:text-sm leading-[1.375rem]">
+                        <span class="invisible whitespace-pre">{{ $search }}</span>
+                        <span class="text-zinc-400 dark:text-zinc-500 whitespace-pre truncate">{{ $ghostSuffix }}<span class="ms-2 text-[10px] font-medium uppercase tracking-wider opacity-70">↵</span></span>
+                    </div>
+                    <button
+                        type="button"
+                        x-ref="acceptGhost"
+                        class="hidden"
+                        wire:click="selectOption({{ json_encode($firstSuggestion['id']) }}, @js($firstSuggestion['label']))"
+                    ></button>
+                @endif
+            </div>
 
             @if(mb_strlen(trim($search)) >= $minChars)
                 <div
