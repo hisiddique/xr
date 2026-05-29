@@ -144,7 +144,7 @@ new #[Title('CRM Settings')] class extends Component {
         subtitle="Configure your company details, tax, and document numbering."
     />
 
-    <form wire:submit="save" class="flex flex-col gap-0 overflow-hidden rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
+    <form wire:submit="save" x-data="formNav" x-on:keydown="handleKey($event)" class="flex flex-col gap-0 overflow-hidden rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
 
         {{-- Branding / Logo --}}
         <div class="grid gap-6 px-4 py-5 lg:grid-cols-[280px_1fr] lg:gap-10">

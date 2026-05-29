@@ -931,6 +931,7 @@ document.addEventListener('alpine:init', () => {
 
             if (inItems) {
                 if (e.key === 'Enter' && e.shiftKey)                 { stop(); this.addNote(); return; }
+                if (e.key === 'Enter' && !ctrl)                      { stop(); this.advanceFromItem(e.target); return; }
                 if (ctrl && e.key === 'Backspace')                   { stop(); this.removeFocused(e.target); return; }
                 if (ctrl && e.key === 'Delete')                      { stop(); this.removeFocused(e.target); return; }
                 if (ctrl && e.key === 'Insert')                      { stop(); this.insertAt(e.target, 1); return; }
@@ -943,11 +944,64 @@ document.addEventListener('alpine:init', () => {
             }
 
             if (isFormInput) {
+                if (e.key === 'Enter' && !ctrl && tag !== 'TEXTAREA') { stop(); this.moveFormField(e.target, 'linear', 1); return; }
                 if (e.key === 'ArrowDown')                           { stop(); this.moveFormField(e.target, 'y', 1); return; }
                 if (e.key === 'ArrowUp')                             { stop(); this.moveFormField(e.target, 'y', -1); return; }
                 if (e.key === 'ArrowRight' && this.atTextBoundary(e.target, 1))  { stop(); this.moveFormField(e.target, 'x', 1); return; }
                 if (e.key === 'ArrowLeft' && this.atTextBoundary(e.target, -1))  { stop(); this.moveFormField(e.target, 'x', -1); return; }
             }
+        },
+
+        unitGhostMatch(typed) {
+            const t = String(typed ?? '').trim();
+            if (!t) return '';
+            const lower = t.toLowerCase();
+            const hit = (this.units || []).find((u) => {
+                const s = String(u);
+                return s.toLowerCase().startsWith(lower) && s.toLowerCase() !== lower;
+            });
+            return hit ?? '';
+        },
+
+        unitGhostSuffix(typed) {
+            const match = this.unitGhostMatch(typed);
+            if (!match) return '';
+            return match.substring(String(typed ?? '').length);
+        },
+
+        advanceFromItem(target) {
+            const cell = target.closest('input, button[data-row-remove]') ?? target;
+            const tr = cell.closest('tr[data-row-idx]');
+            if (!tr) return;
+            const rowIdx = parseInt(tr.dataset.rowIdx, 10);
+
+            // Accept unit ghost on the Per cell before advancing.
+            if (cell.tagName === 'INPUT' && cell.getAttribute('list') === 'units-options') {
+                const match = this.unitGhostMatch(cell.value);
+                if (match) {
+                    cell.value = match;
+                    cell.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            }
+
+            const cells = Array.from(tr.querySelectorAll(this._rowCells));
+            const colIdx = cells.indexOf(cell);
+            const nextSibling = cells[colIdx + 1];
+            if (nextSibling) {
+                nextSibling.focus();
+                if (typeof nextSibling.select === 'function' && nextSibling.type !== 'number') nextSibling.select();
+                return;
+            }
+            const nextTr = this.$refs.rowsBody?.querySelector(`tr[data-row-idx="${rowIdx + 1}"]`);
+            if (nextTr) {
+                const first = nextTr.querySelector(this._rowCells);
+                if (first) {
+                    first.focus();
+                    if (typeof first.select === 'function' && first.type !== 'number') first.select();
+                }
+                return;
+            }
+            this.add();
         },
 
         _formFieldSelector: 'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [data-flux-switch], [data-form-stop], button[data-form-nav]:not([disabled])',
@@ -959,6 +1013,15 @@ document.addEventListener('alpine:init', () => {
         },
 
         moveFormField(input, axis, dir) {
+            if (axis === 'linear') {
+                const all = Array.from(this.$el.querySelectorAll(this._formFieldSelector))
+                    .filter((el) => el.offsetParent !== null);
+                const i = all.indexOf(input);
+                if (i < 0) return;
+                this._focusField(all[i + dir]);
+                return;
+            }
+
             const itemsTable = input.closest('[data-items-table]');
             if (itemsTable) {
                 // Exiting items table — walk linearly to nearest focusable outside it.
@@ -1053,6 +1116,77 @@ document.addEventListener('alpine:init', () => {
             if (!btns.length) return;
             this.selected = (this.selected + dir + btns.length) % btns.length;
             this.focusSelected();
+        },
+    }));
+
+    // ─── Capture-phase Enter handler for Flux switches ──────────────
+    // Flux's <ui-switch> stops keydown propagation on Enter (uses it to toggle),
+    // so a regular form-level handler never sees it. Install a capture listener
+    // that runs before Flux and advances focus instead.
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        const t = e.target;
+        if (!t.hasAttribute?.('data-flux-switch')) return;
+        if (!t.closest('form')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        window.focusNextFormField?.(t);
+    }, true);
+
+    // ─── Focus next form field after `from` element ─────────────────
+    // Used by the typeahead to advance focus after a selection.
+    window.focusNextFormField = (from) => {
+        if (!from) return false;
+        const form = from.closest('form');
+        if (!form) return false;
+        const selector = 'input:not([type=hidden]):not([disabled]):not([type=submit]):not([type=button]), select:not([disabled]), textarea:not([disabled]), [data-form-stop]:not([disabled]), [data-flux-switch]:not([disabled])';
+        const all = Array.from(form.querySelectorAll(selector))
+            .filter((el) => el.offsetParent !== null);
+        const next = all.find((el) =>
+            (from.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)
+            && !from.contains(el)
+        );
+        if (!next) return false;
+        next.focus();
+        if (typeof next.select === 'function' && next.type !== 'number' && next.type !== 'date') next.select();
+        return true;
+    };
+
+    // ─── Generic Form Enter-Navigation ──────────────────────────────
+    // Enter advances focus to the next focusable input; Ctrl+Enter submits.
+    // Apply via `x-data="formNav" x-on:keydown="handleKey($event)"` on a <form>.
+    window.Alpine.data('formNav', () => ({
+        _selector: 'input:not([type=hidden]):not([disabled]):not([type=submit]):not([type=button]), select:not([disabled]), textarea:not([disabled]), [data-form-stop]:not([disabled]), [data-flux-switch]:not([disabled])',
+
+        handleKey(e) {
+            if (e.key !== 'Enter') return;
+            const tag = e.target.tagName;
+            const ctrl = e.ctrlKey || e.metaKey;
+            const isFormInput = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA'
+                || e.target.hasAttribute?.('data-form-stop')
+                || e.target.hasAttribute?.('data-flux-switch');
+            if (!isFormInput && tag !== 'BUTTON') return;
+
+            if (ctrl) {
+                e.preventDefault();
+                this.$el.requestSubmit?.() || this.$el.querySelector('button[type="submit"]')?.click();
+                return;
+            }
+
+            if (tag === 'TEXTAREA') return;
+            if (tag === 'BUTTON' && !e.target.hasAttribute('data-flux-switch') && !e.target.hasAttribute('data-form-nav')) return;
+
+            e.preventDefault();
+            const all = Array.from(this.$el.querySelectorAll(this._selector))
+                .filter((el) => el.offsetParent !== null);
+            const i = all.indexOf(e.target);
+            if (i < 0) return;
+            const next = all[i + 1];
+            if (next) {
+                next.focus();
+                if (typeof next.select === 'function' && next.type !== 'number' && next.type !== 'date') next.select();
+            }
         },
     }));
 

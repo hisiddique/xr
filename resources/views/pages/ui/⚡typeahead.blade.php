@@ -96,7 +96,7 @@ new class extends Component {
     }"
     x-on:click.outside="open = false"
     x-on:typeahead-cleared="$nextTick(() => $el.querySelector('input')?.focus())"
-    x-on:typeahead-selected="$nextTick(() => $el.querySelector('[data-form-stop]')?.focus())"
+    x-on:typeahead-selected="$nextTick(() => { if (! window.focusNextFormField?.($el)) $el.querySelector('[data-form-stop]')?.focus(); })"
     x-on:keydown="
         if (! open) return;
         if ($event.key === 'ArrowDown') {
@@ -129,7 +129,8 @@ new class extends Component {
             <div
                 tabindex="0"
                 data-form-stop
-                x-on:keydown.enter.prevent.stop="$el.querySelector('button')?.click()"
+                x-on:keydown.space.prevent.stop="$el.querySelector('button')?.click()"
+                x-on:keydown.enter.prevent.stop="window.focusNextFormField?.($el)"
                 class="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-white/10 dark:bg-zinc-800"
             >
                 <span class="font-medium text-zinc-900 dark:text-white">{{ $selectedLabel }}</span>

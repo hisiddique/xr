@@ -16,7 +16,6 @@ new #[Title('New Delivery Note')] class extends Component {
     public ?int $assigned_to = null;
     public string $assigneeName = '';
     public string $doc_date = '';
-    public string $due_by = '';
     public string $order_no = '';
     public bool $show_pricing = false;
     public array $items = [];
@@ -25,7 +24,6 @@ new #[Title('New Delivery Note')] class extends Component {
     public function mount(): void
     {
         $this->doc_date = now()->format('Y-m-d');
-        $this->due_by = now()->format('Y-m-d');
         $this->assigned_to = Auth::id();
         $this->assigneeName = Auth::user()->name;
         $this->items = [
@@ -48,7 +46,6 @@ new #[Title('New Delivery Note')] class extends Component {
             'customer_id' => 'required|integer|exists:customers,id',
             'assigned_to' => 'nullable|integer|exists:users,id',
             'doc_date' => 'required|date',
-            'due_by' => 'nullable|date',
             'order_no' => 'nullable|string|max:100',
             'show_pricing' => 'boolean',
             'items' => 'required|array|min:1',
@@ -77,7 +74,6 @@ new #[Title('New Delivery Note')] class extends Component {
             'type' => 'DN',
             'doc_number' => $docNumber,
             'doc_date' => $this->doc_date,
-            'due_by' => $this->due_by ?: null,
             'order_no' => $this->order_no ?: null,
             'subtotal' => $totals['subtotal'],
             'trade_discount' => $totals['discount'],
@@ -154,7 +150,6 @@ new #[Title('New Delivery Note')] class extends Component {
                     required
                 />
                 <flux:input wire:model="doc_date" type="date" :label="__('Delivery Date')" required />
-                <flux:input wire:model="due_by" type="date" :label="__('Due By')" />
                 <flux:input wire:model="order_no" :label="__('Order Reference')" :placeholder="__('Optional')" />
                 <livewire:pages::ui.typeahead
                     :key="'typeahead-assignee'"
@@ -246,13 +241,23 @@ new #[Title('New Delivery Note')] class extends Component {
                                 </template>
                                 <template x-if="! row.is_note">
                                     <td class="px-4 py-2.5">
-                                        <input
-                                            type="text"
-                                            x-model="row.per"
-                                            list="units-options"
-                                            placeholder="e.g. kg or 1000"
-                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
-                                        />
+                                        <div class="relative">
+                                            <input
+                                                type="text"
+                                                x-model="row.per"
+                                                list="units-options"
+                                                placeholder="e.g. kg or 1000"
+                                                class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                            />
+                                            <div
+                                                x-show="unitGhostSuffix(row.per)"
+                                                x-cloak
+                                                class="pointer-events-none absolute inset-y-0 left-0 right-0 flex items-center px-3 text-sm leading-[1.375rem]"
+                                            >
+                                                <span class="invisible whitespace-pre" x-text="row.per"></span>
+                                                <span class="text-zinc-400 dark:text-zinc-500 whitespace-pre" x-text="unitGhostSuffix(row.per)"></span>
+                                            </div>
+                                        </div>
                                     </td>
                                 </template>
                                 <template x-if="! row.is_note">

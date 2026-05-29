@@ -83,7 +83,7 @@ new #[Title('Edit User')] class extends Component {
         </x-slot:action>
     </x-ui.page-header>
 
-    <form wire:submit="save" class="flex flex-col gap-4 max-w-2xl">
+    <form wire:submit="save" x-data="formNav" x-on:keydown="handleKey($event)" class="flex flex-col gap-4 max-w-2xl">
 
         <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
             <div class="border-b border-zinc-200/70 px-4 py-3 dark:border-white/10">

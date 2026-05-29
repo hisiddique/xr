@@ -24,7 +24,6 @@ class Document extends Model
         'doc_number',
         'order_no',
         'doc_date',
-        'due_by',
         'subtotal',
         'trade_discount',
         'discount_amount',
@@ -41,7 +40,6 @@ class Document extends Model
     {
         return [
             'doc_date' => 'date',
-            'due_by' => 'date',
             'subtotal' => 'decimal:2',
             'trade_discount' => 'decimal:2',
             'discount_amount' => 'decimal:2',

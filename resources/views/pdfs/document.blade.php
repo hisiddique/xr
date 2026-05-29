@@ -463,9 +463,6 @@
                     <table class="split"><tr>
                         <td class="left cert-box">
                             <div class="cert-title">Payment terms:</div>
-                            @if($document->due_by)
-                                <div>Due by {{ $document->due_by->format('d/m/Y') }}</div>
-                            @endif
                         </td>
                         <td class="right cert-box">
                             <table class="totals-box">
