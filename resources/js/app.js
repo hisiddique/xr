@@ -160,6 +160,21 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
 
+            // ── '+' creates new on scoped list pages ──
+            if (key === '+') {
+                const path = window.location.pathname;
+                const map = {
+                    '/customers': '/customers/create',
+                    '/delivery-notes': '/delivery-notes/create',
+                    '/users': '/users/create',
+                };
+                if (map[path]) {
+                    e.preventDefault();
+                    Livewire.navigate(map[path]);
+                    return;
+                }
+            }
+
             // ── Tab / Shift+Tab: zone cycling ──
             if (key === 'Tab') {
                 if (this.zones.length > 0) {
@@ -433,7 +448,15 @@ document.addEventListener('alpine:init', () => {
         handleFKey(num) {
             switch (num) {
                 case 1: Livewire.navigate('/customers/create'); break;
-                case 2: Livewire.navigate('/delivery-notes/create'); break;
+                case 2: {
+                    const form = Array.from(document.querySelectorAll('form'))
+                        .find((f) => f.offsetParent !== null);
+                    if (form) {
+                        if (typeof form.requestSubmit === 'function') form.requestSubmit();
+                        else form.querySelector('button[type="submit"]')?.click();
+                    }
+                    break;
+                }
                 case 3: Livewire.navigate('/dashboard'); break;
                 case 4: Livewire.navigate('/customers'); break;
                 case 5: Livewire.navigate('/delivery-notes'); break;

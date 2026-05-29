@@ -39,7 +39,7 @@
                     Customer <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1 rounded bg-white/20 px-1 py-0.5 text-[10px] font-mono">F1</kbd>
                 </flux:button>
                 <flux:button size="sm" variant="primary" icon="plus" :href="route('delivery-notes.create')" wire:navigate>
-                    DN <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1 rounded bg-white/20 px-1 py-0.5 text-[10px] font-mono">F2</kbd>
+                    DN
                 </flux:button>
             </div>
         </header>

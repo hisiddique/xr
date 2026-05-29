@@ -34,6 +34,9 @@
 
                     <kbd class="self-center whitespace-nowrap rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 text-[11px] font-mono dark:border-zinc-600 dark:bg-zinc-800">Backspace</kbd>
                     <span class="self-center text-sm text-zinc-700 dark:text-zinc-300">Go back (browser history) when not in an input</span>
+
+                    <kbd class="self-center whitespace-nowrap rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 text-[11px] font-mono dark:border-zinc-600 dark:bg-zinc-800">+</kbd>
+                    <span class="self-center text-sm text-zinc-700 dark:text-zinc-300">Create new from a list page (Customers / DN / Users)</span>
                 </div>
             </div>
 
@@ -69,7 +72,7 @@
                     <span class="self-center text-sm text-zinc-700 dark:text-zinc-300">New Customer</span>
 
                     <kbd class="self-center whitespace-nowrap rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 text-[11px] font-mono dark:border-zinc-600 dark:bg-zinc-800">F2</kbd>
-                    <span class="self-center text-sm text-zinc-700 dark:text-zinc-300">New Delivery Note</span>
+                    <span class="self-center text-sm text-zinc-700 dark:text-zinc-300">Save the current form</span>
 
                     <kbd class="self-center whitespace-nowrap rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 text-[11px] font-mono dark:border-zinc-600 dark:bg-zinc-800">F3</kbd>
                     <span class="self-center text-sm text-zinc-700 dark:text-zinc-300">Dashboard</span>
