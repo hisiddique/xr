@@ -61,7 +61,7 @@ new #[Title('Units')] class extends Component {
             </div>
             <div class="border-b border-zinc-100 px-6 py-4 dark:border-white/[0.06]">
                 <form wire:submit="addUnit" class="flex gap-2">
-                    <flux:input wire:model="newUnit" :placeholder="__('e.g. each')" maxlength="50" class="flex-1" />
+                    <flux:input wire:model="newUnit" :placeholder="__('e.g. each')" maxlength="50" class="flex-1" data-add-input />
                     <flux:button type="submit" variant="primary" icon="plus">Add</flux:button>
                 </form>
                 <flux:error name="newUnit" />

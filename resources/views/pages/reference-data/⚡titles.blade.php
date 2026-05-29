@@ -61,7 +61,7 @@ new #[Title('Titles')] class extends Component {
             </div>
             <div class="border-b border-zinc-100 px-6 py-4 dark:border-white/[0.06]">
                 <form wire:submit="addTitle" class="flex gap-2">
-                    <flux:input wire:model="newTitle" :placeholder="__('e.g. Dr')" maxlength="20" class="flex-1" />
+                    <flux:input wire:model="newTitle" :placeholder="__('e.g. Dr')" maxlength="20" class="flex-1" data-add-input />
                     <flux:button type="submit" variant="primary" icon="plus">Add</flux:button>
                 </form>
                 <flux:error name="newTitle" />

@@ -173,6 +173,13 @@ document.addEventListener('alpine:init', () => {
                     Livewire.navigate(map[path]);
                     return;
                 }
+                const addInput = document.querySelector('[data-add-input]');
+                if (addInput) {
+                    e.preventDefault();
+                    addInput.focus();
+                    if (typeof addInput.select === 'function') addInput.select();
+                    return;
+                }
             }
 
             // ── Tab / Shift+Tab: zone cycling ──

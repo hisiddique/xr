@@ -275,7 +275,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
         {{-- Form actions --}}
         <div class="flex items-center justify-end gap-3 rounded-2xl border border-zinc-200/70 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.06)] dark:border-white/10 dark:bg-zinc-900">
             <x-ui.back-button :fallback="route('delivery-notes.show', $document)" confirm data-form-nav />
-            <flux:button variant="primary" type="submit" data-form-nav>Save Changes <x-ui.kbd-hint keys="Ctrl+↵" /></flux:button>
+            <flux:button variant="primary" type="submit" data-form-nav>Save Changes</flux:button>
         </div>
     </form>
 
