@@ -109,7 +109,6 @@ new #[Title('New Customer')] class extends Component {
 
         {{-- Section: Company --}}
         <div class="px-4 py-4">
-            <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Company</p>
             <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Basic Information</h2>
             <div class="grid gap-4 md:grid-cols-2">
                 <flux:input wire:model="company_name" :label="__('Company Name')" required autofocus />
@@ -119,7 +118,6 @@ new #[Title('New Customer')] class extends Component {
 
         {{-- Section: Contact --}}
         <div class="border-t border-zinc-200/70 px-4 py-4 dark:border-white/10">
-            <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Contact</p>
             <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Contact Person</h2>
             <div class="grid gap-4 md:grid-cols-3">
                 <flux:select wire:model="title_id" :label="__('Title')">
@@ -135,7 +133,6 @@ new #[Title('New Customer')] class extends Component {
 
         {{-- Section: Address --}}
         <div class="border-t border-zinc-200/70 px-4 py-4 dark:border-white/10">
-            <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Address</p>
             <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Delivery Address</h2>
             <div class="grid gap-4 md:grid-cols-2">
                 <flux:input wire:model="address_1" :label="__('Address Line 1')" />
@@ -147,7 +144,6 @@ new #[Title('New Customer')] class extends Component {
 
         {{-- Section: Credit & Trading --}}
         <div class="border-t border-zinc-200/70 px-4 py-4 dark:border-white/10">
-            <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Trading</p>
             <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Credit & Discount</h2>
             <div class="grid gap-4 md:grid-cols-3">
                 <flux:input

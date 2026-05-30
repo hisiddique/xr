@@ -87,7 +87,6 @@ new #[Title('Edit User')] class extends Component {
 
         <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
             <div class="border-b border-zinc-200/70 px-4 py-3 dark:border-white/10">
-                <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Account</p>
                 <h2 class="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-white">Profile</h2>
             </div>
             <div class="space-y-4 p-4">
@@ -107,7 +106,6 @@ new #[Title('Edit User')] class extends Component {
 
         <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
             <div class="border-b border-zinc-200/70 px-4 py-3 dark:border-white/10">
-                <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Security</p>
                 <h2 class="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-white">Reset Password</h2>
                 <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Leave blank to keep the current password.') }}</p>
             </div>

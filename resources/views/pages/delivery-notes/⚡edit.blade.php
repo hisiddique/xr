@@ -136,8 +136,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
         {{-- Header details --}}
         <div class="rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
             <div class="border-b border-zinc-200/70 px-4 py-3 dark:border-white/10">
-                <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Document</p>
-                <h2 class="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-white">Header Details</h2>
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Header Details</h2>
             </div>
             <div data-form-grid class="grid gap-4 p-4 md:grid-cols-2">
                 <livewire:pages::ui.typeahead

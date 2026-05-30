@@ -149,7 +149,6 @@ new #[Title('CRM Settings')] class extends Component {
         {{-- Branding / Logo --}}
         <div class="grid gap-6 px-4 py-5 lg:grid-cols-[280px_1fr] lg:gap-10">
             <div>
-                <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Branding</p>
                 <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Company Logo</h2>
                 <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Shown on PDFs and email templates. PNG, JPG or SVG up to 2MB.</p>
             </div>
@@ -200,7 +199,6 @@ new #[Title('CRM Settings')] class extends Component {
         {{-- Company --}}
         <div class="grid gap-6 border-t border-zinc-200/70 px-4 py-5 lg:grid-cols-[280px_1fr] lg:gap-10 dark:border-white/10">
             <div>
-                <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Company</p>
                 <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Company Information</h2>
                 <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Identity shown at the top of every document.</p>
             </div>
@@ -222,7 +220,6 @@ new #[Title('CRM Settings')] class extends Component {
         {{-- Documents --}}
         <div class="grid gap-6 border-t border-zinc-200/70 px-4 py-5 lg:grid-cols-[280px_1fr] lg:gap-10 dark:border-white/10">
             <div>
-                <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Documents</p>
                 <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">PDF Footer &amp; Certificate</h2>
                 <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Shown in the certificate block and footer of printed delivery notes and invoices.</p>
             </div>
@@ -247,7 +244,6 @@ new #[Title('CRM Settings')] class extends Component {
         {{-- Tax + Numbering combined into one row --}}
         <div class="grid gap-6 border-t border-zinc-200/70 px-4 py-5 lg:grid-cols-[280px_1fr] lg:gap-10 dark:border-white/10">
             <div>
-                <p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Tax &amp; Numbering</p>
                 <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">VAT &amp; Document Numbering</h2>
                 <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Set the VAT rate and prefix/padding used to generate doc numbers.</p>
             </div>
