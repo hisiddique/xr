@@ -160,17 +160,14 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
 
-            // ── '+' creates new on scoped list pages ──
+            // ── '+' creates new on scoped list & show pages ──
             if (key === '+') {
                 const path = window.location.pathname;
-                const map = {
-                    '/customers': '/customers/create',
-                    '/delivery-notes': '/delivery-notes/create',
-                    '/users': '/users/create',
-                };
-                if (map[path]) {
+                const scopes = ['/customers', '/delivery-notes', '/users'];
+                const scope = scopes.find((s) => path === s || new RegExp(`^${s}/\\d+$`).test(path));
+                if (scope) {
                     e.preventDefault();
-                    Livewire.navigate(map[path]);
+                    Livewire.navigate(`${scope}/create`);
                     return;
                 }
                 const addInput = document.querySelector('[data-add-input]');

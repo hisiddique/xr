@@ -186,7 +186,7 @@ new #[Title('Invoices')] class extends Component {
     {
         return Document::invoices()
             ->when($this->trashed, fn ($q) => $q->onlyTrashed())
-            ->with('customer')
+            ->with(['customer', 'assignee'])
             ->addSelect([
                 'last_email_status' => DocumentEmailLog::select('status')
                     ->whereColumn('document_id', 'documents.id')
@@ -356,6 +356,7 @@ new #[Title('Invoices')] class extends Component {
                             <x-ui.sortable-header column="doc_date" :state="$this->sortStateFor('doc_date')">Date</x-ui.sortable-header>
                             <x-ui.sortable-header column="total_value" align="right" :state="$this->sortStateFor('total_value')">Amount</x-ui.sortable-header>
                             <x-ui.sortable-header column="status" :state="$this->sortStateFor('status')">Status</x-ui.sortable-header>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Sales Person</th>
                             <th class="px-4 py-2"></th>
                         </tr>
                     </thead>
@@ -402,6 +403,7 @@ new #[Title('Invoices')] class extends Component {
                                         {{ $invoice->status->label() }}
                                     </span>
                                 </td>
+                                <td class="px-4 py-2 text-zinc-600 dark:text-zinc-300">{{ $invoice->assignee?->name ?? '—' }}</td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
                                         @if($trashed)

@@ -37,6 +37,11 @@ new #[Title('Edit Invoice')] class extends Component {
 
     public function save(): void
     {
+        $this->items = array_values(array_filter($this->items, fn ($i) => trim((string) ($i['details'] ?? '')) !== ''
+            || (float) ($i['quantity'] ?? 0) > 0
+            || (float) ($i['price'] ?? 0) > 0
+        ));
+
         $this->validate([
             'doc_date' => 'required|date',
             'assigned_to' => 'nullable|integer|exists:users,id',
@@ -173,7 +178,7 @@ new #[Title('Edit Invoice')] class extends Component {
                     wire:model.live="assigned_to"
                     model="App\Models\User"
                     column="name"
-                    :label="__('Assigned To')"
+                    :label="__('Sales Person')"
                     :placeholder="__('Search user (3+ letters)…')"
                     :selected-label="$assigneeName"
                     error-name="assigned_to"

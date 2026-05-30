@@ -60,6 +60,7 @@ class ConvertDeliveryNoteToInvoice
                 'show_pricing' => true,
                 'status' => DocumentStatus::Active,
                 'created_by' => Auth::id() ?? $deliveryNote->created_by,
+                'assigned_to' => $deliveryNote->assigned_to,
                 'converted_from_id' => $deliveryNote->id,
             ]);
 
