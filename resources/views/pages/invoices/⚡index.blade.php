@@ -18,7 +18,7 @@ use Livewire\WithPagination;
 new #[Title('Invoices')] class extends Component {
     use WithPagination, WithSorting;
 
-    protected array $sortable = ['doc_number', 'doc_date', 'status', 'total_value', 'assignee', 'created_at'];
+    protected array $sortable = ['doc_number', 'doc_date', 'status', 'total_value', 'assignee', 'order_no', 'created_at'];
 
     #[Url(as: 'from', except: '')]
     public string $dateFrom = '';
@@ -394,7 +394,7 @@ new #[Title('Invoices')] class extends Component {
                             </th>
                             <x-ui.sortable-header column="doc_number" :state="$this->sortStateFor('doc_number')">#</x-ui.sortable-header>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
-                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Order Ref</th>
+                            <x-ui.sortable-header column="order_no" :state="$this->sortStateFor('order_no')">Order Ref</x-ui.sortable-header>
                             <x-ui.sortable-header column="doc_date" :state="$this->sortStateFor('doc_date')">Date</x-ui.sortable-header>
                             <x-ui.sortable-header column="total_value" align="right" :state="$this->sortStateFor('total_value')">Amount</x-ui.sortable-header>
                             <x-ui.sortable-header column="status" :state="$this->sortStateFor('status')">Status</x-ui.sortable-header>
