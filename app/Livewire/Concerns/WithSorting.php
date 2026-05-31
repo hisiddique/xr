@@ -46,11 +46,22 @@ trait WithSorting
 
     public function applySort(Builder $query): Builder
     {
-        if ($this->sortColumn !== '' && in_array($this->sortColumn, $this->sortableColumns(), true)) {
-            return $query->orderBy($this->sortColumn, $this->sortDirection === 'desc' ? 'desc' : 'asc');
+        if ($this->sortColumn === '' || ! in_array($this->sortColumn, $this->sortableColumns(), true)) {
+            return $query;
         }
 
-        return $query;
+        $direction = $this->sortDirection === 'desc' ? 'desc' : 'asc';
+        $custom = $this->applyCustomSort($query, $this->sortColumn, $direction);
+        if ($custom instanceof Builder) {
+            return $custom;
+        }
+
+        return $query->orderBy($this->sortColumn, $direction);
+    }
+
+    protected function applyCustomSort(Builder $query, string $column, string $direction): ?Builder
+    {
+        return null;
     }
 
     public function sortStateFor(string $column): ?string

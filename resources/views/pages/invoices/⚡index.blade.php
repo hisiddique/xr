@@ -18,7 +18,7 @@ use Livewire\WithPagination;
 new #[Title('Invoices')] class extends Component {
     use WithPagination, WithSorting;
 
-    protected array $sortable = ['doc_number', 'doc_date', 'status', 'total_value', 'created_at'];
+    protected array $sortable = ['doc_number', 'doc_date', 'status', 'total_value', 'assignee', 'created_at'];
 
     #[Url(as: 'from', except: '')]
     public string $dateFrom = '';
@@ -31,6 +31,9 @@ new #[Title('Invoices')] class extends Component {
 
     #[Url(as: 'max', except: '')]
     public string $amountMax = '';
+
+    #[Url(as: 'sp', except: '')]
+    public string $assignedTo = '';
 
     public function updatedDateFrom(): void
     {
@@ -52,13 +55,31 @@ new #[Title('Invoices')] class extends Component {
         $this->resetPage();
     }
 
+    public function updatedAssignedTo(): void
+    {
+        $this->resetPage();
+    }
+
     public function clearFilters(): void
     {
         $this->dateFrom = '';
         $this->dateTo = '';
         $this->amountMin = '';
         $this->amountMax = '';
+        $this->assignedTo = '';
         $this->resetPage();
+    }
+
+    protected function applyCustomSort(\Illuminate\Contracts\Database\Eloquent\Builder $query, string $column, string $direction): ?\Illuminate\Contracts\Database\Eloquent\Builder
+    {
+        if ($column === 'assignee') {
+            return $query->orderBy(
+                \App\Models\User::select('name')->whereColumn('users.id', 'documents.assigned_to'),
+                $direction,
+            );
+        }
+
+        return null;
     }
 
     #[Url]
@@ -206,9 +227,16 @@ new #[Title('Invoices')] class extends Component {
             ->when($this->dateTo !== '', fn ($q) => $q->whereDate('doc_date', '<=', $this->dateTo))
             ->when($this->amountMin !== '' && is_numeric($this->amountMin), fn ($q) => $q->where('total_value', '>=', (float) $this->amountMin))
             ->when($this->amountMax !== '' && is_numeric($this->amountMax), fn ($q) => $q->where('total_value', '<=', (float) $this->amountMax))
+            ->when($this->assignedTo !== '' && is_numeric($this->assignedTo), fn ($q) => $q->where('assigned_to', (int) $this->assignedTo))
             ->tap(fn ($q) => $this->applySort($q))
             ->when($this->sortColumn === '', fn ($q) => $q->latest())
             ->paginate(15);
+    }
+
+    #[Computed]
+    public function salesPeople()
+    {
+        return \App\Models\User::orderBy('name')->get(['id', 'name']);
     }
 
     /** @return array<int, int> */
@@ -290,7 +318,20 @@ new #[Title('Invoices')] class extends Component {
             :date-to="$dateTo"
             :amount-min="$amountMin"
             :amount-max="$amountMax"
-        />
+            :extra-has-value="$assignedTo !== ''"
+        >
+            <x-slot:extra>
+                <div class="flex flex-col">
+                    <label class="mb-0.5 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Sales Person') }}</label>
+                    <flux:select wire:model.live="assignedTo" size="sm" class="!w-44">
+                        <flux:select.option value="">{{ __('All') }}</flux:select.option>
+                        @foreach($this->salesPeople as $u)
+                            <flux:select.option :value="$u->id">{{ $u->name }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
+                </div>
+            </x-slot:extra>
+        </x-ui.range-filters>
     </div>
 
     {{-- Bulk action bar --}}
@@ -353,10 +394,11 @@ new #[Title('Invoices')] class extends Component {
                             </th>
                             <x-ui.sortable-header column="doc_number" :state="$this->sortStateFor('doc_number')">#</x-ui.sortable-header>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Order Ref</th>
                             <x-ui.sortable-header column="doc_date" :state="$this->sortStateFor('doc_date')">Date</x-ui.sortable-header>
                             <x-ui.sortable-header column="total_value" align="right" :state="$this->sortStateFor('total_value')">Amount</x-ui.sortable-header>
                             <x-ui.sortable-header column="status" :state="$this->sortStateFor('status')">Status</x-ui.sortable-header>
-                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Sales Person</th>
+                            <x-ui.sortable-header column="assignee" :state="$this->sortStateFor('assignee')">Sales Person</x-ui.sortable-header>
                             <th class="px-4 py-2"></th>
                         </tr>
                     </thead>
@@ -396,6 +438,7 @@ new #[Title('Invoices')] class extends Component {
                                         <span class="font-medium text-zinc-900 dark:text-white"><x-ui.highlight :text="$invoice->customer->company_name" :term="$search" /></span>
                                     </div>
                                 </td>
+                                <td class="px-4 py-2 text-zinc-600 dark:text-zinc-300">{{ $invoice->order_no ?: '—' }}</td>
                                 <td class="px-6 py-4 text-zinc-500 dark:text-zinc-400">{{ $invoice->doc_date->format('d M Y') }}</td>
                                 <td class="px-6 py-4 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($invoice->total_value, 2) }}</td>
                                 <td class="px-4 py-2">
