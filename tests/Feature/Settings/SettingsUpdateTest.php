@@ -54,6 +54,30 @@ test('VAT rate must be numeric between 0 and 100', function () {
         ->assertHasErrors(['vat_rate']);
 });
 
+test('admin can update interface font size', function () {
+    $admin = User::factory()->admin()->create(['email_verified_at' => now()]);
+
+    Livewire::actingAs($admin)
+        ->test('pages::settings.crm')
+        ->set('app_font_size', '20')
+        ->call('save')
+        ->assertHasNoErrors()
+        ->assertDispatched('font-size-saved');
+
+    Setting::flushCache();
+    expect(Setting::get('app_font_size'))->toBe(20);
+});
+
+test('interface font size must be within 14 and 22', function () {
+    $admin = User::factory()->admin()->create(['email_verified_at' => now()]);
+
+    Livewire::actingAs($admin)
+        ->test('pages::settings.crm')
+        ->set('app_font_size', '40')
+        ->call('save')
+        ->assertHasErrors(['app_font_size']);
+});
+
 test('staff cannot access settings page', function () {
     $staff = User::factory()->staff()->create(['email_verified_at' => now()]);
 

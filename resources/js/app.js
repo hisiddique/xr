@@ -1,3 +1,57 @@
+// Print a document PDF directly via a hidden iframe so the browser's print
+// dialog targets the generated PDF. The optional onDone callback fires once the
+// print dialog is dismissed, so callers can navigate away without racing it.
+window.printPdfDocumentThen = function (url, onDone) {
+    document.getElementById('pdf-print-frame')?.remove();
+
+    const frame = document.createElement('iframe');
+    frame.id = 'pdf-print-frame';
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    frame.src = url;
+
+    let settled = false;
+    const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (typeof onDone === 'function') onDone();
+    };
+
+    frame.addEventListener('load', () => {
+        try {
+            const win = frame.contentWindow;
+            win.addEventListener('afterprint', finish, { once: true });
+            window.addEventListener('afterprint', finish, { once: true });
+            win.focus();
+            win.print();
+        } catch {
+            window.open(url, '_blank');
+            finish();
+        }
+    });
+
+    document.body.appendChild(frame);
+};
+
+window.printPdfDocument = function (url) {
+    window.printPdfDocumentThen(url, null);
+};
+
+// After a delivery note is created we land on its page with a ?do= flag telling
+// us which side-effect to run. Fires print and/or email, then strips the flag so
+// a manual refresh won't re-trigger it.
+window.dnRunPostCreate = function (pdfUrl, emailModal) {
+    const action = new URLSearchParams(window.location.search).get('do');
+    if (!action) return;
+
+    const doPrint = action === 'print' || action === 'emailprint';
+    const doEmail = action === 'email' || action === 'emailprint';
+
+    if (doEmail) setTimeout(() => window.Flux.modal(emailModal).show(), 100);
+    if (doPrint) window.printPdfDocument(pdfUrl);
+
+    window.history.replaceState({}, '', window.location.pathname);
+};
+
 document.addEventListener('alpine:init', () => {
     // ─── Global Hotkeys Store ───────────────────────────────────────
     window.Alpine.store('hotkeys', {
@@ -1119,6 +1173,73 @@ document.addEventListener('alpine:init', () => {
     }));
 
     // ─── Exit-Confirm Modal Button Navigation ───────────────────────
+    window.Alpine.data('fontSizePreview', (initial = 18) => ({
+        size: initial,
+        saved: initial,
+
+        init() {
+            this.$watch('size', (v) => {
+                document.documentElement.style.setProperty('--app-font-size', v + 'px');
+            });
+            window.addEventListener('font-size-saved', (e) => {
+                this.saved = e.detail?.size ?? this.size;
+            });
+        },
+
+        destroy() {
+            document.documentElement.style.setProperty('--app-font-size', this.saved + 'px');
+        },
+    }));
+
+    window.Alpine.data('dnFinishNav', () => ({
+        step: 1,
+        chosen: null,
+        selected: 0,
+
+        init() {
+            document.addEventListener('modal-show', (e) => {
+                if (e.detail?.name !== 'dn-finish') return;
+                this.step = 1;
+                this.chosen = null;
+                this.selected = 0;
+                setTimeout(() => this.focusSelected(), 60);
+            });
+        },
+
+        _buttons() {
+            const ref = this.step === 1 ? this.$refs.step1 : this.$refs.step2;
+            return ref ? Array.from(ref.querySelectorAll('button')) : [];
+        },
+
+        focusSelected() {
+            this._buttons()[this.selected]?.focus();
+        },
+
+        move(dir) {
+            const btns = this._buttons();
+            if (!btns.length) return;
+            this.selected = (this.selected + dir + btns.length) % btns.length;
+            this.focusSelected();
+        },
+
+        choose(action) {
+            this.chosen = action;
+            this.step = 2;
+            this.selected = 0;
+            this.$nextTick(() => setTimeout(() => this.focusSelected(), 30));
+        },
+
+        reject() {
+            window.Flux.modal('dn-finish').close();
+            this.$dispatch('dn-finalize', { action: 'reject', showValues: false });
+        },
+
+        finish(showValues) {
+            window.Flux.modal('dn-finish').close();
+            this.$dispatch('dn-finalize', { action: this.chosen, showValues });
+        },
+    }));
+
     window.Alpine.data('exitConfirmNav', (modalName = 'exit-confirm') => ({
         selected: 0,
 

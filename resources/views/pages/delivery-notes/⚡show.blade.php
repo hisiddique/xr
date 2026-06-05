@@ -38,6 +38,7 @@ new #[Title('Delivery Note')] class extends Component {
         viewPdf: () => window.open('{{ route('documents.pdf', $document) }}', '_blank'),
         downloadPdf: () => window.location.href = '{{ route('documents.pdf.download', $document) }}',
     })"
+    x-init="window.dnRunPostCreate('{{ route('documents.pdf', $document) }}', 'email-document-{{ $document->id }}')"
 >
 
     {{-- Back link --}}
@@ -102,6 +103,9 @@ new #[Title('Delivery Note')] class extends Component {
                     <flux:button variant="ghost" icon="arrow-down-tray" size="sm" :href="route('documents.pdf.download', $document)">
                         Download PDF
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">⇧P</kbd>
+                    </flux:button>
+                    <flux:button variant="ghost" icon="printer" size="sm" x-on:click="window.printPdfDocument('{{ route('documents.pdf', $document) }}')">
+                        Print
                     </flux:button>
                     <flux:button variant="ghost" icon="document" size="sm" :href="route('documents.pdf', $document)" target="_blank">
                         View PDF

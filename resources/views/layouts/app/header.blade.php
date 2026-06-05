@@ -2,6 +2,7 @@
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
     <head>
         @include('partials.head')
+        <style>:root { --app-font-size: {{ (int) \App\Models\Setting::get('app_font_size', 18) }}px; }</style>
     </head>
     <body class="min-h-screen bg-white dark:bg-zinc-800">
         <flux:header container class="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
@@ -74,7 +75,7 @@
         {{ $slot }}
 
         @persist('toast')
-            <flux:toast.group>
+            <flux:toast.group position="middle center">
                 <flux:toast />
             </flux:toast.group>
         @endpersist

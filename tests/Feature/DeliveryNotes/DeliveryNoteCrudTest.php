@@ -35,7 +35,9 @@ test('delivery note can be created with multiple line items', function () {
         ])
         ->call('save')
         ->assertHasNoErrors()
-        ->assertRedirect();
+        ->assertDispatched('dn-open-finish')
+        ->call('finalize', 'holdonly', false)
+        ->assertRedirect(route('delivery-notes.index'));
 
     $doc = Document::first();
     expect($doc->doc_number)->toMatch('/^DN-\d{4}-\d{4}$/')
@@ -56,10 +58,44 @@ test('delivery note number follows DN-YYYY-0001 format', function () {
         ->set('items', [
             ['details' => 'Test', 'quantity' => '1', 'per' => ''],
         ])
-        ->call('save');
+        ->call('save')
+        ->call('finalize', 'holdonly', false);
 
     $year = now()->year;
     expect(Document::first()->doc_number)->toBe("DN-{$year}-0001");
+});
+
+test('rejecting entries creates no delivery note', function () {
+    $user = User::factory()->admin()->create(['email_verified_at' => now()]);
+    $customer = Customer::factory()->create(['trade_discount' => 0]);
+
+    Livewire::actingAs($user)
+        ->test('pages::delivery-notes.create')
+        ->set('customer_id', $customer->id)
+        ->set('doc_date', now()->format('Y-m-d'))
+        ->set('items', [['details' => 'Item 1', 'quantity' => '2', 'per' => '']])
+        ->call('finalize', 'reject', false)
+        ->assertRedirect(route('delivery-notes.index'));
+
+    expect(Document::count())->toBe(0);
+});
+
+test('print action creates the note and redirects to its page with the print flag', function () {
+    $user = User::factory()->admin()->create(['email_verified_at' => now()]);
+    $customer = Customer::factory()->create(['trade_discount' => 0]);
+
+    $component = Livewire::actingAs($user)
+        ->test('pages::delivery-notes.create')
+        ->set('customer_id', $customer->id)
+        ->set('doc_date', now()->format('Y-m-d'))
+        ->set('items', [['details' => 'Item 1', 'quantity' => '2', 'per' => '']])
+        ->call('save')
+        ->call('finalize', 'print', false)
+        ->assertHasNoErrors();
+
+    $document = Document::firstOrFail();
+    expect(Document::count())->toBe(1);
+    $component->assertRedirect(route('delivery-notes.show', ['document' => $document, 'do' => 'print']));
 });
 
 test('delivery note requires at least one item', function () {
@@ -116,7 +152,9 @@ test('delivery note saves prices and computes totals when show_pricing is on', f
         ])
         ->call('save')
         ->assertHasNoErrors()
-        ->assertRedirect();
+        ->assertDispatched('dn-open-finish')
+        ->call('finalize', 'holdonly', true)
+        ->assertRedirect(route('delivery-notes.index'));
 
     $doc = Document::first();
     expect((bool) $doc->show_pricing)->toBeTrue()

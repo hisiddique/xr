@@ -42,6 +42,40 @@ new #[Title('New Delivery Note')] class extends Component {
 
     public function save(): void
     {
+        if (! $this->passesValidation()) {
+            return;
+        }
+
+        $this->dispatch('dn-open-finish');
+    }
+
+    public function finalize(string $action, bool $showValues): void
+    {
+        if ($action === 'reject') {
+            $this->redirect(route('delivery-notes.index'), navigate: true);
+
+            return;
+        }
+
+        if (! $this->passesValidation()) {
+            return;
+        }
+
+        $this->show_pricing = $showValues;
+        $document = $this->persistDocument();
+
+        Flux::toast(variant: 'success', text: __('Delivery note :number created.', ['number' => $document->doc_number]));
+
+        $target = match ($action) {
+            'print', 'email', 'emailprint' => route('delivery-notes.show', ['document' => $document, 'do' => $action]),
+            default => route('delivery-notes.index'),
+        };
+
+        $this->redirect($target, navigate: true);
+    }
+
+    private function passesValidation(): bool
+    {
         $this->items = array_values(array_filter($this->items, fn ($i) => trim((string) ($i['details'] ?? '')) !== ''
             || (float) ($i['quantity'] ?? 0) > 0
             || (float) ($i['price'] ?? 0) > 0
@@ -64,10 +98,15 @@ new #[Title('New Delivery Note')] class extends Component {
             if (empty($item['is_note']) && (float) ($item['quantity'] ?? 0) < 0.01) {
                 $this->addError("items.{$i}.quantity", __('Quantity is required.'));
 
-                return;
+                return false;
             }
         }
 
+        return true;
+    }
+
+    private function persistDocument(): Document
+    {
         $generator = new DocumentNumberGenerator();
         $docNumber = $generator->nextFor('DN');
 
@@ -106,9 +145,7 @@ new #[Title('New Delivery Note')] class extends Component {
             ]);
         }
 
-        Flux::toast(variant: 'success', text: __('Delivery note :number created.', ['number' => $docNumber]));
-
-        $this->redirect(route('delivery-notes.index'), navigate: true);
+        return $document;
     }
 }; ?>
 
@@ -133,6 +170,8 @@ new #[Title('New Delivery Note')] class extends Component {
         x-on:keydown="handleKey($event)"
         x-on:exit-confirm-discard.window="cancel()"
         x-on:exit-confirm-save.window="submit()"
+        x-on:dn-open-finish.window="$flux.modal('dn-finish').show()"
+        x-on:dn-finalize.window="$wire.finalize($event.detail.action, $event.detail.showValues)"
         class="flex min-w-0 flex-1 flex-col gap-4"
     >
 
@@ -295,5 +334,6 @@ new #[Title('New Delivery Note')] class extends Component {
     </div>
 
     <x-ui.exit-confirm-modal />
+    <x-ui.dn-finish-modal />
 
 </div>

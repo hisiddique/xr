@@ -30,6 +30,7 @@ new #[Title('CRM Settings')] class extends Component {
     public string $dn_prefix = 'DN';
     public string $inv_prefix = 'INV';
     public string $number_padding = '4';
+    public string $app_font_size = '18';
     public $logo = null;
 
     public function mount(): void
@@ -53,6 +54,7 @@ new #[Title('CRM Settings')] class extends Component {
         $this->dn_prefix = (string) Setting::get('dn_prefix', 'DN');
         $this->inv_prefix = (string) Setting::get('inv_prefix', 'INV');
         $this->number_padding = (string) Setting::get('number_padding', '4');
+        $this->app_font_size = (string) Setting::get('app_font_size', 18);
     }
 
     public function save(): void
@@ -78,6 +80,7 @@ new #[Title('CRM Settings')] class extends Component {
             'dn_prefix' => 'required|string|max:10|alpha',
             'inv_prefix' => 'required|string|max:10|alpha',
             'number_padding' => 'required|integer|min:1|max:10',
+            'app_font_size' => 'required|integer|min:14|max:22',
         ]);
 
         if ($this->logo) {
@@ -112,6 +115,9 @@ new #[Title('CRM Settings')] class extends Component {
         Setting::set('dn_prefix', strtoupper($this->dn_prefix));
         Setting::set('inv_prefix', strtoupper($this->inv_prefix));
         Setting::set('number_padding', $this->number_padding, 'integer');
+        Setting::set('app_font_size', $this->app_font_size, 'integer');
+
+        $this->dispatch('font-size-saved', size: (int) $this->app_font_size);
 
         Flux::toast(variant: 'success', text: __('Settings saved.'));
     }
@@ -266,6 +272,35 @@ new #[Title('CRM Settings')] class extends Component {
                     &middot;
                     {{ strtoupper($inv_prefix).'-'.now()->year.'-'.str_pad('1', (int) $number_padding, '0', STR_PAD_LEFT) }}
                 </p>
+            </div>
+        </div>
+
+        {{-- Appearance --}}
+        <div
+            class="grid gap-6 border-t border-zinc-200/70 px-4 py-5 lg:grid-cols-[280px_1fr] lg:gap-10 dark:border-white/10"
+            x-data="fontSizePreview({{ (int) $app_font_size }})"
+        >
+            <div>
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Interface Font Size</h2>
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Scales all text across the app proportionally. Drag to preview live. Sign-in pages keep the default size.</p>
+            </div>
+            <div class="space-y-3">
+                <div class="flex items-center gap-4">
+                    <span class="text-xs text-zinc-400">14</span>
+                    <input
+                        type="range"
+                        min="14"
+                        max="22"
+                        step="1"
+                        x-model.number="size"
+                        x-on:change="$wire.set('app_font_size', String(size), false)"
+                        class="h-2 flex-1 cursor-pointer appearance-none rounded-full bg-zinc-200 accent-indigo-600 dark:bg-zinc-700"
+                    >
+                    <span class="text-xs text-zinc-400">22</span>
+                    <span class="w-12 text-right font-mono text-sm font-semibold text-zinc-900 dark:text-white" x-text="size + 'px'"></span>
+                </div>
+                <p class="text-zinc-500 dark:text-zinc-400">The quick brown fox jumps over the lazy dog — 1234567890.</p>
+                @error('app_font_size') <p class="text-xs text-red-500">{{ $message }}</p> @enderror
             </div>
         </div>
 

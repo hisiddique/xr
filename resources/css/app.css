@@ -58,7 +58,7 @@
 @layer base {
 
     html {
-        font-size: 18px;
+        font-size: var(--app-font-size, 18px);
     }
 
     *,
@@ -86,4 +86,28 @@ input:focus[data-flux-control],
 textarea:focus[data-flux-control],
 select:focus[data-flux-control] {
     @apply outline-hidden ring-2 ring-accent ring-offset-2 ring-offset-accent-foreground;
+}
+
+/* Dead-center toast alerts (position="middle center"). Flux only ships edge
+   positions, so we float the popover in the viewport middle via auto margins
+   and let the dialog flow (relative) so the group keeps a fit-content height. */
+ui-toast-group[position~="middle"] {
+    margin-top: auto;
+    margin-bottom: auto;
+}
+
+ui-toast-group[position~="middle"] [data-flux-toast-dialog] {
+    position: relative;
+    transition: opacity 0.25s allow-discrete, transform 0.25s allow-discrete;
+}
+
+ui-toast-group[position~="middle"] [data-flux-toast-dialog].showing {
+    transform: scale(1);
+}
+
+@starting-style {
+    ui-toast-group[position~="middle"] [data-flux-toast-dialog].showing {
+        opacity: 0;
+        transform: scale(0.95);
+    }
 }
