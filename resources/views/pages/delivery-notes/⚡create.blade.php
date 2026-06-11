@@ -109,19 +109,21 @@ new #[Title('New Delivery Note')] class extends Component {
                     return false;
                 }
 
-                $hasPrice = (float) ($item['price'] ?? 0) > 0;
-                $hasPer   = trim((string) ($item['per'] ?? '')) !== '';
+                if ($this->show_pricing) {
+                    $hasPrice = (float) ($item['price'] ?? 0) > 0;
+                    $hasPer = trim((string) ($item['per'] ?? '')) !== '';
 
-                if ($hasPrice && ! $hasPer) {
-                    $this->addError("items.{$i}.per", __('Per is required when price is set.'));
+                    if ($hasPrice && ! $hasPer) {
+                        $this->addError("items.{$i}.per", __('Per is required when price is set.'));
 
-                    return false;
-                }
+                        return false;
+                    }
 
-                if ($hasPer && ! $hasPrice) {
-                    $this->addError("items.{$i}.price", __('Price is required when per is set.'));
+                    if ($hasPer && ! $hasPrice) {
+                        $this->addError("items.{$i}.price", __('Price is required when per is set.'));
 
-                    return false;
+                        return false;
+                    }
                 }
             }
         }

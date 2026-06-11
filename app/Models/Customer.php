@@ -8,11 +8,35 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class Customer extends Model
 {
     /** @use HasFactory<CustomerFactory> */
     use HasFactory, SoftDeletes;
+
+    protected static function booted(): void
+    {
+        static::creating(function (Customer $customer): void {
+            if (blank($customer->reference)) {
+                $customer->reference = static::nextReference();
+            }
+        });
+    }
+
+    public static function nextReference(): string
+    {
+        return DB::transaction(function (): string {
+            $highest = static::withTrashed()
+                ->where('reference', 'LIKE', 'CUST-%')
+                ->lockForUpdate()
+                ->pluck('reference')
+                ->map(fn (string $reference): int => (int) substr($reference, 5))
+                ->max() ?? 0;
+
+            return sprintf('CUST-%s', str_pad((string) ($highest + 1), 5, '0', STR_PAD_LEFT));
+        });
+    }
 
     protected $fillable = [
         'company_name',
