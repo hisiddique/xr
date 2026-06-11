@@ -202,6 +202,10 @@
                     </tr>
                 </table>
 
+                @if(! empty($notes))
+                    <p class="body-text" style="white-space:pre-line">{{ $notes }}</p>
+                @endif
+
                 <p class="closing">
                     The {{ $document->type->label() }} PDF is attached to this email for your records.
                     If you have any questions, please do not hesitate to get in touch.

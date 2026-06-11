@@ -25,7 +25,7 @@ it('converts a delivery note to an invoice with correct doc_number format', func
     $invoice = $action->handle($dn);
 
     expect($invoice->type)->toBe(DocumentType::Invoice)
-        ->and($invoice->doc_number)->toMatch('/^INV-\d{4}-\d{4}$/')
+        ->and($invoice->doc_number)->toMatch('/^INV-\d{4}$/')
         ->and($invoice->status)->toBe(DocumentStatus::Active)
         ->and($invoice->customer_id)->toBe($dn->customer_id)
         ->and($invoice->converted_from_id)->toBe($dn->id);

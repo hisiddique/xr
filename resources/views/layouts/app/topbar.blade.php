@@ -37,7 +37,7 @@
                         ])
                     >
                         Dashboard
-                        <kbd x-show="$store.hotkeys.showLabels" x-cloak class="rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 font-mono text-[10px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F3</kbd>
+                        <kbd x-show="$store.hotkeys.showLabels" x-cloak class="rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 font-mono text-[10px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F9</kbd>
                     </a>
 
                     <a
@@ -400,11 +400,9 @@
             </div>
         </main>
 
-        @include('partials.zone-hints')
-
         @persist('toast')
             <flux:toast.group position="middle center">
-                <flux:toast />
+                <flux:toast class="in-[ui-toast-group]:w-sm sm:in-[ui-toast-group]:w-md" />
             </flux:toast.group>
         @endpersist
 

@@ -11,27 +11,41 @@ use Illuminate\Database\Seeder;
 
 class DocumentSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
         $admin = User::where('email', 'admin@deliverycrm.test')->first();
+        $staff = User::where('email', 'staff@deliverycrm.test')->first();
         $customers = Customer::all();
-        $generator = new DocumentNumberGenerator();
+        $generator = new DocumentNumberGenerator;
+        $users = collect([$admin, $staff])->filter();
 
-        Document::factory(10)
+        Document::factory(200)
             ->deliveryNote()
-            ->make([
-                'created_by' => $admin?->id,
-            ])
-            ->each(function (Document $document) use ($customers, $admin, $generator): void {
+            ->make()
+            ->each(function (Document $document) use ($customers, $users, $generator): void {
+                $user = $users->random();
                 $document->customer_id = $customers->random()->id;
-                $document->created_by = $admin?->id;
+                $document->created_by = $user?->id;
+                $document->assigned_to = $user?->id;
                 $document->doc_number = $generator->nextFor('DN');
                 $document->save();
 
-                DocumentItem::factory(fake()->numberBetween(2, 5))
+                DocumentItem::factory(fake()->numberBetween(2, 6))
+                    ->create(['document_id' => $document->id]);
+            });
+
+        Document::factory(80)
+            ->invoice()
+            ->make()
+            ->each(function (Document $document) use ($customers, $users, $generator): void {
+                $user = $users->random();
+                $document->customer_id = $customers->random()->id;
+                $document->created_by = $user?->id;
+                $document->assigned_to = $user?->id;
+                $document->doc_number = $generator->nextFor('INV');
+                $document->save();
+
+                DocumentItem::factory(fake()->numberBetween(2, 6))
                     ->create(['document_id' => $document->id]);
             });
     }

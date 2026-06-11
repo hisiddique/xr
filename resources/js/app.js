@@ -36,10 +36,78 @@ window.printPdfDocument = function (url) {
     window.printPdfDocumentThen(url, null);
 };
 
+window.recordDocumentPrint = function (url) {
+    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+    fetch(url, { method: 'POST', headers: { 'X-CSRF-TOKEN': token, 'Accept': 'application/json' } });
+};
+
+window.printAndRecord = function (pdfUrl, recordUrl) {
+    window.recordDocumentPrint(recordUrl);
+    window.printPdfDocument(pdfUrl);
+};
+
+// Tag-style email input for the email modal's "Additional Recipients" field.
+window.emailTagInput = function (wireRef, initialTags = []) {
+    return {
+        tags: [...initialTags],
+        input: '',
+        error: '',
+
+        addTag() {
+            const val = this.input.trim().replace(/,+$/, '');
+            if (!val) return;
+            const emails = val.split(/[\s,]+/).map(e => e.trim()).filter(Boolean);
+            emails.forEach(email => {
+                if (!this.isValidEmail(email)) {
+                    this.error = `"${email}" is not a valid email address.`;
+                    return;
+                }
+                if (this.tags.includes(email)) return;
+                this.tags.push(email);
+                this.error = '';
+            });
+            this.input = '';
+            this.sync();
+        },
+
+        removeTag(index) {
+            this.tags.splice(index, 1);
+            this.sync();
+        },
+
+        onKeydown(e) {
+            if (e.key === 'Enter' || e.key === ',' || e.key === 'Tab') {
+                if (this.input.trim()) {
+                    e.preventDefault();
+                    this.addTag();
+                }
+                return;
+            }
+            if (e.key === 'Backspace' && !this.input && this.tags.length) {
+                this.removeTag(this.tags.length - 1);
+            }
+        },
+
+        onPaste(e) {
+            e.preventDefault();
+            this.input = (e.clipboardData || window.clipboardData).getData('text');
+            this.addTag();
+        },
+
+        isValidEmail(email) {
+            return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        },
+
+        sync() {
+            wireRef.$set('emails', this.tags);
+        },
+    };
+};
+
 // After a delivery note is created we land on its page with a ?do= flag telling
 // us which side-effect to run. Fires print and/or email, then strips the flag so
 // a manual refresh won't re-trigger it.
-window.dnRunPostCreate = function (pdfUrl, emailModal) {
+window.dnRunPostCreate = function (pdfUrl, emailModal, recordPrintUrl) {
     const action = new URLSearchParams(window.location.search).get('do');
     if (!action) return;
 
@@ -47,7 +115,9 @@ window.dnRunPostCreate = function (pdfUrl, emailModal) {
     const doEmail = action === 'email' || action === 'emailprint';
 
     if (doEmail) setTimeout(() => window.Flux.modal(emailModal).show(), 100);
-    if (doPrint) window.printPdfDocument(pdfUrl);
+    if (doPrint) {
+        recordPrintUrl ? window.printAndRecord(pdfUrl, recordPrintUrl) : window.printPdfDocument(pdfUrl);
+    }
 
     window.history.replaceState({}, '', window.location.pathname);
 };
@@ -512,6 +582,8 @@ document.addEventListener('alpine:init', () => {
                     if (form) {
                         if (typeof form.requestSubmit === 'function') form.requestSubmit();
                         else form.querySelector('button[type="submit"]')?.click();
+                    } else {
+                        Livewire.navigate('/delivery-notes/create');
                     }
                     break;
                 }
@@ -525,9 +597,7 @@ document.addEventListener('alpine:init', () => {
                 case 8:
                     if (this.contextActions.f8) this.contextActions.f8();
                     break;
-                case 9:
-                    if (this.contextActions.f9) this.contextActions.f9();
-                    break;
+                case 9: Livewire.navigate('/dashboard'); break;
                 case 10: Livewire.navigate('/settings/profile'); break;
                 case 11:
                     if (this.isAdmin) Livewire.navigate('/settings/crm');
@@ -831,6 +901,41 @@ document.addEventListener('alpine:init', () => {
             this.$nextTick(() => {
                 this.$el.querySelector('input:not([type=hidden]):not([type=file]), textarea, select')?.focus();
             });
+
+            this.$el.addEventListener('change', (e) => {
+                if (e.target.tagName !== 'SELECT') return;
+                const tr = e.target.closest('tr[data-row-idx]');
+                if (!tr) {
+                    this.focusFirstItem();
+                    return;
+                }
+                const rowIdx = parseInt(tr.dataset.rowIdx, 10);
+                const nextTr = this.$refs.rowsBody?.querySelector(`tr[data-row-idx="${rowIdx + 1}"]`);
+                if (nextTr) {
+                    this._focusWithRetry(nextTr.querySelector('input[data-row-details]'));
+                } else {
+                    this.add();
+                }
+            });
+        },
+
+        // A closing native <select> popup hands focus back to the select after
+        // our handler runs, so a single focus() can lose the race. Retry until
+        // the target actually holds focus.
+        _focusWithRetry(target, tries = 12) {
+            if (!target) return;
+            const attempt = () => {
+                target.focus();
+                if (typeof target.select === 'function' && target.type !== 'number' && target.type !== 'date') target.select();
+                if (document.activeElement !== target && tries-- > 0) {
+                    setTimeout(attempt, 25);
+                }
+            };
+            setTimeout(attempt, 0);
+        },
+
+        focusFirstItem() {
+            this._focusWithRetry(this.$refs.rowsBody?.querySelector('input[data-row-details]'));
         },
 
         add() {
@@ -900,10 +1005,10 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        _rowCells: 'input, button[data-row-remove]:not([hidden]):not([style*="display: none"])',
+        _rowCells: 'input, select, button[data-row-remove]:not([hidden]):not([style*="display: none"])',
 
         moveVertical(target, dir) {
-            const cell = target.closest('input, button[data-row-remove]') ?? target;
+            const cell = target.closest('input, select, button[data-row-remove]') ?? target;
             const tr = cell.closest('tr[data-row-idx]');
             if (!tr) return;
             const rowIdx = parseInt(tr.dataset.rowIdx, 10);
@@ -916,22 +1021,16 @@ document.addEventListener('alpine:init', () => {
             }
             const targetCells = Array.from(targetTr.querySelectorAll(this._rowCells));
             const next = targetCells[colIdx] ?? targetCells[0];
-            if (next) {
-                next.focus();
-                if (typeof next.select === 'function' && next.type !== 'number') next.select();
-            }
+            if (next) this._focusField(next);
         },
 
         moveHorizontal(target, dir) {
-            const cell = target.closest('input, button[data-row-remove]') ?? target;
+            const cell = target.closest('input, select, button[data-row-remove]') ?? target;
             const cells = Array.from(this.$refs.rowsBody?.querySelectorAll(this._rowCells) ?? []);
             const idx = cells.indexOf(cell);
             if (idx < 0) return;
             const next = cells[idx + dir];
-            if (next) {
-                next.focus();
-                if (typeof next.select === 'function' && next.type !== 'number') next.select();
-            }
+            if (next) this._focusField(next);
         },
 
         atTextBoundary(input, dir) {
@@ -1011,8 +1110,8 @@ document.addEventListener('alpine:init', () => {
             if (e.key === 'Insert' && !inItems)                  { stop(); this.add(); return; }
 
             if (inItems) {
-                if (e.key === 'Enter' && e.shiftKey)                 { stop(); this.addNote(); return; }
-                if (e.key === 'Enter' && !ctrl)                      { stop(); this.advanceFromItem(e.target); return; }
+                if (e.key === 'Enter' && e.shiftKey)  { stop(); this.addNote(); return; }
+                if (e.key === 'Enter' && !ctrl)       { stop(); this.advanceFromItem(e.target); return; }
                 if (ctrl && e.key === 'Backspace')                   { stop(); this.removeFocused(e.target); return; }
                 if (ctrl && e.key === 'Delete')                      { stop(); this.removeFocused(e.target); return; }
                 if (ctrl && e.key === 'Insert')                      { stop(); this.insertAt(e.target, 1); return; }
@@ -1056,30 +1155,17 @@ document.addEventListener('alpine:init', () => {
             if (!tr) return;
             const rowIdx = parseInt(tr.dataset.rowIdx, 10);
 
-            // Accept unit ghost on the Per cell before advancing.
-            if (cell.tagName === 'INPUT' && cell.getAttribute('list') === 'units-options') {
-                const match = this.unitGhostMatch(cell.value);
-                if (match) {
-                    cell.value = match;
-                    cell.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-            }
-
             const cells = Array.from(tr.querySelectorAll(this._rowCells));
             const colIdx = cells.indexOf(cell);
             const nextSibling = cells[colIdx + 1];
             if (nextSibling) {
-                nextSibling.focus();
-                if (typeof nextSibling.select === 'function' && nextSibling.type !== 'number') nextSibling.select();
+                this._focusField(nextSibling);
                 return;
             }
             const nextTr = this.$refs.rowsBody?.querySelector(`tr[data-row-idx="${rowIdx + 1}"]`);
             if (nextTr) {
                 const first = nextTr.querySelector(this._rowCells);
-                if (first) {
-                    first.focus();
-                    if (typeof first.select === 'function' && first.type !== 'number') first.select();
-                }
+                if (first) this._focusField(first);
                 return;
             }
             this.add();
@@ -1091,6 +1177,9 @@ document.addEventListener('alpine:init', () => {
             if (!el) return;
             el.focus();
             if (typeof el.select === 'function' && el.type !== 'number' && el.type !== 'date') el.select();
+            if (el.tagName === 'SELECT' && el.closest('[data-items-table]') && typeof el.showPicker === 'function') {
+                try { el.showPicker(); } catch (_) {}
+            }
         },
 
         moveFormField(input, axis, dir) {
@@ -1237,6 +1326,15 @@ document.addEventListener('alpine:init', () => {
         finish(showValues) {
             window.Flux.modal('dn-finish').close();
             this.$dispatch('dn-finalize', { action: this.chosen, showValues });
+        },
+
+        handleShortcut(e) {
+            if (this.step !== 1) return;
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            const map = { p: 'print', e: 'email', a: 'emailprint', h: 'holdonly' };
+            const k = e.key.toLowerCase();
+            if (k === 'r') { e.preventDefault(); this.reject(); return; }
+            if (map[k]) { e.preventDefault(); this.choose(map[k]); }
         },
     }));
 

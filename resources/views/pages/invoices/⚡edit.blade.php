@@ -16,6 +16,7 @@ new #[Title('Edit Invoice')] class extends Component {
     public string $assigneeName = '';
     public array $items = [];
     public array $units = [];
+    public array $users = [];
     public bool $emailAfterSave = false;
 
     public function mount(): void
@@ -33,6 +34,16 @@ new #[Title('Edit Invoice')] class extends Component {
             'per' => $item->per ?? '',
         ])->toArray();
         $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
+        $this->users = \App\Models\User::orderBy('name')->get(['id', 'name'])->toArray();
+
+        if (session()->has('success')) {
+            Flux::toast(
+                heading: __('Invoice Created'),
+                text: session('success'),
+                variant: 'success',
+                duration: 0,
+            );
+        }
     }
 
     public function save(): void
@@ -53,10 +64,27 @@ new #[Title('Edit Invoice')] class extends Component {
         ]);
 
         foreach ($this->items as $i => $item) {
-            if (empty($item['is_note']) && (float) ($item['quantity'] ?? 0) < 0.01) {
-                $this->addError("items.{$i}.quantity", __('Quantity is required.'));
+            if (empty($item['is_note'])) {
+                if ((float) ($item['quantity'] ?? 0) < 0.01) {
+                    $this->addError("items.{$i}.quantity", __('Quantity is required.'));
 
-                return;
+                    return;
+                }
+
+                $hasPrice = (float) ($item['price'] ?? 0) > 0;
+                $hasPer   = trim((string) ($item['per'] ?? '')) !== '';
+
+                if ($hasPrice && ! $hasPer) {
+                    $this->addError("items.{$i}.per", __('Per is required when price is set.'));
+
+                    return;
+                }
+
+                if ($hasPer && ! $hasPrice) {
+                    $this->addError("items.{$i}.price", __('Price is required when per is set.'));
+
+                    return;
+                }
             }
         }
 
@@ -172,16 +200,16 @@ new #[Title('Edit Invoice')] class extends Component {
                 </div>
                 <flux:input wire:model="doc_date" type="date" :label="__('Invoice Date')" required />
                 <flux:input wire:model="order_no" :label="__('Order Reference')" :placeholder="__('Optional')" />
-                <livewire:pages::ui.typeahead
-                    :key="'typeahead-assignee'"
-                    wire:model.live="assigned_to"
-                    model="App\Models\User"
-                    column="name"
-                    :label="__('Sales Person')"
-                    :placeholder="__('Search user (3+ letters)…')"
-                    :selected-label="$assigneeName"
-                    error-name="assigned_to"
-                />
+                <div>
+                    <flux:label>{{ __('Sales Person') }}</flux:label>
+                    <flux:select wire:model="assigned_to" class="mt-1.5" x-on:focus="$el.showPicker?.()">
+                        <flux:select.option value="">— None —</flux:select.option>
+                        @foreach($users as $user)
+                            <flux:select.option :value="$user['id']">{{ $user['name'] }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
+                    @error('assigned_to') <flux:error>{{ $message }}</flux:error> @enderror
+                </div>
             </div>
         </div>
 
@@ -197,11 +225,6 @@ new #[Title('Edit Invoice')] class extends Component {
                 </div>
             </div>
 
-            <datalist id="units-options">
-                <template x-for="unit in units" :key="unit">
-                    <option :value="unit"></option>
-                </template>
-            </datalist>
             <div class="overflow-x-auto" data-items-table>
                 <table class="w-full text-sm">
                     <thead class="bg-zinc-50 dark:bg-zinc-800/50">
@@ -226,7 +249,7 @@ new #[Title('Edit Invoice')] class extends Component {
                                             x-model="row.details"
                                             :placeholder="row.is_note ? '{{ __('Note…') }}' : '{{ __('Description…') }}'"
                                             :class="row.is_note ? 'italic' : ''"
-                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 placeholder:font-normal placeholder:text-zinc-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                         />
                                     </div>
                                 </td>
@@ -237,7 +260,7 @@ new #[Title('Edit Invoice')] class extends Component {
                                             min="0.01"
                                             step="0.01"
                                             x-model.number="row.quantity"
-                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                         />
                                     </td>
                                 </template>
@@ -248,29 +271,21 @@ new #[Title('Edit Invoice')] class extends Component {
                                             min="0"
                                             step="0.01"
                                             x-model.number="row.price"
-                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                         />
                                     </td>
                                 </template>
                                 <template x-if="! row.is_note">
                                     <td class="px-4 py-2.5">
-                                        <div class="relative">
-                                            <input
-                                                type="text"
-                                                x-model="row.per"
-                                                list="units-options"
-                                                placeholder="e.g. kg or 1000"
-                                                class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
-                                            />
-                                            <div
-                                                x-show="unitGhostSuffix(row.per)"
-                                                x-cloak
-                                                class="pointer-events-none absolute inset-y-0 left-0 right-0 flex items-center px-3 text-sm leading-[1.375rem]"
-                                            >
-                                                <span class="invisible whitespace-pre" x-text="row.per"></span>
-                                                <span class="text-zinc-400 dark:text-zinc-500 whitespace-pre" x-text="unitGhostSuffix(row.per)"></span>
-                                            </div>
-                                        </div>
+                                        <select
+                                            x-model="row.per"
+                                                                                        class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                        >
+                                            <option value="">—</option>
+                                            <template x-for="unit in units" :key="unit">
+                                                <option :value="unit" x-text="unit"></option>
+                                            </template>
+                                        </select>
                                     </td>
                                 </template>
                                 <template x-if="! row.is_note">
@@ -291,6 +306,7 @@ new #[Title('Edit Invoice')] class extends Component {
             @error('items.*.details') <p class="px-6 pb-3 text-xs text-rose-600">{{ $message }}</p> @enderror
             @error('items.*.quantity') <p class="px-6 pb-3 text-xs text-rose-600">{{ $message }}</p> @enderror
             @error('items.*.price') <p class="px-6 pb-3 text-xs text-rose-600">{{ $message }}</p> @enderror
+            @error('items.*.per') <p class="px-6 pb-3 text-xs text-rose-600">{{ $message }}</p> @enderror
         </div>
 
         {{-- Sticky footer bar --}}

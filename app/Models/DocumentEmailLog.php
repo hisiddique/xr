@@ -14,6 +14,7 @@ class DocumentEmailLog extends Model
     protected $fillable = [
         'document_id',
         'recipient_email',
+        'recipient_emails',
         'sent_at',
         'status',
         'error_message',
@@ -23,6 +24,7 @@ class DocumentEmailLog extends Model
     {
         return [
             'sent_at' => 'datetime',
+            'recipient_emails' => 'array',
         ];
     }
 }

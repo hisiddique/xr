@@ -2,12 +2,12 @@
 
 use App\DocumentStatus;
 use App\Models\Document;
-use Flux\Flux;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Delivery Note')] class extends Component {
+new #[Title('Delivery Note')] class extends Component
+{
     public Document $document;
 
     public function mount(): void
@@ -26,6 +26,11 @@ new #[Title('Delivery Note')] class extends Component {
     {
         $this->redirect(route('delivery-notes.index'), navigate: true);
     }
+
+    public function recordPrint(): void
+    {
+        $this->document->increment('print_count');
+    }
 }; ?>
 
 <div
@@ -38,7 +43,7 @@ new #[Title('Delivery Note')] class extends Component {
         viewPdf: () => window.open('{{ route('documents.pdf', $document) }}', '_blank'),
         downloadPdf: () => window.location.href = '{{ route('documents.pdf.download', $document) }}',
     })"
-    x-init="window.dnRunPostCreate('{{ route('documents.pdf', $document) }}', 'email-document-{{ $document->id }}')"
+    x-init="window.dnRunPostCreate('{{ route('documents.pdf', $document) }}', 'email-document-{{ $document->id }}', '{{ route('documents.record-print', $document) }}')"
 >
 
     {{-- Back link --}}
@@ -104,7 +109,7 @@ new #[Title('Delivery Note')] class extends Component {
                         Download PDF
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">⇧P</kbd>
                     </flux:button>
-                    <flux:button variant="ghost" icon="printer" size="sm" x-on:click="window.printPdfDocument('{{ route('documents.pdf', $document) }}')">
+                    <flux:button variant="ghost" icon="printer" size="sm" x-on:click="$wire.recordPrint(); window.printPdfDocument('{{ route('documents.pdf', $document) }}')">
                         Print
                     </flux:button>
                     <flux:button variant="ghost" icon="document" size="sm" :href="route('documents.pdf', $document)" target="_blank">
@@ -164,10 +169,10 @@ new #[Title('Delivery Note')] class extends Component {
                                     </tr>
                                 @else
                                     <tr>
-                                        <td class="px-4 py-2 text-zinc-900 dark:text-white">{{ $item->details }}</td>
-                                        <td class="px-4 py-2 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">{{ $item->quantity }}</td>
-                                        <td class="px-4 py-2 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">£{{ number_format($item->price, 2) }}</td>
-                                        <td class="px-4 py-2 text-zinc-500 dark:text-zinc-400">{{ $item->per ?? '—' }}</td>
+                                        <td class="px-4 py-2 font-semibold text-zinc-900 dark:text-white">{{ $item->details }}</td>
+                                        <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-700 dark:text-zinc-300">{{ $item->quantity }}</td>
+                                        <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-700 dark:text-zinc-300">£{{ number_format($item->price, 2) }}</td>
+                                        <td class="px-4 py-2 font-semibold text-zinc-700 dark:text-zinc-300">{{ $item->per ?? '—' }}</td>
                                         <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($item->line_value, 2) }}</td>
                                     </tr>
                                 @endif
@@ -180,7 +185,7 @@ new #[Title('Delivery Note')] class extends Component {
                         <div class="w-72 space-y-2.5">
                             <div class="flex justify-between text-sm">
                                 <span class="text-zinc-500 dark:text-zinc-400">Subtotal</span>
-                                <span class="font-mono tabular-nums text-zinc-900 dark:text-white">£{{ number_format($document->subtotal, 2) }}</span>
+                                <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($document->subtotal, 2) }}</span>
                             </div>
                             @if($document->discount_amount > 0)
                                 <div class="flex justify-between text-sm">
@@ -190,7 +195,7 @@ new #[Title('Delivery Note')] class extends Component {
                             @endif
                             <div class="flex justify-between text-sm">
                                 <span class="text-zinc-500 dark:text-zinc-400">VAT</span>
-                                <span class="font-mono tabular-nums text-zinc-900 dark:text-white">£{{ number_format($document->vat_amount, 2) }}</span>
+                                <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($document->vat_amount, 2) }}</span>
                             </div>
                             <div class="flex justify-between border-t border-zinc-200 pt-3 dark:border-white/10">
                                 <span class="text-sm font-semibold text-zinc-900 dark:text-white">Total</span>
@@ -243,7 +248,7 @@ new #[Title('Delivery Note')] class extends Component {
                                     'bg-rose-500' => $log->status !== 'sent',
                                 ])></div>
                                 <div class="min-w-0 flex-1">
-                                    <p class="truncate text-sm text-zinc-900 dark:text-white">{{ $log->recipient_email }}</p>
+                                    <p class="text-sm text-zinc-900 dark:text-white">{{ implode(', ', $log->recipient_emails ?? [$log->recipient_email]) }}</p>
                                     <p class="text-xs text-zinc-400 dark:text-zinc-500">{{ $log->sent_at?->diffForHumans() ?? $log->created_at?->diffForHumans() ?? 'Unknown' }}</p>
                                     @if($log->status !== 'sent' && $log->error_message)
                                         <p class="mt-1 text-xs text-rose-600 dark:text-rose-400">{{ $log->error_message }}</p>

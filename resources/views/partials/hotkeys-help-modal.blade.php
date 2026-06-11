@@ -74,9 +74,6 @@
                     <kbd class="self-center whitespace-nowrap rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 text-[11px] font-mono dark:border-zinc-600 dark:bg-zinc-800">F2</kbd>
                     <span class="self-center text-sm text-zinc-700 dark:text-zinc-300">Save the current form</span>
 
-                    <kbd class="self-center whitespace-nowrap rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 text-[11px] font-mono dark:border-zinc-600 dark:bg-zinc-800">F3</kbd>
-                    <span class="self-center text-sm text-zinc-700 dark:text-zinc-300">Dashboard</span>
-
                     <kbd class="self-center whitespace-nowrap rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 text-[11px] font-mono dark:border-zinc-600 dark:bg-zinc-800">F4</kbd>
                     <span class="self-center text-sm text-zinc-700 dark:text-zinc-300">Customers</span>
 
@@ -93,7 +90,7 @@
                     <span class="self-center text-sm text-zinc-700 dark:text-zinc-300">Email DN</span>
 
                     <kbd class="self-center whitespace-nowrap rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 text-[11px] font-mono dark:border-zinc-600 dark:bg-zinc-800">F9</kbd>
-                    <span class="self-center text-sm text-zinc-700 dark:text-zinc-300">Email Invoice</span>
+                    <span class="self-center text-sm text-zinc-700 dark:text-zinc-300">Dashboard</span>
 
                     <kbd class="self-center whitespace-nowrap rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 text-[11px] font-mono dark:border-zinc-600 dark:bg-zinc-800">F10</kbd>
                     <span class="self-center text-sm text-zinc-700 dark:text-zinc-300">Profile</span>

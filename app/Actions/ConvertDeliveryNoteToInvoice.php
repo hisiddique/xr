@@ -34,7 +34,8 @@ class ConvertDeliveryNoteToInvoice
         }
 
         return DB::transaction(function () use ($deliveryNote) {
-            $docNumber = $this->numberGenerator->nextFor('INV');
+            $sequence = $this->numberGenerator->extractSequence($deliveryNote->doc_number);
+            $docNumber = $this->numberGenerator->numberForConversion('INV', $sequence);
 
             $deliveryNote->loadMissing(['items', 'customer']);
 

@@ -30,6 +30,7 @@ class Document extends Model
         'vat_amount',
         'total_value',
         'show_pricing',
+        'print_count',
         'status',
         'created_by',
         'assigned_to',
@@ -46,6 +47,7 @@ class Document extends Model
             'vat_amount' => 'decimal:2',
             'total_value' => 'decimal:2',
             'show_pricing' => 'boolean',
+            'print_count' => 'integer',
             'type' => DocumentType::class,
             'status' => DocumentStatus::class,
         ];

@@ -6,16 +6,21 @@ use App\DocumentType;
 use App\Livewire\Concerns\WithSorting;
 use App\Models\Document;
 use App\Models\DocumentEmailLog;
+use App\Models\User;
 use App\Services\DocumentEmailService;
 use Flux\Flux;
+use Illuminate\Contracts\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 
-new #[Title('Delivery Notes')] class extends Component {
-    use WithPagination, WithSorting;
+new #[Title('Delivery Notes')] class extends Component
+{
+    use WithPagination;
+    use WithSorting;
 
     protected array $sortable = ['doc_number', 'doc_date', 'status', 'total_value', 'assignee', 'order_no', 'created_at'];
 
@@ -84,6 +89,13 @@ new #[Title('Delivery Notes')] class extends Component {
         $this->resetPage();
     }
 
+    public int $perPage = 25;
+
+    public function updatedPerPage(): void
+    {
+        $this->resetPage();
+    }
+
     public function updatedAssignedTo(): void
     {
         $this->resetPage();
@@ -99,11 +111,11 @@ new #[Title('Delivery Notes')] class extends Component {
         $this->resetPage();
     }
 
-    protected function applyCustomSort(\Illuminate\Contracts\Database\Eloquent\Builder $query, string $column, string $direction): ?\Illuminate\Contracts\Database\Eloquent\Builder
+    protected function applyCustomSort(Builder $query, string $column, string $direction): ?Builder
     {
         if ($column === 'assignee') {
             return $query->orderBy(
-                \App\Models\User::select('name')->whereColumn('users.id', 'documents.assigned_to'),
+                User::select('name')->whereColumn('users.id', 'documents.assigned_to'),
                 $direction,
             );
         }
@@ -127,7 +139,7 @@ new #[Title('Delivery Notes')] class extends Component {
         try {
             $action->handle($note);
             Flux::toast(variant: 'success', text: __('Delivery note :number converted.', ['number' => $note->doc_number]));
-        } catch (\DomainException $e) {
+        } catch (DomainException $e) {
             Flux::toast(variant: 'warning', text: $e->getMessage());
         }
 
@@ -152,7 +164,7 @@ new #[Title('Delivery Notes')] class extends Component {
             try {
                 $action->handle($note);
                 $converted++;
-            } catch (\DomainException) {
+            } catch (DomainException) {
                 $skipped++;
             }
         }
@@ -170,7 +182,7 @@ new #[Title('Delivery Notes')] class extends Component {
         Flux::toast(variant: $converted > 0 ? 'success' : 'warning', text: $message);
     }
 
-    /** @return \Illuminate\Support\Collection<int, Document> */
+    /** @return Collection<int, Document> */
     #[Computed]
     public function selectedForEmail()
     {
@@ -211,7 +223,7 @@ new #[Title('Delivery Notes')] class extends Component {
             try {
                 $service->send($note, $email);
                 $sent++;
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 $failed++;
             }
         }
@@ -232,7 +244,7 @@ new #[Title('Delivery Notes')] class extends Component {
     #[Computed]
     public function salesPeople()
     {
-        return \App\Models\User::orderBy('name')->get(['id', 'name']);
+        return User::orderBy('name')->get(['id', 'name']);
     }
 
     #[Computed]
@@ -261,8 +273,8 @@ new #[Title('Delivery Notes')] class extends Component {
             ->when($this->amountMax !== '' && is_numeric($this->amountMax), fn ($q) => $q->where('total_value', '<=', (float) $this->amountMax))
             ->when($this->assignedTo !== '' && is_numeric($this->assignedTo), fn ($q) => $q->where('assigned_to', (int) $this->assignedTo))
             ->tap(fn ($q) => $this->applySort($q))
-            ->when($this->sortColumn === '', fn ($q) => $q->latest())
-            ->paginate(15);
+            ->when($this->sortColumn === '', fn ($q) => $q->oldest())
+            ->paginate($this->perPage);
     }
 
     /** @return array<int, int> */
@@ -278,6 +290,11 @@ new #[Title('Delivery Notes')] class extends Component {
         $ids = $this->selectableIdsOnPage;
 
         return ! empty($ids) && empty(array_diff($ids, $this->selectedIds));
+    }
+
+    public function recordPrint(int $documentId): void
+    {
+        Document::findOrFail($documentId)->increment('print_count');
     }
 }; ?>
 
@@ -325,6 +342,29 @@ new #[Title('Delivery Notes')] class extends Component {
                         {{ $label }}
                     </button>
                 @endforeach
+            </div>
+            <div
+                class="ml-auto"
+                x-data="{
+                    init() {
+                        const saved = localStorage.getItem('crm_per_page');
+                        const valid = [25, 50, 100, 250, 500, 1000];
+                        if (saved && valid.includes(Number(saved))) {
+                            $wire.set('perPage', Number(saved), false);
+                        }
+                    }
+                }"
+                x-init="init()"
+            >
+                <select
+                    wire:model.live="perPage"
+                    x-on:change="localStorage.setItem('crm_per_page', $event.target.value)"
+                    class="rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-700 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                >
+                    @foreach([25, 50, 100, 250, 500, 1000] as $n)
+                        <option value="{{ $n }}" @selected($perPage === $n)>{{ $n }} per page</option>
+                    @endforeach
+                </select>
             </div>
         </div>
 
@@ -383,7 +423,7 @@ new #[Title('Delivery Notes')] class extends Component {
     @endif
 
     {{-- Table card --}}
-    <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
+    <div class="overflow-x-clip rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
 
         @if($this->deliveryNotes->isEmpty())
             <x-ui.empty-state
@@ -400,11 +440,11 @@ new #[Title('Delivery Notes')] class extends Component {
                 @endunless
             </x-ui.empty-state>
         @else
-            <div class="overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 rounded-lg" x-data="zoneNav('table')" data-zone="table" tabindex="-1">
+            <div x-data="zoneNav('table')" data-zone="table" tabindex="-1" class="outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30">
                 <table class="w-full text-sm">
-                    <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                    <thead class="sticky top-14 lg:top-16 z-10 bg-zinc-50 dark:bg-zinc-800/50">
                         <tr>
-                            <th class="w-10 px-4 py-2">
+                            <th class="w-10 px-4 py-1">
                                 @if(count($this->selectableIdsOnPage) > 0)
                                     <input
                                         type="checkbox"
@@ -416,13 +456,13 @@ new #[Title('Delivery Notes')] class extends Component {
                                 @endif
                             </th>
                             <x-ui.sortable-header column="doc_number" :state="$this->sortStateFor('doc_number')">#</x-ui.sortable-header>
-                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
+                            <th class="px-4 py-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
                             <x-ui.sortable-header column="order_no" :state="$this->sortStateFor('order_no')">Order Ref</x-ui.sortable-header>
                             <x-ui.sortable-header column="doc_date" :state="$this->sortStateFor('doc_date')">Date</x-ui.sortable-header>
                             <x-ui.sortable-header column="total_value" align="right" :state="$this->sortStateFor('total_value')">Amount</x-ui.sortable-header>
                             <x-ui.sortable-header column="status" :state="$this->sortStateFor('status')">Status</x-ui.sortable-header>
                             <x-ui.sortable-header column="assignee" :state="$this->sortStateFor('assignee')">Sales Person</x-ui.sortable-header>
-                            <th class="px-4 py-2"></th>
+                            <th class="px-4 py-1"></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
@@ -434,7 +474,10 @@ new #[Title('Delivery Notes')] class extends Component {
                                 data-email-modal="email-document-{{ $note->id }}"
                                 @if($note->status === DocumentStatus::Active) data-convert-modal="convert-dn" data-convert-id="{{ $note->id }}" @endif
                                 data-delete-modal="delete-document-{{ $note->id }}"
-                                class="transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5"
+                                @class([
+                                    'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
+                                    'sticky bottom-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_-1px_0_0_theme(--color-zinc-100)] dark:shadow-[0_-1px_0_0_theme(--color-white/0.06)]' => $loop->last,
+                                ])
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
                                 <td class="px-4 py-2">
@@ -474,6 +517,16 @@ new #[Title('Delivery Notes')] class extends Component {
                                     <div class="flex items-center justify-end gap-1">
                                         <flux:button size="xs" variant="ghost" icon="eye" :href="route('delivery-notes.show', $note)" wire:navigate data-row-action="view" />
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('delivery-notes.edit', $note)" wire:navigate data-row-action="edit" />
+                                        <span x-data="{ printed: {{ $note->print_count > 0 ? 'true' : 'false' }} }">
+                                            <flux:button
+                                                size="xs"
+                                                variant="ghost"
+                                                icon="printer"
+                                                x-on:click="$wire.recordPrint({{ $note->id }}); window.printPdfDocument('{{ route('documents.pdf', $note) }}'); printed = true"
+                                                x-bind:class="printed ? '!text-emerald-600 hover:!text-emerald-700 dark:!text-emerald-400' : '!text-amber-500 hover:!text-amber-600 dark:!text-amber-400'"
+                                                x-bind:title="printed ? '{{ __('Printed') }}' : '{{ __('Not yet printed') }}'"
+                                            />
+                                        </span>
                                         <span class="relative inline-flex">
                                             <flux:button
                                                 size="xs"
@@ -520,9 +573,8 @@ new #[Title('Delivery Notes')] class extends Component {
                 </table>
             </div>
 
-            <div class="border-t border-zinc-100 px-4 py-2 dark:border-white/[0.06] outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30" x-data="zoneNav('pagination')" data-zone="pagination" tabindex="-1">
-                {{ $this->deliveryNotes->links() }}
-            </div>
+            {{-- Footer: pagination --}}
+            <flux:pagination :paginator="$this->deliveryNotes" class="px-6" />
         @endif
     </div>
 

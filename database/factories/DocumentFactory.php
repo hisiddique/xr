@@ -6,7 +6,6 @@ use App\DocumentStatus;
 use App\DocumentType;
 use App\Models\Customer;
 use App\Models\Document;
-use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -44,6 +43,7 @@ class DocumentFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'type' => DocumentType::DeliveryNote,
+            'doc_number' => 'DN-'.str_pad((string) fake()->unique()->numberBetween(1, 9999), 4, '0', STR_PAD_LEFT),
         ]);
     }
 
@@ -51,6 +51,7 @@ class DocumentFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'type' => DocumentType::Invoice,
+            'doc_number' => 'INV-'.str_pad((string) fake()->unique()->numberBetween(1, 9999), 4, '0', STR_PAD_LEFT),
         ]);
     }
 }

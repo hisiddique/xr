@@ -40,14 +40,14 @@ test('delivery note can be created with multiple line items', function () {
         ->assertRedirect(route('delivery-notes.index'));
 
     $doc = Document::first();
-    expect($doc->doc_number)->toMatch('/^DN-\d{4}-\d{4}$/')
+    expect($doc->doc_number)->toMatch('/^DN-\d{4}$/')
         ->and($doc->items->count())->toBe(2)
         ->and((float) $doc->subtotal)->toBe(0.0)
         ->and((float) $doc->vat_amount)->toBe(0.0)
         ->and((float) $doc->total_value)->toBe(0.0);
 });
 
-test('delivery note number follows DN-YYYY-0001 format', function () {
+test('delivery note number follows DN-0001 format', function () {
     $user = User::factory()->admin()->create(['email_verified_at' => now()]);
     $customer = Customer::factory()->create(['trade_discount' => 0]);
 
@@ -61,8 +61,7 @@ test('delivery note number follows DN-YYYY-0001 format', function () {
         ->call('save')
         ->call('finalize', 'holdonly', false);
 
-    $year = now()->year;
-    expect(Document::first()->doc_number)->toBe("DN-{$year}-0001");
+    expect(Document::first()->doc_number)->toBe('DN-0001');
 });
 
 test('rejecting entries creates no delivery note', function () {

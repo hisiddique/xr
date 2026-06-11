@@ -6,10 +6,10 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
-use Livewire\WithPagination;
 
 new #[Title('Customers')] class extends Component {
-    use WithPagination, WithSorting;
+    use WithSorting;
+    use \Livewire\WithPagination;
 
     protected array $sortable = ['company_name', 'reference', 'email_1', 'created_at'];
 
@@ -17,6 +17,13 @@ new #[Title('Customers')] class extends Component {
     public string $search = '';
 
     public function updatedSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public int $perPage = 25;
+
+    public function updatedPerPage(): void
     {
         $this->resetPage();
     }
@@ -31,8 +38,8 @@ new #[Title('Customers')] class extends Component {
             );
 
         return $this->sortColumn === ''
-            ? $this->applySort($query)->latest()->paginate(15)
-            : $this->applySort($query)->paginate(15);
+            ? $this->applySort($query)->oldest()->paginate($this->perPage)
+            : $this->applySort($query)->paginate($this->perPage);
     }
 }; ?>
 
@@ -51,21 +58,45 @@ new #[Title('Customers')] class extends Component {
 
     {{-- Toolbar card --}}
     <div class="rounded-2xl border border-zinc-200/70 bg-white p-3 dark:border-white/10 dark:bg-zinc-900">
-        <div x-data="zoneNav('search')" data-zone="search" tabindex="-1" class="outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 rounded-lg max-w-sm">
-            <flux:input
-                wire:model.live.debounce.300ms="search"
-                data-search-input
-                autocomplete="off"
-                icon="magnifying-glass"
-                :placeholder="__('Search by company, reference or email…')"
-                clearable
-                class="max-w-sm"
-            />
+        <div class="flex items-center justify-between gap-3">
+            <div x-data="zoneNav('search')" data-zone="search" tabindex="-1" class="outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 rounded-lg max-w-sm">
+                <flux:input
+                    wire:model.live.debounce.300ms="search"
+                    data-search-input
+                    autocomplete="off"
+                    icon="magnifying-glass"
+                    :placeholder="__('Search by company, reference or email…')"
+                    clearable
+                    class="max-w-sm"
+                />
+            </div>
+            <div
+                x-data="{
+                    init() {
+                        const saved = localStorage.getItem('crm_per_page');
+                        const valid = [25, 50, 100, 250, 500, 1000];
+                        if (saved && valid.includes(Number(saved))) {
+                            $wire.set('perPage', Number(saved), false);
+                        }
+                    }
+                }"
+                x-init="init()"
+            >
+                <select
+                    wire:model.live="perPage"
+                    x-on:change="localStorage.setItem('crm_per_page', $event.target.value)"
+                    class="rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-700 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                >
+                    @foreach([25, 50, 100, 250, 500, 1000] as $n)
+                        <option value="{{ $n }}" @selected($perPage === $n)>{{ $n }} per page</option>
+                    @endforeach
+                </select>
+            </div>
         </div>
     </div>
 
     {{-- Table card --}}
-    <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
+    <div class="overflow-x-clip rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
 
         @if($this->customers->isEmpty())
             <x-ui.empty-state
@@ -82,14 +113,15 @@ new #[Title('Customers')] class extends Component {
                 @endunless
             </x-ui.empty-state>
         @else
-            <div class="overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 rounded-lg" x-data="zoneNav('table')" data-zone="table" tabindex="-1">
+            <div x-data="zoneNav('table')" data-zone="table" tabindex="-1" class="outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30">
                 <table class="w-full text-sm">
-                    <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                    <thead class="sticky top-14 lg:top-16 z-10 bg-zinc-50 dark:bg-zinc-800/50">
                         <tr>
+                            <x-ui.sortable-header column="reference" :state="$this->sortStateFor('reference')">Reference</x-ui.sortable-header>
                             <x-ui.sortable-header column="company_name" :state="$this->sortStateFor('company_name')">Company</x-ui.sortable-header>
-                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Contact</th>
+                            <th class="px-4 py-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Contact</th>
                             <x-ui.sortable-header column="email_1" :state="$this->sortStateFor('email_1')">Email</x-ui.sortable-header>
-                            <th class="px-4 py-2"></th>
+                            <th class="px-4 py-1"></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
@@ -99,20 +131,25 @@ new #[Title('Customers')] class extends Component {
                                 data-view-url="{{ route('customers.show', $customer) }}"
                                 data-edit-url="{{ route('customers.edit', $customer) }}"
                                 data-delete-modal="delete-customer-{{ $customer->id }}"
-                                class="transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5"
+                                @class([
+                                    'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
+                                    'sticky bottom-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_-1px_0_0_theme(--color-zinc-100)] dark:shadow-[0_-1px_0_0_theme(--color-white/0.06)]' => $loop->last,
+                                ])
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
+                                <td class="px-4 py-2 font-mono text-sm text-zinc-500 dark:text-zinc-400">
+                                    @if($customer->reference)
+                                        <x-ui.highlight :text="$customer->reference" :term="$search" />
+                                    @else
+                                        <span class="text-zinc-300 dark:text-zinc-600">—</span>
+                                    @endif
+                                </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center gap-3">
                                         <x-ui.avatar :name="$customer->company_name" size="sm" />
-                                        <div>
-                                            <a href="{{ route('customers.show', $customer) }}" wire:navigate class="font-semibold text-zinc-900 hover:text-indigo-600 dark:text-white dark:hover:text-indigo-400 transition-colors">
-                                                <x-ui.highlight :text="$customer->company_name" :term="$search" />
-                                            </a>
-                                            @if($customer->reference)
-                                                <p class="text-xs text-zinc-400 dark:text-zinc-500 font-mono"><x-ui.highlight :text="$customer->reference" :term="$search" /></p>
-                                            @endif
-                                        </div>
+                                        <a href="{{ route('customers.show', $customer) }}" wire:navigate class="font-semibold text-zinc-900 hover:text-indigo-600 dark:text-white dark:hover:text-indigo-400 transition-colors">
+                                            <x-ui.highlight :text="$customer->company_name" :term="$search" />
+                                        </a>
                                     </div>
                                 </td>
                                 <td class="px-6 py-4 text-zinc-600 dark:text-zinc-400">
@@ -132,9 +169,8 @@ new #[Title('Customers')] class extends Component {
                 </table>
             </div>
 
-            <div class="border-t border-zinc-100 px-4 py-2 dark:border-white/[0.06] outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30" x-data="zoneNav('pagination')" data-zone="pagination" tabindex="-1">
-                {{ $this->customers->links() }}
-            </div>
+            {{-- Footer: pagination --}}
+            <flux:pagination :paginator="$this->customers" class="px-6" />
         @endif
     </div>
 

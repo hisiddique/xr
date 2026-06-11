@@ -32,6 +32,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Document PDF
     Route::get('documents/{document}/pdf', [DocumentPdfController::class, 'show'])->name('documents.pdf');
     Route::get('documents/{document}/pdf/download', [DocumentPdfController::class, 'download'])->name('documents.pdf.download');
+    Route::post('documents/{document}/record-print', [DocumentPdfController::class, 'recordPrint'])->name('documents.record-print');
 
     // Admin-only routes
     Route::middleware('admin')->group(function () {

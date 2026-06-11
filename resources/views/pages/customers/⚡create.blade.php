@@ -48,29 +48,20 @@ new #[Title('New Customer')] class extends Component {
     #[Validate('nullable|integer|exists:lookup_credit_limits,id')]
     public ?int $credit_limit_id = null;
 
+    #[Validate('nullable|string|max:50|unique:customers,reference')]
+    public string $reference = '';
+
     public function save(): void
     {
         $validated = $this->validate();
 
         Customer::create(array_merge($validated, [
-            'reference' => $this->nextReference(),
             'created_by' => Auth::id(),
         ]));
 
         Flux::toast(variant: 'success', text: __('Customer created successfully.'));
 
         $this->redirect(route('customers.index'), navigate: true);
-    }
-
-    private function nextReference(): string
-    {
-        $last = Customer::where('reference', 'like', 'CUST-%')
-            ->orderByDesc('reference')
-            ->value('reference');
-
-        $next = $last ? ((int) substr($last, 5)) + 1 : 1;
-
-        return 'CUST-'.str_pad((string) $next, 5, '0', STR_PAD_LEFT);
     }
 
     #[Computed]
@@ -112,6 +103,7 @@ new #[Title('New Customer')] class extends Component {
             <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Basic Information</h2>
             <div class="grid gap-4 md:grid-cols-2">
                 <flux:input wire:model="company_name" :label="__('Company Name')" required autofocus />
+                <flux:input wire:model="reference" :label="__('Reference')" :placeholder="__('e.g. CUST-001')" />
                 <flux:input wire:model="email_1" type="email" :label="__('Email Address')" />
             </div>
         </div>

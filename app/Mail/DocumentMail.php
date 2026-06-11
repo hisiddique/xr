@@ -16,7 +16,7 @@ class DocumentMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public Document $document) {}
+    public function __construct(public Document $document, public ?string $notes = null) {}
 
     /**
      * Get the message envelope.

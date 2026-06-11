@@ -20,6 +20,7 @@ class SettingSeeder extends Seeder
             ['key' => 'dn_prefix', 'value' => 'DN', 'type' => 'string'],
             ['key' => 'inv_prefix', 'value' => 'INV', 'type' => 'string'],
             ['key' => 'number_padding', 'value' => '4', 'type' => 'integer'],
+            ['key' => 'dn_start_number', 'value' => '1', 'type' => 'integer'],
         ];
 
         foreach ($settings as $setting) {

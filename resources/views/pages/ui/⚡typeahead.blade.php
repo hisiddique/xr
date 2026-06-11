@@ -19,13 +19,17 @@ new class extends Component {
     public int $cacheTtl = 60;
     public int $maxResults = 10;
     public bool $required = false;
+    /** @var array<string> */
+    public array $searchColumns = [];
+    public string $labelAccessor = '';
 
     public string $search = '';
     public string $selectedLabel = '';
 
-    public function mount(string $selectedLabel = ''): void
+    public function mount(string $selectedLabel = '', int $minChars = 3): void
     {
         $this->selectedLabel = $selectedLabel;
+        $this->minChars = $minChars;
     }
 
     public function selectOption(int|string $id, string $label): void
@@ -57,22 +61,33 @@ new class extends Component {
         $column = $this->column;
         $valueColumn = $this->valueColumn;
         $limit = $this->maxResults;
+        $searchColumns = $this->searchColumns ?: [$column];
+        $labelAccessor = $this->labelAccessor ?: $column;
+        $useAccessor = $this->labelAccessor !== '';
 
-        $cacheKey = 'typeahead:'.md5($modelClass.'|'.$column.'|'.$valueColumn.'|'.$limit.'|'.mb_strtolower($term));
+        $cacheKey = 'typeahead:'.md5($modelClass.'|'.$column.'|'.$valueColumn.'|'.$limit.'|'.implode(',', $searchColumns).'|'.$labelAccessor.'|'.mb_strtolower($term));
 
         return Cache::remember(
             $cacheKey,
             $this->cacheTtl,
-            fn (): array => $modelClass::query()
-                ->where($column, 'like', "%{$term}%")
-                ->orderBy($column)
-                ->limit($limit)
-                ->get([$valueColumn, $column])
-                ->map(fn ($m): array => [
+            function () use ($modelClass, $column, $valueColumn, $searchColumns, $labelAccessor, $useAccessor, $limit, $term): array {
+                $query = $modelClass::query()
+                    ->where(function ($q) use ($searchColumns, $term): void {
+                        foreach ($searchColumns as $col) {
+                            $q->orWhere($col, 'like', "%{$term}%");
+                        }
+                    })
+                    ->orderByRaw("CASE WHEN {$column} LIKE ? THEN 0 ELSE 1 END", [$term.'%'])
+                    ->orderBy($column)
+                    ->limit($limit);
+
+                $results = $useAccessor ? $query->get() : $query->get([$valueColumn, $column]);
+
+                return $results->map(fn ($m): array => [
                     'id' => $m->{$valueColumn},
-                    'label' => (string) $m->{$column},
-                ])
-                ->all(),
+                    'label' => (string) $m->{$labelAccessor},
+                ])->all();
+            },
         );
     }
 }; ?>
