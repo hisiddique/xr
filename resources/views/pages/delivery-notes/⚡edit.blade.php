@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\ValidatesDocumentItems;
 use App\Models\Customer;
 use App\Models\Document;
 use App\Models\LookupUnit;
@@ -9,6 +10,7 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('Edit Delivery Note')] class extends Component {
+    use ValidatesDocumentItems;
     public Document $document;
 
     public ?int $customer_id = null;
@@ -50,45 +52,16 @@ new #[Title('Edit Delivery Note')] class extends Component {
             || (float) ($i['price'] ?? 0) > 0
         ));
 
-        $this->validate([
-            'customer_id' => 'required|integer|exists:customers,id',
-            'assigned_to' => 'nullable|integer|exists:users,id',
-            'doc_date' => 'required|date',
-            'order_no' => 'nullable|string|max:100',
-            'show_pricing' => 'boolean',
-            'items' => 'required|array|min:1',
-            'items.*.details' => 'required|string|max:500',
-            'items.*.is_note' => 'boolean',
-            'items.*.quantity' => 'nullable|numeric|min:0',
-            'items.*.price' => 'nullable|numeric|min:0',
-        ]);
-
-        foreach ($this->items as $i => $item) {
-            if (empty($item['is_note'])) {
-                if ((float) ($item['quantity'] ?? 0) < 0.01) {
-                    $this->addError("items.{$i}.quantity", __('Quantity is required.'));
-
-                    return;
-                }
-
-                if ($this->show_pricing) {
-                    $hasPrice = (float) ($item['price'] ?? 0) > 0;
-                    $hasPer = trim((string) ($item['per'] ?? '')) !== '';
-
-                    if ($hasPrice && ! $hasPer) {
-                        $this->addError("items.{$i}.per", __('Per is required when price is set.'));
-
-                        return;
-                    }
-
-                    if ($hasPer && ! $hasPrice) {
-                        $this->addError("items.{$i}.price", __('Price is required when per is set.'));
-
-                        return;
-                    }
-                }
-            }
-        }
+        $this->validate(
+            [
+                'customer_id' => 'required|integer|exists:customers,id',
+                'assigned_to' => 'nullable|integer|exists:users,id',
+                'doc_date' => 'required|date',
+                'order_no' => 'nullable|string|max:100',
+                'show_pricing' => 'boolean',
+            ] + $this->documentItemRules(),
+            $this->documentItemMessages(),
+        );
 
         $customer = Customer::findOrFail($this->customer_id);
         $totals = (new DocumentTotalsCalculator())->calculate(collect($this->items), $customer);

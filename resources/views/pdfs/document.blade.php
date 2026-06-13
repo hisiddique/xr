@@ -169,7 +169,9 @@
 </head>
 @php
     $isDN = $document->type->value === 'DN';
-    $showPricing = ! $isDN || (bool) $document->show_pricing;
+    $isCN = $document->type->value === 'CN';
+    $isPriced = in_array($document->type->value, ['INV', 'CN']);
+    $showPricing = $isPriced || (bool) $document->show_pricing;
     $cols = $showPricing ? 5 : 3;
 
     $companyName         = \App\Models\Setting::get('company_name', config('app.name'));
@@ -205,6 +207,8 @@
         $cust->post_code,
     ])->filter()->values();
 
+    $creditedInvoice = $isCN ? $document->creditedInvoice : null;
+
     $bottomPaddingMm = $isDN ? 88 : 65;
     $bottomBlockBottomMm = $isDN ? 22 : 26;
     $bottomBlockHeightMm = $isDN ? 65 : 38;
@@ -217,7 +221,7 @@
     $leftMetaLines = $visualLines($cust->company_name)
         + $visualLines($custPerson)
         + $custAddressLines->sum($visualLines);
-    $rightMetaLines = 6 + ($document->order_no ? 1 : 0);
+    $rightMetaLines = 6 + ($document->order_no ? 1 : 0) + ($isCN && $creditedInvoice ? 1 : 0);
     $headerTopMm = 77 + max(0, max($leftMetaLines, $rightMetaLines) - 6) * 4.0;
 @endphp
 
@@ -275,13 +279,24 @@
                             </div>
                         </td>
                         <td class="right meta-right">
-                            <div class="doc-title">{{ $isDN ? 'Delivery Note' : 'Invoice' }}</div>
+                            <div class="doc-title">
+                                {{ $isDN ? 'Delivery Note' : ($isCN ? 'Credit Note' : 'Invoice') }}
+                            </div>
                             <table class="kv">
                                 <tr><td class="k">Date</td><td class="c">:</td><td>{{ $document->doc_date->format('d/m/Y') }}</td></tr>
-                                <tr><td class="k">{{ $isDN ? 'Delivery Note No.' : 'Invoice No.' }}</td><td class="c">:</td><td>{{ $document->doc_number }}</td></tr>
+                                <tr>
+                                    <td class="k">
+                                        {{ $isDN ? 'Delivery Note No.' : ($isCN ? 'Credit Note No.' : 'Invoice No.') }}
+                                    </td>
+                                    <td class="c">:</td>
+                                    <td>{{ $document->doc_number }}</td>
+                                </tr>
                                 <tr><td class="k">Customer</td><td class="c">:</td><td>{{ $cust->company_name }}</td></tr>
                                 @if($document->order_no)
                                     <tr><td class="k">Order No</td><td class="c">:</td><td>{{ $document->order_no }}</td></tr>
+                                @endif
+                                @if($isCN && $creditedInvoice)
+                                    <tr><td class="k">Against Invoice</td><td class="c">:</td><td>{{ $creditedInvoice->doc_number }}</td></tr>
                                 @endif
                                 <tr><td class="k">Sheet No.</td><td class="c">:</td><td>&nbsp;</td></tr>
                             </table>
@@ -447,6 +462,47 @@
                                     <td class="gap"></td>
                                     <td class="lbl">Date:</td>
                                     <td class="line"></td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr></table>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+@elseif($isCN)
+    <table class="doc-bottom">
+        <tbody>
+            <tr>
+                <td colspan="2" class="split-cell">
+                    <table class="split"><tr>
+                        <td class="left cert-box">
+                            @if($document->reason)
+                                <div class="cert-title">Reason:</div>
+                                <div>{{ $document->reason }}</div>
+                            @else
+                                &nbsp;
+                            @endif
+                        </td>
+                        <td class="right cert-box">
+                            <table class="totals-box">
+                                <tr>
+                                    <td class="l">Total Value</td>
+                                    <td class="v">£{{ number_format($document->subtotal, 2) }}</td>
+                                </tr>
+                                @if($document->discount_amount > 0)
+                                    <tr>
+                                        <td class="l">Discount ({{ $document->trade_discount }}%)</td>
+                                        <td class="v">-£{{ number_format($document->discount_amount, 2) }}</td>
+                                    </tr>
+                                @endif
+                                <tr>
+                                    <td class="l">VAT @ {{ number_format((float) \App\Models\Setting::get('vat_rate', 20), 2) }}%</td>
+                                    <td class="v">£{{ number_format($document->vat_amount, 2) }}</td>
+                                </tr>
+                                <tr class="grand">
+                                    <td class="l">Credit Total</td>
+                                    <td class="v">£{{ number_format($document->total_value, 2) }}</td>
                                 </tr>
                             </table>
                         </td>

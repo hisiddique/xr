@@ -37,6 +37,14 @@ class ConvertDeliveryNoteToInvoice
             $sequence = $this->numberGenerator->extractSequence($deliveryNote->doc_number);
             $docNumber = $this->numberGenerator->numberForConversion('INV', $sequence);
 
+            if (Document::withTrashed()->where('doc_number', $docNumber)->exists()) {
+                $suffix = 1;
+                do {
+                    $candidate = $docNumber.'-'.$suffix++;
+                } while (Document::withTrashed()->where('doc_number', $candidate)->exists());
+                $docNumber = $candidate;
+            }
+
             $deliveryNote->loadMissing(['items', 'customer']);
 
             $itemsForCalc = $deliveryNote->items->map(fn ($item) => [

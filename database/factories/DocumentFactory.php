@@ -54,4 +54,13 @@ class DocumentFactory extends Factory
             'doc_number' => 'INV-'.str_pad((string) fake()->unique()->numberBetween(1, 9999), 4, '0', STR_PAD_LEFT),
         ]);
     }
+
+    public function creditNote(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'type' => DocumentType::CreditNote,
+            'doc_number' => 'CN-'.str_pad((string) fake()->unique()->numberBetween(1, 9999), 4, '0', STR_PAD_LEFT),
+            'show_pricing' => true,
+        ]);
+    }
 }

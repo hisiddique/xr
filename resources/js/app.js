@@ -287,7 +287,7 @@ document.addEventListener('alpine:init', () => {
             // ── '+' creates new on scoped list & show pages ──
             if (key === '+') {
                 const path = window.location.pathname;
-                const scopes = ['/customers', '/delivery-notes', '/users'];
+                const scopes = ['/customers', '/delivery-notes', '/credit-notes', '/users'];
                 const scope = scopes.find((s) => path === s || new RegExp(`^${s}/\\d+$`).test(path));
                 if (scope) {
                     e.preventDefault();
@@ -527,6 +527,25 @@ document.addEventListener('alpine:init', () => {
                     this.currentZone = nextZone.kind;
                     return;
                 }
+            }
+
+            // ── Gmail-style chords (g c / g d / g i / g r) ──
+            if (lowerKey === 'g' && !e.shiftKey) {
+                e.preventDefault();
+                this._pendingChord = 'g';
+                const cancel = () => { this._pendingChord = null; };
+                window.addEventListener('keydown', (e2) => {
+                    if (this._pendingChord !== 'g') return;
+                    this._pendingChord = null;
+                    e2.preventDefault();
+                    const k2 = e2.key.toLowerCase();
+                    if (k2 === 'c') Livewire.navigate('/customers');
+                    else if (k2 === 'd') Livewire.navigate('/delivery-notes');
+                    else if (k2 === 'i') Livewire.navigate('/invoices');
+                    else if (k2 === 'r') Livewire.navigate('/credit-notes');
+                }, { once: true });
+                setTimeout(cancel, 1500);
+                return;
             }
 
             // ── Type-to-search: single printable char focuses search input ──
@@ -862,9 +881,8 @@ document.addEventListener('alpine:init', () => {
 
         emailRow(i) {
             const row = this._zoneRows[i];
-            if (row?.emailModal && window.Flux) {
-                Flux.modal(row.emailModal).show();
-            }
+            const trigger = row?.actions?.find((a) => a.kind === 'email')?.el;
+            if (trigger) trigger.click();
         },
 
         convertRow(i) {
@@ -1068,6 +1086,18 @@ document.addEventListener('alpine:init', () => {
                 return (q / n) * p;
             }
             return q * p;
+        },
+
+        importRows(items) {
+            this.rows = items;
+            this.$nextTick(() => {
+                items.forEach((row, i) => {
+                    if (!row.per) return;
+                    const tr = this.$refs.rowsBody?.querySelector(`tr[data-row-idx="${i}"]`);
+                    const sel = tr?.querySelector('select');
+                    if (sel) sel.value = row.per;
+                });
+            });
         },
 
         submit() {

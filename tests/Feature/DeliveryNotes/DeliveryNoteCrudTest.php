@@ -30,7 +30,7 @@ test('delivery note can be created with multiple line items', function () {
         ->set('customer_id', $customer->id)
         ->set('doc_date', '2026-04-13')
         ->set('items', [
-            ['details' => 'Item 1', 'quantity' => '2', 'per' => 'each'],
+            ['details' => 'Item 1', 'quantity' => '2', 'per' => ''],
             ['details' => 'Item 2', 'quantity' => '1', 'per' => ''],
         ])
         ->call('save')
@@ -173,7 +173,7 @@ test('delivery note can be edited', function () {
     Livewire::actingAs($user)
         ->test('pages::delivery-notes.edit', ['document' => $document])
         ->set('items', [
-            ['details' => 'New item', 'quantity' => '2', 'per' => 'each'],
+            ['details' => 'New item', 'quantity' => '2', 'per' => ''],
         ])
         ->call('save')
         ->assertHasNoErrors();

@@ -17,7 +17,7 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 
-new #[Title('Invoices')] class extends Component
+new #[Title('Credit Notes')] class extends Component
 {
     use WithPagination;
     use WithSorting;
@@ -150,25 +150,11 @@ new #[Title('Invoices')] class extends Component
 
     public function restore(int $id): void
     {
-        $invoice = Document::onlyTrashed()->invoices()->findOrFail($id);
+        $creditNote = Document::onlyTrashed()->creditNotes()->findOrFail($id);
 
-        DB::transaction(function () use ($invoice) {
-            $invoice->restore();
+        $creditNote->restore();
 
-            $source = $invoice->convertedFrom;
-            if ($source && $source->status === DocumentStatus::Active) {
-                $sourceHasOtherActiveInvoice = Document::invoices()
-                    ->where('converted_from_id', $source->id)
-                    ->where('id', '!=', $invoice->id)
-                    ->exists();
-
-                if (! $sourceHasOtherActiveInvoice) {
-                    $source->update(['status' => DocumentStatus::Converted]);
-                }
-            }
-        });
-
-        Flux::toast(variant: 'success', text: __('Invoice :number restored.', ['number' => $invoice->doc_number]));
+        Flux::toast(variant: 'success', text: __('Credit note :number restored.', ['number' => $creditNote->doc_number]));
     }
 
     /** @return Collection<int, Document> */
@@ -179,7 +165,7 @@ new #[Title('Invoices')] class extends Component
             return collect();
         }
 
-        return Document::invoices()
+        return Document::creditNotes()
             ->with('customer')
             ->whereIn('id', $this->selectedIds)
             ->get();
@@ -191,7 +177,7 @@ new #[Title('Invoices')] class extends Component
             return;
         }
 
-        $invoices = Document::invoices()
+        $creditNotes = Document::creditNotes()
             ->with('customer')
             ->whereIn('id', $this->selectedIds)
             ->get();
@@ -200,8 +186,8 @@ new #[Title('Invoices')] class extends Component
         $skipped = 0;
         $failed = 0;
 
-        foreach ($invoices as $invoice) {
-            $email = $invoice->customer?->email_1;
+        foreach ($creditNotes as $creditNote) {
+            $email = $creditNote->customer?->email_1;
 
             if (! $email) {
                 $skipped++;
@@ -210,7 +196,7 @@ new #[Title('Invoices')] class extends Component
             }
 
             try {
-                $service->send($invoice, $email);
+                $service->send($creditNote, $email);
                 $sent++;
             } catch (Throwable) {
                 $failed++;
@@ -219,7 +205,7 @@ new #[Title('Invoices')] class extends Component
 
         $this->selectedIds = [];
 
-        Flux::modal('bulk-email-invoices')->close();
+        Flux::modal('bulk-email-credit-notes')->close();
 
         $message = match (true) {
             $sent > 0 && ($skipped > 0 || $failed > 0) => __(':n sent, :s skipped, :f failed.', ['n' => $sent, 's' => $skipped, 'f' => $failed]),
@@ -231,11 +217,11 @@ new #[Title('Invoices')] class extends Component
     }
 
     #[Computed]
-    public function invoices()
+    public function creditNotes()
     {
-        return Document::invoices()
+        return Document::creditNotes()
             ->when($this->trashed, fn ($q) => $q->onlyTrashed())
-            ->with(['customer', 'assignee'])
+            ->with(['customer', 'assignee', 'creditedInvoice'])
             ->addSelect([
                 'last_email_status' => DocumentEmailLog::select('status')
                     ->whereColumn('document_id', 'documents.id')
@@ -275,7 +261,7 @@ new #[Title('Invoices')] class extends Component
             return [];
         }
 
-        return $this->invoices->pluck('id')->all();
+        return $this->creditNotes->pluck('id')->all();
     }
 
     #[Computed]
@@ -295,9 +281,15 @@ new #[Title('Invoices')] class extends Component
 <div class="flex flex-col gap-4">
 
     <x-ui.page-header
-        title="Invoices"
-        subtitle="Manage and track all invoices."
-    />
+        title="Credit Notes"
+        subtitle="Manage and track all credit notes."
+    >
+        <x-slot:action>
+            <flux:button variant="primary" icon="plus" :href="route('credit-notes.create')" wire:navigate>
+                New Credit Note
+            </flux:button>
+        </x-slot:action>
+    </x-ui.page-header>
 
     {{-- Toolbar card --}}
     <div class="rounded-2xl border border-zinc-200/70 bg-white p-3 dark:border-white/10 dark:bg-zinc-900 flex flex-col gap-3">
@@ -308,7 +300,7 @@ new #[Title('Invoices')] class extends Component
                     data-search-input
                     autocomplete="off"
                     icon="magnifying-glass"
-                    :placeholder="__('Search by invoice number or customer…')"
+                    :placeholder="__('Search by credit note number or customer…')"
                     clearable
                     class="flex-1 max-w-sm"
                 />
@@ -396,7 +388,7 @@ new #[Title('Invoices')] class extends Component
             <div class="flex items-center gap-2 text-sm">
                 <flux:icon.check-circle class="size-4 text-indigo-600 dark:text-indigo-400" />
                 <span class="font-medium text-indigo-900 dark:text-indigo-200">
-                    {{ trans_choice(':count invoice selected|:count invoices selected', count($selectedIds), ['count' => count($selectedIds)]) }}
+                    {{ trans_choice(':count credit note selected|:count credit notes selected', count($selectedIds), ['count' => count($selectedIds)]) }}
                 </span>
             </div>
             <div class="flex items-center gap-2">
@@ -407,7 +399,7 @@ new #[Title('Invoices')] class extends Component
                     size="sm"
                     variant="primary"
                     icon="envelope"
-                    x-on:click="$flux.modal('bulk-email-invoices').show()"
+                    x-on:click="$flux.modal('bulk-email-credit-notes').show()"
                 >
                     {{ __('Email Selected') }}
                 </flux:button>
@@ -418,16 +410,16 @@ new #[Title('Invoices')] class extends Component
     {{-- Table card --}}
     <div class="overflow-x-clip rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
 
-        @if($this->invoices->isEmpty())
+        @if($this->creditNotes->isEmpty())
             <x-ui.empty-state
                 :icon="$trashed ? 'trash' : 'document-text'"
-                :title="$trashed ? 'Trash is empty' : 'No invoices found'"
-                :description="$trashed ? 'Deleted invoices will appear here.' : (($search || $status) ? 'Try adjusting your search or filters.' : 'Invoices are created by converting a delivery note.')"
+                :title="$trashed ? 'Trash is empty' : 'No credit notes found'"
+                :description="$trashed ? 'Deleted credit notes will appear here.' : (($search || $status) ? 'Try adjusting your search or filters.' : 'Create your first credit note to get started.')"
             >
                 @unless($trashed || $search || $status)
                     <x-slot:action>
-                        <flux:button variant="primary" :href="route('delivery-notes.index')" wire:navigate>
-                            Go to Delivery Notes
+                        <flux:button variant="primary" :href="route('credit-notes.create')" wire:navigate>
+                            New Credit Note
                         </flux:button>
                     </x-slot:action>
                 @endunless
@@ -451,6 +443,7 @@ new #[Title('Invoices')] class extends Component
                             <x-ui.sortable-header column="doc_number" :state="$this->sortStateFor('doc_number')">#</x-ui.sortable-header>
                             <th class="px-4 py-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
                             <x-ui.sortable-header column="order_no" :state="$this->sortStateFor('order_no')">Order Ref</x-ui.sortable-header>
+                            <th class="px-4 py-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Against Invoice</th>
                             <x-ui.sortable-header column="doc_date" :state="$this->sortStateFor('doc_date')">Date</x-ui.sortable-header>
                             <x-ui.sortable-header column="total_value" align="right" :state="$this->sortStateFor('total_value')">Amount</x-ui.sortable-header>
                             <x-ui.sortable-header column="status" :state="$this->sortStateFor('status')">Status</x-ui.sortable-header>
@@ -459,12 +452,12 @@ new #[Title('Invoices')] class extends Component
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
-                        @foreach($this->invoices as $invoice)
+                        @foreach($this->creditNotes as $creditNote)
                             <tr
                                 data-row-index="{{ $loop->index }}"
-                                data-view-url="{{ route('invoices.show', $invoice) }}"
-                                data-edit-url="{{ route('invoices.edit', $invoice) }}"
-                                data-email-modal="email-document-{{ $invoice->id }}"
+                                data-view-url="{{ route('credit-notes.show', $creditNote) }}"
+                                data-edit-url="{{ route('credit-notes.edit', $creditNote) }}"
+                                data-email-modal="email-document-{{ $creditNote->id }}"
                                 @class([
                                     'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
                                     'sticky bottom-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_-1px_0_0_theme(--color-zinc-100)] dark:shadow-[0_-1px_0_0_theme(--color-white/0.06)]' => $loop->last,
@@ -475,37 +468,38 @@ new #[Title('Invoices')] class extends Component
                                     @if(! $trashed)
                                         <input
                                             type="checkbox"
-                                            value="{{ $invoice->id }}"
+                                            value="{{ $creditNote->id }}"
                                             wire:model.live="selectedIds"
                                             class="size-4 cursor-pointer rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
                                         />
                                     @endif
                                 </td>
                                 <td class="px-4 py-2">
-                                    <a href="{{ route('invoices.show', $invoice) }}" wire:navigate @class([
+                                    <a href="{{ route('credit-notes.show', $creditNote) }}" wire:navigate @class([
                                         'inline-flex items-center rounded-md px-2 py-0.5 font-mono text-sm font-semibold text-indigo-700 hover:underline dark:text-indigo-300',
-                                        'bg-emerald-100 dark:bg-emerald-500/20' => $invoice->last_email_status === 'sent',
-                                        'bg-rose-100 dark:bg-rose-500/20' => $invoice->last_email_status === 'failed',
-                                        'bg-amber-100 dark:bg-amber-500/20' => $invoice->last_email_status === null,
+                                        'bg-emerald-100 dark:bg-emerald-500/20' => $creditNote->last_email_status === 'sent',
+                                        'bg-rose-100 dark:bg-rose-500/20' => $creditNote->last_email_status === 'failed',
+                                        'bg-amber-100 dark:bg-amber-500/20' => $creditNote->last_email_status === null,
                                     ])>
-                                        <x-ui.highlight :text="$invoice->doc_number" :term="$search" />
+                                        <x-ui.highlight :text="$creditNote->doc_number" :term="$search" />
                                     </a>
                                 </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center gap-2.5">
-                                        <x-ui.avatar :name="$invoice->customer->company_name" size="xs" />
-                                        <span class="font-medium text-zinc-900 dark:text-white"><x-ui.highlight :text="$invoice->customer->company_name" :term="$search" /></span>
+                                        <x-ui.avatar :name="$creditNote->customer->company_name" size="xs" />
+                                        <span class="font-medium text-zinc-900 dark:text-white"><x-ui.highlight :text="$creditNote->customer->company_name" :term="$search" /></span>
                                     </div>
                                 </td>
-                                <td class="px-4 py-2 text-zinc-600 dark:text-zinc-300">{{ $invoice->order_no ?: '—' }}</td>
-                                <td class="px-6 py-4 text-zinc-500 dark:text-zinc-400">{{ $invoice->doc_date->format('d M Y') }}</td>
-                                <td class="px-6 py-4 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($invoice->total_value, 2) }}</td>
+                                <td class="px-4 py-2 text-zinc-600 dark:text-zinc-300">{{ $creditNote->order_no ?: '—' }}</td>
+                                <td class="px-4 py-2 font-mono text-sm text-zinc-600 dark:text-zinc-300">{{ $creditNote->creditedInvoice?->doc_number ?? '—' }}</td>
+                                <td class="px-6 py-4 text-zinc-500 dark:text-zinc-400">{{ $creditNote->doc_date->format('d M Y') }}</td>
+                                <td class="px-6 py-4 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($creditNote->total_value, 2) }}</td>
                                 <td class="px-4 py-2">
-                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $invoice->status->ringColor() }}">
-                                        {{ $invoice->status->label() }}
+                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $creditNote->status->ringColor() }}">
+                                        {{ $creditNote->status->label() }}
                                     </span>
                                 </td>
-                                <td class="px-4 py-2 text-zinc-600 dark:text-zinc-300">{{ $invoice->assignee?->name ?? '—' }}</td>
+                                <td class="px-4 py-2 text-zinc-600 dark:text-zinc-300">{{ $creditNote->assignee?->name ?? '—' }}</td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
                                         @if($trashed)
@@ -513,22 +507,22 @@ new #[Title('Invoices')] class extends Component
                                                 size="xs"
                                                 variant="ghost"
                                                 icon="arrow-uturn-left"
-                                                wire:click="restore({{ $invoice->id }})"
+                                                wire:click="restore({{ $creditNote->id }})"
                                                 class="text-emerald-600 hover:text-emerald-700"
                                                 data-row-action="restore"
                                             >
                                                 {{ __('Restore') }}
                                             </flux:button>
                                         @else
-                                            <flux:button size="xs" variant="ghost" icon="eye" :href="route('invoices.show', $invoice)" wire:navigate data-row-action="view" />
-                                            <flux:button size="xs" variant="ghost" icon="pencil" :href="route('invoices.edit', $invoice)" wire:navigate data-row-action="edit" />
-                                            <flux:button size="xs" variant="ghost" icon="arrow-down-tray" :href="route('documents.pdf.download', $invoice)" data-row-action="download" />
-                                            <span x-data="{ printed: {{ $invoice->print_count > 0 ? 'true' : 'false' }} }">
+                                            <flux:button size="xs" variant="ghost" icon="eye" :href="route('credit-notes.show', $creditNote)" wire:navigate data-row-action="view" />
+                                            <flux:button size="xs" variant="ghost" icon="pencil" :href="route('credit-notes.edit', $creditNote)" wire:navigate data-row-action="edit" />
+                                            <flux:button size="xs" variant="ghost" icon="arrow-down-tray" :href="route('documents.pdf.download', $creditNote)" data-row-action="download" />
+                                            <span x-data="{ printed: {{ $creditNote->print_count > 0 ? 'true' : 'false' }} }">
                                                 <flux:button
                                                     size="xs"
                                                     variant="ghost"
                                                     icon="printer"
-                                                    x-on:click="$wire.recordPrint({{ $invoice->id }}); window.printPdfDocument('{{ route('documents.pdf', $invoice) }}'); printed = true"
+                                                    x-on:click="$wire.recordPrint({{ $creditNote->id }}); window.printPdfDocument('{{ route('documents.pdf', $creditNote) }}'); printed = true"
                                                     x-bind:class="printed ? '!text-emerald-600 hover:!text-emerald-700 dark:!text-emerald-400' : '!text-amber-500 hover:!text-amber-600 dark:!text-amber-400'"
                                                     x-bind:title="printed ? '{{ __('Printed') }}' : '{{ __('Not yet printed') }}'"
                                                 />
@@ -538,28 +532,28 @@ new #[Title('Invoices')] class extends Component
                                                     size="xs"
                                                     variant="ghost"
                                                     icon="envelope"
-                                                    wire:click="$set('emailingDocumentId', {{ $invoice->id }})"
-                                                    x-on:click="$flux.modal('email-document-{{ $invoice->id }}').show()"
+                                                    wire:click="$set('emailingDocumentId', {{ $creditNote->id }})"
+                                                    x-on:click="$flux.modal('email-document-{{ $creditNote->id }}').show()"
                                                     @class([
-                                                        '!text-emerald-600 hover:!text-emerald-700 dark:!text-emerald-400' => $invoice->last_email_status === 'sent',
-                                                        '!text-rose-600 hover:!text-rose-700 dark:!text-rose-400' => $invoice->last_email_status === 'failed',
-                                                        '!text-amber-500 hover:!text-amber-600 dark:!text-amber-400' => $invoice->last_email_status === null,
+                                                        '!text-emerald-600 hover:!text-emerald-700 dark:!text-emerald-400' => $creditNote->last_email_status === 'sent',
+                                                        '!text-rose-600 hover:!text-rose-700 dark:!text-rose-400' => $creditNote->last_email_status === 'failed',
+                                                        '!text-amber-500 hover:!text-amber-600 dark:!text-amber-400' => $creditNote->last_email_status === null,
                                                     ])
-                                                    title="{{ match($invoice->last_email_status) {
+                                                    title="{{ match($creditNote->last_email_status) {
                                                         'sent' => __('Email sent'),
-                                                        'failed' => __('Last send failed: :msg', ['msg' => $invoice->last_email_error ?? 'unknown error']),
+                                                        'failed' => __('Last send failed: :msg', ['msg' => $creditNote->last_email_error ?? 'unknown error']),
                                                         default => __('Not yet emailed'),
                                                     } }}"
                                                     data-row-action="email"
                                                 />
-                                                @if($invoice->last_email_status === 'failed')
+                                                @if($creditNote->last_email_status === 'failed')
                                                     <span class="pointer-events-none absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
                                                         <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75"></span>
                                                         <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-900"></span>
                                                     </span>
                                                 @endif
                                             </span>
-                                            <livewire:pages::invoices.delete-modal :document="$invoice" :key="'delete-'.$invoice->id" />
+                                            <livewire:pages::credit-notes.delete-modal :document="$creditNote" :key="'delete-'.$creditNote->id" />
                                         @endif
                                     </div>
                                 </td>
@@ -570,7 +564,7 @@ new #[Title('Invoices')] class extends Component
             </div>
 
             {{-- Footer: pagination --}}
-            <flux:pagination :paginator="$this->invoices" class="px-6" />
+            <flux:pagination :paginator="$this->creditNotes" class="px-6" />
         @endif
     </div>
 
@@ -578,14 +572,14 @@ new #[Title('Invoices')] class extends Component
 
     {{-- Modals --}}
     @if(! $trashed && count($selectedIds) > 0)
-        <flux:modal name="bulk-email-invoices" focusable class="max-w-lg">
+        <flux:modal name="bulk-email-credit-notes" focusable class="max-w-lg">
             <div class="flex max-h-[80vh] flex-col gap-4">
                 <div class="shrink-0">
                     <flux:heading size="lg">
                         {{ trans_choice('Send :count email?|Send :count emails?', count($selectedIds), ['count' => count($selectedIds)]) }}
                     </flux:heading>
                     <flux:subheading>
-                        {{ __('Each selected invoice will be emailed to the customer below. Rows without a customer email are skipped.') }}
+                        {{ __('Each selected credit note will be emailed to the customer below. Rows without a customer email are skipped.') }}
                     </flux:subheading>
                 </div>
                 <ul class="min-h-0 flex-1 overflow-y-auto rounded-lg border border-zinc-200 divide-y divide-zinc-100 dark:border-white/10 dark:divide-white/[0.06]">

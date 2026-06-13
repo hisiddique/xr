@@ -8,6 +8,8 @@ use Livewire\Component;
 new class extends Component {
     public Document $document;
 
+    public bool $autoOpen = false;
+
     /** @var array<int, string> */
     public array $emails = [];
 
@@ -46,8 +48,8 @@ new class extends Component {
     }
 }; ?>
 
-<div>
-    <flux:modal name="email-document-{{ $document->id }}" focusable class="max-w-md">
+<div @if($autoOpen) x-data x-init="$nextTick(() => $flux.modal('email-document-{{ $document->id }}').show())" @endif>
+    <flux:modal name="email-document-{{ $document->id }}" focusable class="max-w-md" @close="$wire.dispatch('email-modal-closed')">
         <div class="space-y-6">
             <div>
                 <flux:heading size="lg">{{ __('Send :type', ['type' => $document->type->label()]) }}</flux:heading>
@@ -57,7 +59,7 @@ new class extends Component {
             </div>
 
             <form wire:submit="send" class="space-y-4">
-                <div x-data="emailTagInput($wire, @js($emails))">
+                <div x-data="emailTagInput($wire, @js($emails))" wire:ignore>
                     <flux:label>{{ __('Recipients') }} <span class="text-rose-500">*</span></flux:label>
                     <div
                         class="mt-1 flex min-h-[38px] flex-wrap gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 dark:border-white/15 dark:bg-zinc-800"
@@ -84,9 +86,9 @@ new class extends Component {
                     </div>
                     <p x-show="error" x-text="error" class="mt-1 text-xs text-rose-500"></p>
                     <p class="mt-1 text-xs text-zinc-400">Press <kbd class="rounded border border-zinc-200 bg-zinc-100 px-1 dark:border-zinc-700 dark:bg-zinc-800">Enter</kbd> or <kbd class="rounded border border-zinc-200 bg-zinc-100 px-1 dark:border-zinc-700 dark:bg-zinc-800">,</kbd> to add each address.</p>
-                    <flux:error name="emails" />
-                    <flux:error name="emails.*" />
                 </div>
+                <flux:error name="emails" />
+                <flux:error name="emails.*" />
 
                 <div>
                     <flux:label>{{ __('Additional Notes') }}</flux:label>

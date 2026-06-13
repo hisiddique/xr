@@ -29,8 +29,10 @@ new #[Title('CRM Settings')] class extends Component {
     public string $retention_of_title_clause = '';
     public string $dn_prefix = 'DN';
     public string $inv_prefix = 'INV';
+    public string $cn_prefix = 'CN';
     public string $number_padding = '4';
     public string $dn_start_number = '1';
+    public string $cn_start_number = '1';
     public string $app_font_size = '18';
     public $logo = null;
 
@@ -54,8 +56,10 @@ new #[Title('CRM Settings')] class extends Component {
         $this->retention_of_title_clause = (string) Setting::get('retention_of_title_clause', '');
         $this->dn_prefix = (string) Setting::get('dn_prefix', 'DN');
         $this->inv_prefix = (string) Setting::get('inv_prefix', 'INV');
+        $this->cn_prefix = (string) Setting::get('cn_prefix', 'CN');
         $this->number_padding = (string) Setting::get('number_padding', '4');
         $this->dn_start_number = (string) Setting::get('dn_start_number', '1');
+        $this->cn_start_number = (string) Setting::get('cn_start_number', '1');
         $this->app_font_size = (string) Setting::get('app_font_size', 18);
     }
 
@@ -81,8 +85,10 @@ new #[Title('CRM Settings')] class extends Component {
             'retention_of_title_clause' => 'nullable|string|max:2000',
             'dn_prefix' => 'required|string|max:10|alpha',
             'inv_prefix' => 'required|string|max:10|alpha',
+            'cn_prefix' => 'required|string|max:10|alpha',
             'number_padding' => 'required|integer|min:1|max:10',
             'dn_start_number' => 'required|integer|min:1',
+            'cn_start_number' => 'required|integer|min:1',
             'app_font_size' => 'required|integer|min:14|max:22',
         ]);
 
@@ -117,8 +123,10 @@ new #[Title('CRM Settings')] class extends Component {
         Setting::set('retention_of_title_clause', $this->retention_of_title_clause);
         Setting::set('dn_prefix', strtoupper($this->dn_prefix));
         Setting::set('inv_prefix', strtoupper($this->inv_prefix));
+        Setting::set('cn_prefix', strtoupper($this->cn_prefix));
         Setting::set('number_padding', $this->number_padding, 'integer');
         Setting::set('dn_start_number', $this->dn_start_number, 'integer');
+        Setting::set('cn_start_number', $this->cn_start_number, 'integer');
         Setting::set('app_font_size', $this->app_font_size, 'integer');
 
         $this->dispatch('font-size-saved', size: (int) $this->app_font_size);
@@ -258,7 +266,7 @@ new #[Title('CRM Settings')] class extends Component {
                 <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Set the VAT rate and prefix/padding used to generate doc numbers.</p>
             </div>
             <div class="space-y-3">
-                <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
                     <flux:input
                         wire:model="vat_rate"
                         type="number"
@@ -269,8 +277,10 @@ new #[Title('CRM Settings')] class extends Component {
                     />
                     <flux:input wire:model="dn_prefix" :label="__('DN Prefix')" :placeholder="__('DN')" maxlength="10" />
                     <flux:input wire:model="inv_prefix" :label="__('Invoice Prefix')" :placeholder="__('INV')" maxlength="10" />
+                    <flux:input wire:model="cn_prefix" :label="__('Credit Note Prefix')" :placeholder="__('CN')" maxlength="10" />
                     <flux:input wire:model="number_padding" type="number" min="1" max="10" :label="__('Padding')" :description="__('e.g. 4 → 0001')" />
                     <flux:input wire:model="dn_start_number" type="number" min="1" :label="__('DN Start Number')" :description="__('First DN sequence number.')" />
+                    <flux:input wire:model="cn_start_number" type="number" min="1" :label="__('Credit Note Start Number')" :description="__('First CN sequence number.')" />
                 </div>
                 <p class="text-xs text-zinc-500 dark:text-zinc-400 font-mono">
                     Preview: {{ strtoupper($dn_prefix).'-'.str_pad($dn_start_number ?: '1', (int) $number_padding, '0', STR_PAD_LEFT) }}

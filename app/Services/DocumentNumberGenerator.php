@@ -25,7 +25,11 @@ class DocumentNumberGenerator
                 ->orderByDesc('id')
                 ->first();
 
-            $startFloor = ($type === 'DN') ? (int) Setting::get('dn_start_number', 1) : 1;
+            $startFloor = match ($type) {
+                'DN' => (int) Setting::get('dn_start_number', 1),
+                'CN' => (int) Setting::get('cn_start_number', 1),
+                default => 1,
+            };
             $nextSequence = max($last ? $this->extractSequence($last->doc_number) + 1 : 1, $startFloor);
 
             return sprintf('%s-%s', $prefix, str_pad((string) $nextSequence, $padding, '0', STR_PAD_LEFT));

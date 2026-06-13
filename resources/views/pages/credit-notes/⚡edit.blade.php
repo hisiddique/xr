@@ -8,24 +8,27 @@ use Flux\Flux;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Edit Invoice')] class extends Component {
+new #[Title('Edit Credit Note')] class extends Component {
     use ValidatesDocumentItems;
     public Document $document;
 
     public string $doc_date = '';
     public string $order_no = '';
+    public string $reason = '';
+    public ?int $credited_invoice_id = null;
     public ?int $assigned_to = null;
     public string $assigneeName = '';
     public array $items = [];
     public array $units = [];
     public array $users = [];
     public bool $emailAfterSave = false;
-    public ?string $conversionNotice = null;
 
     public function mount(): void
     {
         $this->doc_date = $this->document->doc_date->format('Y-m-d');
         $this->order_no = $this->document->order_no ?? '';
+        $this->reason = $this->document->reason ?? '';
+        $this->credited_invoice_id = $this->document->credited_invoice_id;
         $this->assigned_to = $this->document->assigned_to ?? $this->document->created_by;
         $this->assigneeName = $this->document->assignee?->name ?? $this->document->creator?->name ?? '';
         $this->items = $this->document->items->map(fn ($item) => [
@@ -40,7 +43,12 @@ new #[Title('Edit Invoice')] class extends Component {
         $this->users = \App\Models\User::orderBy('name')->get(['id', 'name'])->toArray();
 
         if (session()->has('success')) {
-            $this->conversionNotice = session('success');
+            Flux::toast(
+                heading: __('Credit Note Created'),
+                text: session('success'),
+                variant: 'success',
+                duration: 0,
+            );
         }
     }
 
@@ -54,6 +62,7 @@ new #[Title('Edit Invoice')] class extends Component {
         $this->validate(
             [
                 'doc_date' => 'required|date',
+                'reason' => 'nullable|string|max:1000',
                 'assigned_to' => 'nullable|integer|exists:users,id',
             ] + $this->documentItemRules(),
             $this->documentItemMessages(),
@@ -66,6 +75,7 @@ new #[Title('Edit Invoice')] class extends Component {
         $this->document->update([
             'doc_date' => $this->doc_date,
             'order_no' => $this->order_no ?: null,
+            'reason' => $this->reason ?: null,
             'assigned_to' => $this->assigned_to,
             'subtotal' => $totals['subtotal'],
             'trade_discount' => $totals['discount'],
@@ -74,7 +84,6 @@ new #[Title('Edit Invoice')] class extends Component {
             'total_value' => $totals['total'],
         ]);
 
-        // Sync items: delete old, create new
         $this->document->items()->delete();
         foreach ($this->items as $item) {
             $isNote = ! empty($item['is_note']);
@@ -94,11 +103,11 @@ new #[Title('Edit Invoice')] class extends Component {
 
         if ($this->emailAfterSave) {
             $this->emailAfterSave = false;
-            Flux::toast(variant: 'success', text: __('Invoice updated.'));
+            Flux::toast(variant: 'success', text: __('Credit note updated.'));
             $this->dispatch('open-email-modal');
         } else {
-            Flux::toast(variant: 'success', text: __('Invoice updated.'));
-            $this->redirect(route('invoices.show', $this->document), navigate: true);
+            Flux::toast(variant: 'success', text: __('Credit note updated.'));
+            $this->redirect(route('credit-notes.show', $this->document), navigate: true);
         }
     }
 
@@ -115,51 +124,21 @@ new #[Title('Edit Invoice')] class extends Component {
     x-on:open-email-modal.window="$flux.modal('email-document-{{ $document->id }}').show()"
 >
 
-    @if($this->conversionNotice)
-        <div
-            x-data="{ show: true }"
-            x-show="show"
-            class="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-500/20 dark:bg-emerald-500/10"
-        >
-            <flux:icon.check-circle class="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            <span class="flex-1 text-sm text-emerald-800 dark:text-emerald-300">{{ $this->conversionNotice }}</span>
-            <button
-                type="button"
-                x-on:click="show = false"
-                class="text-emerald-500 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-200"
-                aria-label="Dismiss"
-            >&times;</button>
-        </div>
-    @endif
-
     <x-ui.page-header
         :title="'Edit: '.$document->doc_number"
-        subtitle="Update the invoice details and line items."
+        subtitle="Update the credit note details and line items."
     >
         <x-slot:action>
-            <flux:button variant="ghost" icon="arrow-left" :href="route('invoices.show', $document)" wire:navigate>
+            <flux:button variant="ghost" icon="arrow-left" :href="route('credit-notes.show', $document)" wire:navigate>
                 Back
             </flux:button>
         </x-slot:action>
     </x-ui.page-header>
 
-    {{-- Converted-from badge --}}
-    @if($document->convertedFrom)
-        <div class="flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 dark:border-violet-500/20 dark:bg-violet-500/10">
-            <flux:icon.arrow-path class="size-4 text-violet-600 dark:text-violet-400" />
-            <span class="text-sm text-violet-700 dark:text-violet-300">
-                Converted from delivery note
-                <a href="{{ route('delivery-notes.show', $document->convertedFrom) }}" wire:navigate class="font-semibold underline hover:no-underline">
-                    {{ $document->convertedFrom->doc_number }}
-                </a>
-            </span>
-        </div>
-    @endif
-
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
 
     <form
-        x-data="lineItemForm(@js($items), @js($this->units), '{{ route('invoices.show', $document) }}', { line: { quantity: '1', price: '0.00' }, note: { price: '0.00' } })"
+        x-data="lineItemForm(@js($items), @js($this->units), '{{ route('credit-notes.show', $document) }}', { line: { quantity: '1', price: '0.00' }, note: { price: '0.00' } })"
         x-on:submit.prevent="submit()"
         x-on:keydown="handleKey($event)"
         x-on:exit-confirm-discard.window="cancel()"
@@ -186,7 +165,7 @@ new #[Title('Edit Invoice')] class extends Component {
                         <span class="ml-auto text-xs text-zinc-400">Read-only</span>
                     </div>
                 </div>
-                <flux:input wire:model="doc_date" type="date" :label="__('Invoice Date')" required />
+                <flux:input wire:model="doc_date" type="date" :label="__('Credit Note Date')" required />
                 <flux:input wire:model="order_no" :label="__('Order Reference')" :placeholder="__('Optional')" />
                 <div>
                     <flux:label>{{ __('Sales Person') }}</flux:label>
@@ -197,6 +176,26 @@ new #[Title('Edit Invoice')] class extends Component {
                         @endforeach
                     </flux:select>
                     @error('assigned_to') <flux:error>{{ $message }}</flux:error> @enderror
+                </div>
+                {{-- Against Invoice (read-only) --}}
+                <div>
+                    <flux:label>{{ __('Against Invoice') }}</flux:label>
+                    <div class="mt-1.5 flex items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-white/10 dark:bg-zinc-800">
+                        @if($document->creditedInvoice)
+                            <a
+                                href="{{ route('invoices.show', $document->creditedInvoice) }}"
+                                wire:navigate
+                                class="text-sm font-semibold text-indigo-600 underline hover:no-underline dark:text-indigo-400"
+                            >{{ $document->creditedInvoice->doc_number }}</a>
+                        @else
+                            <span class="text-sm text-zinc-400">—</span>
+                        @endif
+                        <span class="ml-auto text-xs text-zinc-400">Read-only</span>
+                    </div>
+                </div>
+                <div class="md:col-span-2">
+                    <flux:textarea wire:model="reason" :label="__('Reason')" :placeholder="__('Optional reason for this credit note…')" rows="2" />
+                    @error('reason') <flux:error>{{ $message }}</flux:error> @enderror
                 </div>
             </div>
         </div>
@@ -267,7 +266,7 @@ new #[Title('Edit Invoice')] class extends Component {
                                     <td class="px-4 py-2.5">
                                         <select
                                             x-model="row.per"
-                                                                                        class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                         >
                                             <option value="">—</option>
                                             <template x-for="unit in units" :key="unit">
@@ -299,7 +298,7 @@ new #[Title('Edit Invoice')] class extends Component {
 
         {{-- Sticky footer bar --}}
         <div class="sticky bottom-0 z-10 flex items-center justify-end gap-3 rounded-2xl border border-zinc-200/70 bg-white/95 px-4 py-3 shadow-[0_-1px_4px_rgba(16,24,40,0.06)] backdrop-blur dark:border-white/10 dark:bg-zinc-900/95">
-            <x-ui.back-button :fallback="route('invoices.show', $document)" confirm data-form-nav />
+            <x-ui.back-button :fallback="route('credit-notes.show', $document)" confirm data-form-nav />
             <flux:button variant="filled" type="submit" data-form-nav>Save Changes</flux:button>
             <flux:button variant="primary" type="button" x-on:click.prevent="submitAndEmail()" icon="envelope" data-form-nav>
                 Save &amp; Email

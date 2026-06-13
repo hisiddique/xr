@@ -26,6 +26,12 @@ new #[Title('Dashboard')] class extends Component {
     }
 
     #[Computed]
+    public function creditNoteCount(): int
+    {
+        return Document::creditNotes()->count();
+    }
+
+    #[Computed]
     public function greeting(): string
     {
         $hour = (int) now()->format('G');
@@ -42,9 +48,10 @@ new #[Title('Dashboard')] class extends Component {
     $isAdmin = auth()->user()?->isAdmin();
 
     $activeTiles = array_values(array_filter([
-        ['key' => 'c', 'label' => 'Customers',      'icon' => 'users',         'href' => route('customers.index')],
-        ['key' => 'd', 'label' => 'Delivery Notes', 'icon' => 'truck',         'href' => route('delivery-notes.index')],
-        ['key' => 'i', 'label' => 'Invoices',       'icon' => 'document-text', 'href' => route('invoices.index')],
+        ['key' => 'c', 'label' => 'Customers',      'icon' => 'users',          'href' => route('customers.index')],
+        ['key' => 'd', 'label' => 'Delivery Notes', 'icon' => 'truck',          'href' => route('delivery-notes.index')],
+        ['key' => 'i', 'label' => 'Invoices',       'icon' => 'document-text',  'href' => route('invoices.index')],
+        ['key' => 'n', 'label' => 'Credit Notes',   'icon' => 'receipt-refund', 'href' => route('credit-notes.index')],
         $isAdmin ? ['key' => 'r', 'label' => 'References', 'icon' => 'tag', 'menu' => [
             ['label' => 'Titles',        'icon' => 'identification', 'href' => route('reference-data.titles')],
             ['label' => 'Credit Terms',  'icon' => 'calendar-days',  'href' => route('reference-data.credit-terms')],
@@ -96,11 +103,12 @@ new #[Title('Dashboard')] class extends Component {
     </div>
 
     {{-- KPI Cards --}}
-    <div class="grid gap-4 sm:grid-cols-3">
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         @foreach([
-            ['label' => 'Customers',      'value' => $this->customerCount,      'icon' => 'users',         'bar' => 'bg-indigo-500',  'iconBg' => 'bg-indigo-50 dark:bg-indigo-500/10',   'iconText' => 'text-indigo-600 dark:text-indigo-400',   'href' => route('customers.index')],
-            ['label' => 'Delivery Notes', 'value' => $this->deliveryNoteCount,  'icon' => 'truck',         'bar' => 'bg-emerald-500', 'iconBg' => 'bg-emerald-50 dark:bg-emerald-500/10', 'iconText' => 'text-emerald-600 dark:text-emerald-400', 'href' => route('delivery-notes.index')],
-            ['label' => 'Invoices',       'value' => $this->invoiceCount,       'icon' => 'document-text', 'bar' => 'bg-amber-500',   'iconBg' => 'bg-amber-50 dark:bg-amber-500/10',     'iconText' => 'text-amber-600 dark:text-amber-400',     'href' => route('invoices.index')],
+            ['label' => 'Customers',      'value' => $this->customerCount,      'icon' => 'users',          'bar' => 'bg-indigo-500',  'iconBg' => 'bg-indigo-50 dark:bg-indigo-500/10',   'iconText' => 'text-indigo-600 dark:text-indigo-400',   'href' => route('customers.index')],
+            ['label' => 'Delivery Notes', 'value' => $this->deliveryNoteCount,  'icon' => 'truck',          'bar' => 'bg-emerald-500', 'iconBg' => 'bg-emerald-50 dark:bg-emerald-500/10', 'iconText' => 'text-emerald-600 dark:text-emerald-400', 'href' => route('delivery-notes.index')],
+            ['label' => 'Invoices',       'value' => $this->invoiceCount,       'icon' => 'document-text',  'bar' => 'bg-amber-500',   'iconBg' => 'bg-amber-50 dark:bg-amber-500/10',     'iconText' => 'text-amber-600 dark:text-amber-400',     'href' => route('invoices.index')],
+            ['label' => 'Credit Notes',   'value' => $this->creditNoteCount,    'icon' => 'receipt-refund', 'bar' => 'bg-rose-500',    'iconBg' => 'bg-rose-50 dark:bg-rose-500/10',       'iconText' => 'text-rose-600 dark:text-rose-400',       'href' => route('credit-notes.index')],
         ] as $kpi)
             <a
                 href="{{ $kpi['href'] }}"

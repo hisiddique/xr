@@ -79,6 +79,32 @@ test('bulkConvert clears the selection after running', function () {
         ->assertSet('selectedIds', []);
 });
 
+test('convertSingle converts and opens the success modal without redirecting', function () {
+    $user = User::factory()->admin()->create(['email_verified_at' => now()]);
+    $customer = Customer::factory()->create();
+
+    $dn = Document::factory()->deliveryNote()
+        ->for($customer, 'customer')
+        ->has(DocumentItem::factory(), 'items')
+        ->create(['status' => DocumentStatus::Active]);
+
+    $component = Livewire::actingAs($user)
+        ->test('pages::delivery-notes.index')
+        ->set('convertingNoteId', $dn->id)
+        ->call('convertSingle')
+        ->assertNoRedirect()
+        ->assertDispatched('conversion-succeeded');
+
+    $invoice = Document::where('type', DocumentType::Invoice)
+        ->where('converted_from_id', $dn->id)
+        ->firstOrFail();
+
+    $component->assertSet('convertedInvoiceId', $invoice->id)
+        ->assertSet('convertedInvoiceNumber', $invoice->doc_number);
+
+    expect($dn->fresh()->status)->toBe(DocumentStatus::Converted);
+});
+
 test('bulkConvert ignores invoice ids that sneak into the selection', function () {
     $user = User::factory()->admin()->create(['email_verified_at' => now()]);
     $customer = Customer::factory()->create();

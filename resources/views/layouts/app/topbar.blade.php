@@ -66,18 +66,25 @@
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 font-mono text-[10px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F5</kbd>
                     </a>
 
-                    <a
-                        href="{{ route('invoices.index') }}"
-                        wire:navigate
-                        @class([
-                            'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-                            'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('invoices.*'),
-                            'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('invoices.*'),
-                        ])
-                    >
-                        Invoices
-                        <kbd x-show="$store.hotkeys.showLabels" x-cloak class="rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 font-mono text-[10px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F6</kbd>
-                    </a>
+                    <flux:dropdown>
+                        <button
+                            type="button"
+                            @class([
+                                'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                                'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('invoices.*', 'credit-notes.*'),
+                                'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('invoices.*', 'credit-notes.*'),
+                            ])
+                        >
+                            Documents
+                            <svg class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </button>
+                        <flux:menu>
+                            <flux:menu.item :href="route('invoices.index')" wire:navigate>Invoices</flux:menu.item>
+                            <flux:menu.item :href="route('credit-notes.index')" wire:navigate>Credit Notes</flux:menu.item>
+                        </flux:menu>
+                    </flux:dropdown>
 
                     @if(auth()->user()?->isAdmin())
                         {{-- Reference Data dropdown --}}
@@ -143,6 +150,9 @@
                             </flux:menu.item>
                             <flux:menu.item :href="route('delivery-notes.create')" icon="truck" wire:navigate>
                                 {{ __('Delivery Note') }}
+                            </flux:menu.item>
+                            <flux:menu.item :href="route('credit-notes.create')" icon="receipt-refund" wire:navigate>
+                                {{ __('Credit Note') }}
                             </flux:menu.item>
                         </flux:menu>
                     </flux:dropdown>
@@ -275,6 +285,20 @@
                             >
                                 <flux:icon.document-text class="size-5 shrink-0" />
                                 Invoices
+                            </a>
+                        </li>
+                        <li>
+                            <a
+                                href="{{ route('credit-notes.index') }}"
+                                wire:navigate
+                                @class([
+                                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('credit-notes.*'),
+                                    'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('credit-notes.*'),
+                                ])
+                            >
+                                <flux:icon.receipt-refund class="size-5 shrink-0" />
+                                Credit Notes
                             </a>
                         </li>
 

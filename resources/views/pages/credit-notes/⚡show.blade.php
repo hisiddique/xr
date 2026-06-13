@@ -5,13 +5,13 @@ use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Invoice')] class extends Component
+new #[Title('Credit Note')] class extends Component
 {
     public Document $document;
 
     public function mount(): void
     {
-        $this->document->load(['customer', 'items', 'emailLogs', 'convertedFrom', 'creator', 'creditNotesIssued']);
+        $this->document->load(['customer', 'items', 'emailLogs', 'creditedInvoice', 'creator']);
     }
 
     #[On('email-log-updated')]
@@ -23,7 +23,7 @@ new #[Title('Invoice')] class extends Component
     #[On('document-deleted')]
     public function onDeleted(): void
     {
-        $this->redirect(route('invoices.index'), navigate: true);
+        $this->redirect(route('credit-notes.index'), navigate: true);
     }
 
     public function recordPrint(): void
@@ -32,15 +32,20 @@ new #[Title('Invoice')] class extends Component
     }
 }; ?>
 
-<div class="flex flex-col gap-6" x-data="showPageKeys({
-    edit: () => Livewire.navigate('{{ route('invoices.edit', $document) }}'),
-    viewPdf: () => window.open('{{ route('documents.pdf', $document) }}', '_blank'),
-    downloadPdf: () => window.location.href = '{{ route('documents.pdf.download', $document) }}',
-})">
+<div
+    class="flex flex-col gap-6"
+    x-data="showPageKeys({
+        f8: () => Flux.modal('email-document-{{ $document->id }}').show(),
+        edit: () => Livewire.navigate('{{ route('credit-notes.edit', $document) }}'),
+        viewPdf: () => window.open('{{ route('documents.pdf', $document) }}', '_blank'),
+        downloadPdf: () => window.location.href = '{{ route('documents.pdf.download', $document) }}',
+    })"
+    x-init="window.dnRunPostCreate('{{ route('documents.pdf', $document) }}', 'email-document-{{ $document->id }}', '{{ route('documents.record-print', $document) }}')"
+>
 
     {{-- Back link --}}
     <div>
-        <x-ui.back-button :fallback="route('invoices.index')" icon="arrow-left" size="sm">Back</x-ui.back-button>
+        <x-ui.back-button :fallback="route('credit-notes.index')" icon="arrow-left" size="sm">Back</x-ui.back-button>
     </div>
 
     {{-- Hero header card --}}
@@ -49,7 +54,7 @@ new #[Title('Invoice')] class extends Component
 
         {{-- Floating icon badge --}}
         <div class="absolute left-6 top-12 flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-[0_1px_2px_rgba(16,24,40,0.12),0_2px_8px_rgba(16,24,40,0.12)] ring-4 ring-white dark:bg-zinc-800 dark:ring-zinc-900">
-            <flux:icon.document-text class="size-6 text-indigo-600 dark:text-indigo-400" />
+            <flux:icon.receipt-refund class="size-6 text-indigo-600 dark:text-indigo-400" />
         </div>
 
         <div class="px-4 pb-4 pt-10">
@@ -64,34 +69,14 @@ new #[Title('Invoice')] class extends Component
                     @if($document->creator)
                         <span class="text-sm text-zinc-500 dark:text-zinc-400">· {{ __('Created by :name', ['name' => $document->creator->name]) }}</span>
                     @endif
-                    @if($document->convertedFrom)
-                        <a
-                            href="{{ route('delivery-notes.show', $document->convertedFrom) }}"
-                            wire:navigate
-                            class="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 ring-1 ring-inset ring-violet-600/20 hover:bg-violet-100 transition-colors dark:bg-violet-500/10 dark:text-violet-400"
-                        >
-                            <flux:icon.arrow-path class="size-3" />
-                            From {{ $document->convertedFrom->doc_number }}
-                        </a>
-                    @endif
-                    @foreach($document->creditNotesIssued as $creditNote)
-                        <a
-                            href="{{ route('credit-notes.show', $creditNote) }}"
-                            wire:navigate
-                            class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 hover:bg-amber-100 transition-colors dark:bg-amber-500/10 dark:text-amber-400"
-                        >
-                            <flux:icon.receipt-refund class="size-3" />
-                            Credited by {{ $creditNote->doc_number }}
-                        </a>
-                    @endforeach
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
-                    <flux:button variant="ghost" icon="pencil" size="sm" :href="route('invoices.edit', $document)" wire:navigate>
+                    <flux:button variant="ghost" icon="pencil" size="sm" :href="route('credit-notes.edit', $document)" wire:navigate>
                         Edit
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">e</kbd>
                     </flux:button>
-                    <livewire:pages::invoices.delete-modal :document="$document" :key="'delete-'.$document->id" />
+                    <livewire:pages::credit-notes.delete-modal :document="$document" :key="'delete-'.$document->id" />
                     <flux:button variant="ghost" icon="arrow-down-tray" size="sm" :href="route('documents.pdf.download', $document)">
                         Download PDF
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">⇧P</kbd>
@@ -110,9 +95,18 @@ new #[Title('Invoice')] class extends Component
                         x-on:click="$flux.modal('email-document-{{ $document->id }}').show()"
                     >
                         Send Email
+                        <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-indigo-300 bg-indigo-50 px-1 py-0.5 text-[10px] font-mono text-indigo-600 dark:border-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">F8</kbd>
                     </flux:button>
                 </div>
             </div>
+
+            {{-- Reason --}}
+            @if($document->reason)
+                <div class="mt-4 rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-800/50">
+                    <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Reason</p>
+                    <p class="mt-1 text-sm text-zinc-700 dark:text-zinc-300">{{ $document->reason }}</p>
+                </div>
+            @endif
         </div>
     </div>
 
@@ -181,7 +175,7 @@ new #[Title('Invoice')] class extends Component
                             <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($document->vat_amount, 2) }}</span>
                         </div>
                         <div class="flex justify-between border-t border-zinc-200 pt-3 dark:border-white/10">
-                            <span class="text-sm font-semibold text-zinc-900 dark:text-white">Total</span>
+                            <span class="text-sm font-semibold text-zinc-900 dark:text-white">Credit Total</span>
                             <span class="text-xl font-semibold tracking-tight tabular-nums text-zinc-900 dark:text-white">£{{ number_format($document->total_value, 2) }}</span>
                         </div>
                     </div>
@@ -190,7 +184,7 @@ new #[Title('Invoice')] class extends Component
 
         </div>
 
-        {{-- Right: Customer + Email log + source DN (1/3 width) --}}
+        {{-- Right: Customer + Credited Against + Email History (1/3 width) --}}
         <div class="flex flex-col gap-4">
 
             {{-- Customer --}}
@@ -213,13 +207,34 @@ new #[Title('Invoice')] class extends Component
                 </div>
             </x-ui.section-card>
 
+            {{-- Credited Against --}}
+            @if($document->creditedInvoice)
+                <x-ui.section-card title="Credited Against">
+                    <div class="flex items-center gap-3">
+                        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/10">
+                            <flux:icon.document-text class="size-5 text-violet-600 dark:text-violet-400" />
+                        </div>
+                        <div>
+                            <a
+                                href="{{ route('invoices.show', $document->creditedInvoice) }}"
+                                wire:navigate
+                                class="font-semibold text-zinc-900 hover:text-indigo-600 dark:text-white dark:hover:text-indigo-400 transition-colors font-mono"
+                            >
+                                {{ $document->creditedInvoice->doc_number }}
+                            </a>
+                            <p class="text-xs text-zinc-500 dark:text-zinc-400">{{ $document->creditedInvoice->doc_date->format('d F Y') }}</p>
+                        </div>
+                    </div>
+                </x-ui.section-card>
+            @endif
+
             {{-- Email History --}}
             <x-ui.section-card title="Email History">
                 @if($document->emailLogs->isEmpty())
                     <x-ui.empty-state
                         icon="envelope"
                         title="No emails sent yet"
-                        description="Send this invoice to the customer."
+                        description="Send this credit note to the customer."
                     />
                 @else
                     <ul class="space-y-3">

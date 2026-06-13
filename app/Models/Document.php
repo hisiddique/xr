@@ -35,6 +35,8 @@ class Document extends Model
         'created_by',
         'assigned_to',
         'converted_from_id',
+        'credited_invoice_id',
+        'reason',
     ];
 
     protected function casts(): array
@@ -102,5 +104,26 @@ class Document extends Model
     public function scopeInvoices(Builder $query): Builder
     {
         return $query->where('type', DocumentType::Invoice);
+    }
+
+    public function scopeCreditNotes(Builder $query): Builder
+    {
+        return $query->where('type', DocumentType::CreditNote);
+    }
+
+    /**
+     * The invoice this credit note is raised against.
+     */
+    public function creditedInvoice(): BelongsTo
+    {
+        return $this->belongsTo(Document::class, 'credited_invoice_id');
+    }
+
+    /**
+     * The credit notes raised against this invoice.
+     */
+    public function creditNotesIssued(): HasMany
+    {
+        return $this->hasMany(Document::class, 'credited_invoice_id');
     }
 }

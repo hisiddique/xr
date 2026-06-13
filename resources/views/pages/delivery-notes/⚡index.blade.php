@@ -50,6 +50,27 @@ new #[Title('Delivery Notes')] class extends Component
 
     public ?int $convertingNoteId = null;
 
+    public ?int $convertedInvoiceId = null;
+
+    public ?string $convertedInvoiceNumber = null;
+
+    public ?int $emailingDocumentId = null;
+
+    /** @return Document|null */
+    #[Computed]
+    public function emailingDocument(): ?Document
+    {
+        return $this->emailingDocumentId
+            ? Document::with('customer')->find($this->emailingDocumentId)
+            : null;
+    }
+
+    #[\Livewire\Attributes\On('email-modal-closed')]
+    public function clearEmailingDocument(): void
+    {
+        $this->emailingDocumentId = null;
+    }
+
     /** @return Document|null */
     #[Computed]
     public function convertingNote()
@@ -137,14 +158,22 @@ new #[Title('Delivery Notes')] class extends Component
         }
 
         try {
-            $action->handle($note);
-            Flux::toast(variant: 'success', text: __('Delivery note :number converted.', ['number' => $note->doc_number]));
+            $invoice = $action->handle($note);
         } catch (DomainException $e) {
             Flux::toast(variant: 'warning', text: $e->getMessage());
+            $this->convertingNoteId = null;
+            Flux::modal('convert-dn')->close();
+
+            return;
         }
 
         $this->convertingNoteId = null;
         Flux::modal('convert-dn')->close();
+
+        $this->convertedInvoiceId = $invoice->id;
+        $this->convertedInvoiceNumber = $invoice->doc_number;
+
+        $this->dispatch('conversion-succeeded');
     }
 
     public function bulkConvert(ConvertDeliveryNoteToInvoice $action): void
@@ -532,6 +561,7 @@ new #[Title('Delivery Notes')] class extends Component
                                                 size="xs"
                                                 variant="ghost"
                                                 icon="envelope"
+                                                wire:click="$set('emailingDocumentId', {{ $note->id }})"
                                                 x-on:click="$flux.modal('email-document-{{ $note->id }}').show()"
                                                 @class([
                                                     '!text-emerald-600 hover:!text-emerald-700 dark:!text-emerald-400' => $note->last_email_status === 'sent',
@@ -564,7 +594,6 @@ new #[Title('Delivery Notes')] class extends Component
                                             />
                                         @endif
                                         <livewire:pages::delivery-notes.delete-modal :document="$note" :key="'delete-'.$note->id" />
-                                        <livewire:pages::documents.email-modal :document="$note" :key="'email-'.$note->id" />
                                     </div>
                                 </td>
                             </tr>
@@ -679,5 +708,45 @@ new #[Title('Delivery Notes')] class extends Component
             </div>
         </div>
     </flux:modal>
+
+    <div x-data x-on:conversion-succeeded.window="$flux.modal('conversion-success').show()"></div>
+
+    <flux:modal name="conversion-success" class="max-w-md">
+        <div class="space-y-6">
+            <div class="flex items-start gap-3">
+                <flux:icon.check-circle class="size-6 shrink-0 text-emerald-500" />
+                <div>
+                    <flux:heading size="lg">{{ __('Invoice created') }}</flux:heading>
+                    <flux:subheading>
+                        @if($convertedInvoiceNumber)
+                            {{ __('Invoice :number was created from the delivery note.', ['number' => $convertedInvoiceNumber]) }}
+                        @endif
+                    </flux:subheading>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3">
+                <flux:modal.close>
+                    <flux:button variant="ghost" type="button">{{ __('Close') }}</flux:button>
+                </flux:modal.close>
+                @if($convertedInvoiceId)
+                    <flux:button
+                        variant="primary"
+                        icon="eye"
+                        :href="route('invoices.show', $convertedInvoiceId)"
+                        wire:navigate
+                    >
+                        {{ __('View invoice') }}
+                    </flux:button>
+                @endif
+            </div>
+        </div>
+    </flux:modal>
+
+    @if($this->emailingDocument)
+        <livewire:pages::documents.email-modal
+            :document="$this->emailingDocument"
+            :autoOpen="true"
+            :key="'email-'.$emailingDocumentId" />
+    @endif
 
 </div>

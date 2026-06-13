@@ -29,6 +29,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('invoices/{document}/edit', 'pages::invoices.edit')->name('invoices.edit');
     Route::livewire('invoices/{document}', 'pages::invoices.show')->name('invoices.show');
 
+    // Credit Notes
+    Route::livewire('credit-notes', 'pages::credit-notes.index')->name('credit-notes.index');
+    Route::livewire('credit-notes/create', 'pages::credit-notes.create')->name('credit-notes.create');
+    Route::livewire('credit-notes/{document}/edit', 'pages::credit-notes.edit')->name('credit-notes.edit');
+    Route::livewire('credit-notes/{document}', 'pages::credit-notes.show')->name('credit-notes.show');
+
     // Document PDF
     Route::get('documents/{document}/pdf', [DocumentPdfController::class, 'show'])->name('documents.pdf');
     Route::get('documents/{document}/pdf/download', [DocumentPdfController::class, 'download'])->name('documents.pdf.download');
