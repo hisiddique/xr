@@ -2,6 +2,7 @@
 
 use App\Livewire\Concerns\WithSorting;
 use App\Models\Payment;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -212,6 +213,26 @@ new #[Title('Payments')] class extends Component
                                     <div class="flex items-center justify-end gap-1">
                                         <flux:button size="xs" variant="ghost" icon="eye" :href="route('payments.show', $payment)" wire:navigate data-row-action="view" />
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('payments.edit', $payment)" wire:navigate data-row-action="edit" />
+                                        @if($payment->receipt_path)
+                                            <flux:button
+                                                size="xs"
+                                                variant="ghost"
+                                                icon="arrow-down-tray"
+                                                :href="Storage::disk('public')->url($payment->receipt_path)"
+                                                target="_blank"
+                                                title="{{ __('Download receipt') }}"
+                                                data-row-action="download-receipt"
+                                            />
+                                        @else
+                                            <flux:button
+                                                size="xs"
+                                                variant="ghost"
+                                                icon="arrow-down-tray"
+                                                disabled
+                                                title="{{ __('No receipt uploaded') }}"
+                                                class="opacity-30 cursor-not-allowed"
+                                            />
+                                        @endif
                                     </div>
                                 </td>
                             </tr>

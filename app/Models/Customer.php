@@ -103,4 +103,14 @@ class Customer extends Model
     {
         return $this->hasMany(Document::class)->where('type', 'INV');
     }
+
+    public function creditNotes(): HasMany
+    {
+        return $this->hasMany(Document::class)->where('type', 'CN');
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
 }
