@@ -35,6 +35,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('credit-notes/{document}/edit', 'pages::credit-notes.edit')->name('credit-notes.edit');
     Route::livewire('credit-notes/{document}', 'pages::credit-notes.show')->name('credit-notes.show');
 
+    // Payments
+    Route::livewire('payments', 'pages::payments.index')->name('payments.index');
+    Route::livewire('payments/create', 'pages::payments.form')->name('payments.create');
+    Route::livewire('payments/{payment}/edit', 'pages::payments.form')->name('payments.edit');
+    Route::livewire('payments/{payment}', 'pages::payments.show')->name('payments.show');
+
     // Document PDF
     Route::get('documents/{document}/pdf', [DocumentPdfController::class, 'show'])->name('documents.pdf');
     Route::get('documents/{document}/pdf/download', [DocumentPdfController::class, 'download'])->name('documents.pdf.download');
@@ -54,6 +60,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::livewire('reference-data/credit-terms', 'pages::reference-data.credit-terms')->name('reference-data.credit-terms');
         Route::livewire('reference-data/credit-limits', 'pages::reference-data.credit-limits')->name('reference-data.credit-limits');
         Route::livewire('reference-data/units', 'pages::reference-data.units')->name('reference-data.units');
+        Route::livewire('reference-data/payment-methods', 'pages::reference-data.payment-methods')->name('reference-data.payment-methods');
     });
 });
 

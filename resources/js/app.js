@@ -596,6 +596,8 @@ document.addEventListener('alpine:init', () => {
             switch (num) {
                 case 1: Livewire.navigate('/customers/create'); break;
                 case 2: {
+                    const submitBtn = document.querySelector('[data-form-submit]');
+                    if (submitBtn) { submitBtn.click(); break; }
                     const form = Array.from(document.querySelectorAll('form'))
                         .find((f) => f.offsetParent !== null);
                     if (form) {
@@ -912,6 +914,12 @@ document.addEventListener('alpine:init', () => {
         rows: initialRows,
         units,
         fallback,
+        invoiceSuggestions: [],
+        thOpen: false,
+        thSearch: '',
+        thActiveIdx: -1,
+        thRowIdx: null,
+        thPosition: { top: 0, left: 0, width: 0 },
         _lineDefault: { details: '', quantity: '', price: '', per: '', is_note: false, ...(defaults.line || {}) },
         _noteDefault: { details: '', quantity: '0', price: '', per: '', is_note: true, ...(defaults.note || {}) },
 
@@ -920,11 +928,25 @@ document.addEventListener('alpine:init', () => {
                 this.$el.querySelector('input:not([type=hidden]):not([type=file]), textarea, select')?.focus();
             });
 
+            if (this.$wire) {
+                this.$wire.$watch('invoiceItemSuggestions', (v) => { this.invoiceSuggestions = v ?? []; });
+            }
+
+            const reposition = () => {
+                if (this.thOpen && this.thRowIdx !== null) this._thUpdatePosition(this.thRowIdx);
+            };
+            window.addEventListener('scroll', reposition, true);
+            window.addEventListener('resize', reposition);
+            this.$cleanup(() => {
+                window.removeEventListener('scroll', reposition, true);
+                window.removeEventListener('resize', reposition);
+            });
+
             this.$el.addEventListener('change', (e) => {
                 if (e.target.tagName !== 'SELECT') return;
                 const tr = e.target.closest('tr[data-row-idx]');
                 if (!tr) {
-                    this.focusFirstItem();
+                    this.moveFormField(e.target, 'linear', 1);
                     return;
                 }
                 const rowIdx = parseInt(tr.dataset.rowIdx, 10);
@@ -954,6 +976,18 @@ document.addEventListener('alpine:init', () => {
 
         focusFirstItem() {
             this._focusWithRetry(this.$refs.rowsBody?.querySelector('input[data-row-details]'));
+        },
+
+        fillRow(i, item) {
+            Object.assign(this.rows[i], item);
+            this.$nextTick(() => {
+                const tr = this.$refs.rowsBody?.querySelector(`tr[data-row-idx="${i}"]`);
+                const qty = tr?.querySelector('input[data-row-qty]');
+                if (qty) {
+                    qty.focus();
+                    if (typeof qty.select === 'function') qty.select();
+                }
+            });
         },
 
         add() {
@@ -1098,6 +1132,82 @@ document.addEventListener('alpine:init', () => {
                     if (sel) sel.value = row.per;
                 });
             });
+        },
+
+        get thFiltered() {
+            const q = this.thSearch.toLowerCase();
+            return this.invoiceSuggestions.filter((s) => {
+                if (q && !s.details.toLowerCase().includes(q)) return false;
+                return !this.rows.some((r, idx) =>
+                    idx !== this.thRowIdx && r.details === s.details && r.from_invoice === true
+                );
+            });
+        },
+
+        get thGhostSuffix() {
+            if (!this.thSearch || !this.thFiltered.length) return '';
+            const first = this.thFiltered[0].details;
+            if (first.toLowerCase().startsWith(this.thSearch.toLowerCase())) {
+                return first.slice(this.thSearch.length);
+            }
+            return '';
+        },
+
+        _thUpdatePosition(i) {
+            const tr = this.$refs.rowsBody?.querySelector(`tr[data-row-idx="${i}"]`);
+            const input = tr?.querySelector('input[data-row-details]');
+            if (!input) return;
+            const rect = input.getBoundingClientRect();
+            this.thPosition = { top: rect.bottom, left: rect.left, width: rect.width };
+        },
+
+        thFocus(i) {
+            this.thRowIdx = i;
+            this.thSearch = this.rows[i]?.details ?? '';
+            this.thActiveIdx = -1;
+            this._thUpdatePosition(i);
+            this.$nextTick(() => { this.thOpen = this.thFiltered.length > 0; });
+        },
+
+        thInput(value, i) {
+            this.thRowIdx = i;
+            this.thSearch = value;
+            this.thActiveIdx = -1;
+            this._thUpdatePosition(i);
+            this.thOpen = this.thFiltered.length > 0 && value.length > 0;
+        },
+
+        thKeydown(e, i) {
+            if (!this.thOpen || this.thRowIdx !== i) return;
+            if (e.key === 'ArrowDown') {
+                this.thActiveIdx = Math.min(this.thActiveIdx + 1, this.thFiltered.length - 1);
+                e.preventDefault(); e.stopPropagation();
+            } else if (e.key === 'ArrowUp') {
+                this.thActiveIdx = Math.max(this.thActiveIdx - 1, 0);
+                e.preventDefault(); e.stopPropagation();
+            } else if (e.key === 'Enter' && this.thOpen) {
+                const toPick = this.thActiveIdx >= 0 ? this.thFiltered[this.thActiveIdx] : (this.thGhostSuffix ? this.thFiltered[0] : null);
+                if (toPick) { this.thPick(toPick); e.preventDefault(); e.stopPropagation(); }
+            } else if (e.key === 'Escape') {
+                this.thOpen = false; this.thActiveIdx = -1;
+            }
+        },
+
+        thPick(s) {
+            const i = this.thRowIdx;
+            Object.assign(this.rows[i], s);
+            this.thOpen = false;
+            this.thSearch = s.details;
+            this.thActiveIdx = -1;
+            this.$nextTick(() => {
+                const tr = this.$refs.rowsBody?.querySelector(`tr[data-row-idx="${i}"]`);
+                const qty = tr?.querySelector('input[data-row-qty]');
+                if (qty) { qty.focus(); if (typeof qty.select === 'function') qty.select(); }
+            });
+        },
+
+        thBlur() {
+            setTimeout(() => { this.thOpen = false; }, 150);
         },
 
         submit() {
@@ -1426,6 +1536,9 @@ document.addEventListener('alpine:init', () => {
         if (!next) return false;
         next.focus();
         if (typeof next.select === 'function' && next.type !== 'number' && next.type !== 'date') next.select();
+        if (next.tagName === 'SELECT' && typeof next.showPicker === 'function') {
+            try { next.showPicker(); } catch (_) {}
+        }
         return true;
     };
 
@@ -1434,6 +1547,27 @@ document.addEventListener('alpine:init', () => {
     // Apply via `x-data="formNav" x-on:keydown="handleKey($event)"` on a <form>.
     window.Alpine.data('formNav', () => ({
         _selector: 'input:not([type=hidden]):not([disabled]):not([type=submit]):not([type=button]), select:not([disabled]), textarea:not([disabled]), [data-form-stop]:not([disabled]), [data-flux-switch]:not([disabled])',
+
+        init() {
+            this.$el.addEventListener('change', (e) => {
+                if (e.target.tagName !== 'SELECT') return;
+                this._advanceFocus(e.target);
+            });
+        },
+
+        _advanceFocus(el) {
+            const all = Array.from(this.$el.querySelectorAll(this._selector))
+                .filter((el) => el.offsetParent !== null);
+            const i = all.indexOf(el);
+            if (i < 0) return;
+            const next = all[i + 1];
+            if (!next) return;
+            next.focus();
+            if (typeof next.select === 'function' && next.type !== 'number' && next.type !== 'date') next.select();
+            if (next.tagName === 'SELECT' && typeof next.showPicker === 'function') {
+                try { next.showPicker(); } catch (_) {}
+            }
+        },
 
         handleKey(e) {
             if (e.key !== 'Enter') return;
@@ -1446,6 +1580,8 @@ document.addEventListener('alpine:init', () => {
 
             if (ctrl) {
                 e.preventDefault();
+                const submitBtn = this.$el.querySelector('[data-form-submit]');
+                if (submitBtn) { submitBtn.click(); return; }
                 this.$el.requestSubmit?.() || this.$el.querySelector('button[type="submit"]')?.click();
                 return;
             }
@@ -1454,15 +1590,45 @@ document.addEventListener('alpine:init', () => {
             if (tag === 'BUTTON' && !e.target.hasAttribute('data-flux-switch') && !e.target.hasAttribute('data-form-nav')) return;
 
             e.preventDefault();
-            const all = Array.from(this.$el.querySelectorAll(this._selector))
-                .filter((el) => el.offsetParent !== null);
-            const i = all.indexOf(e.target);
-            if (i < 0) return;
-            const next = all[i + 1];
-            if (next) {
-                next.focus();
-                if (typeof next.select === 'function' && next.type !== 'number' && next.type !== 'date') next.select();
+            this._advanceFocus(e.target);
+        },
+    }));
+
+    // ─── Payment Allocator Component ────────────────────────────────
+    window.Alpine.data('paymentAllocator', ({ rows }) => ({
+        rows: rows.map(r => ({ ...r, amount: r.existing_allocation, creditAmount: 0 })),
+        get creditBalance() { return parseFloat(this.$wire.creditBalance) || 0; },
+        get paymentAmount() { return parseFloat(this.$wire.amount) || 0; },
+        get totalAllocated() {
+            return this.rows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+        },
+        get totalCreditUsed() {
+            return this.rows.reduce((sum, r) => sum + (parseFloat(r.creditAmount) || 0), 0);
+        },
+        get budgetRemaining() {
+            return Math.max(0, this.paymentAmount - this.totalAllocated);
+        },
+        get unallocatedBalance() {
+            return Math.max(0, this.paymentAmount - this.totalAllocated);
+        },
+        autoAllocate() {
+            let payment = this.paymentAmount;
+            let credit = this.creditBalance;
+            if (payment <= 0 && credit <= 0) {
+                this.rows.forEach(r => { r.amount = 0; });
+                return;
             }
+            this.rows.forEach(r => {
+                const outstanding = parseFloat(r.max_allocatable) || 0;
+                if (outstanding <= 0) { r.amount = 0; return; }
+                const creditCover = Math.min(outstanding, credit);
+                credit -= creditCover;
+                const afterCredit = outstanding - creditCover;
+                const paymentCover = Math.min(afterCredit, payment);
+                payment -= paymentCover;
+                r.creditAmount = Math.round(creditCover * 100) / 100;
+                r.amount = Math.round((creditCover + paymentCover) * 100) / 100;
+            });
         },
     }));
 

@@ -19,6 +19,8 @@ class DocumentItem extends Model
         'price',
         'per',
         'line_value',
+        'original_amount',
+        'refund_amount',
     ];
 
     protected function casts(): array
@@ -28,6 +30,8 @@ class DocumentItem extends Model
             'quantity' => 'decimal:2',
             'price' => 'decimal:2',
             'line_value' => 'decimal:2',
+            'original_amount' => 'decimal:2',
+            'refund_amount' => 'decimal:2',
         ];
     }
 }

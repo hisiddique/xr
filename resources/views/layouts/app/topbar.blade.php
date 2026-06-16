@@ -71,8 +71,8 @@
                             type="button"
                             @class([
                                 'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-                                'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('invoices.*', 'credit-notes.*'),
-                                'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('invoices.*', 'credit-notes.*'),
+                                'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*'),
+                                'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*'),
                             ])
                         >
                             Documents
@@ -83,6 +83,7 @@
                         <flux:menu>
                             <flux:menu.item :href="route('invoices.index')" wire:navigate>Invoices</flux:menu.item>
                             <flux:menu.item :href="route('credit-notes.index')" wire:navigate>Credit Notes</flux:menu.item>
+                            <flux:menu.item :href="route('payments.index')" wire:navigate>Payments</flux:menu.item>
                         </flux:menu>
                     </flux:dropdown>
 
@@ -107,6 +108,7 @@
                                 <flux:menu.item :href="route('reference-data.credit-terms')" wire:navigate>Credit Terms</flux:menu.item>
                                 <flux:menu.item :href="route('reference-data.credit-limits')" wire:navigate>Credit Limits</flux:menu.item>
                                 <flux:menu.item :href="route('reference-data.units')" wire:navigate>Units</flux:menu.item>
+                                <flux:menu.item :href="route('reference-data.payment-methods')" wire:navigate>Payment Methods</flux:menu.item>
                             </flux:menu>
                         </flux:dropdown>
 
@@ -153,6 +155,9 @@
                             </flux:menu.item>
                             <flux:menu.item :href="route('credit-notes.create')" icon="receipt-refund" wire:navigate>
                                 {{ __('Credit Note') }}
+                            </flux:menu.item>
+                            <flux:menu.item :href="route('payments.create')" icon="banknotes" wire:navigate>
+                                {{ __('Payment') }}
                             </flux:menu.item>
                         </flux:menu>
                     </flux:dropdown>
@@ -301,6 +306,20 @@
                                 Credit Notes
                             </a>
                         </li>
+                        <li>
+                            <a
+                                href="{{ route('payments.index') }}"
+                                wire:navigate
+                                @class([
+                                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('payments.*'),
+                                    'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('payments.*'),
+                                ])
+                            >
+                                <flux:icon.banknotes class="size-5 shrink-0" />
+                                Payments
+                            </a>
+                        </li>
 
                         @if(auth()->user()?->isAdmin())
                             <li class="pt-2">
@@ -360,6 +379,20 @@
                                 >
                                     <flux:icon.tag class="size-5 shrink-0" />
                                     Units
+                                </a>
+                            </li>
+                            <li>
+                                <a
+                                    href="{{ route('reference-data.payment-methods') }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('reference-data.payment-methods'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('reference-data.payment-methods'),
+                                    ])
+                                >
+                                    <flux:icon.tag class="size-5 shrink-0" />
+                                    Payment Methods
                                 </a>
                             </li>
                             <li>

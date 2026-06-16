@@ -169,6 +169,21 @@
                                     <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-auto rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F6</kbd>
                                 </a>
                             </li>
+                            <li>
+                                <a
+                                    href="{{ route('payments.index') }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'bg-indigo-50 text-indigo-700 border-l-[3px] border-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('payments.*'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('payments.*'),
+                                    ])
+                                >
+                                    <flux:icon.banknotes class="size-5 shrink-0" />
+                                    <span class="flex-1">Payments</span>
+                                    <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-auto rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F7</kbd>
+                                </a>
+                            </li>
                         </ul>
                     </div>
 
@@ -248,6 +263,19 @@
                                                 ])
                                             >
                                                 Units
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a
+                                                href="{{ route('reference-data.payment-methods') }}"
+                                                wire:navigate
+                                                @class([
+                                                    'flex items-center gap-3 rounded-lg py-2 pr-3 pl-9 text-sm font-medium transition-colors',
+                                                    'bg-indigo-50 text-indigo-700 border-l-[3px] border-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('reference-data.payment-methods'),
+                                                    'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('reference-data.payment-methods'),
+                                                ])
+                                            >
+                                                Payment Methods
                                             </a>
                                         </li>
                                     </ul>

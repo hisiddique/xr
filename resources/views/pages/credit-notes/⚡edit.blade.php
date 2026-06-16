@@ -19,9 +19,10 @@ new #[Title('Edit Credit Note')] class extends Component {
     public ?int $assigned_to = null;
     public string $assigneeName = '';
     public array $items = [];
+    public string $global_amount = '';
     public array $units = [];
     public array $users = [];
-    public bool $emailAfterSave = false;
+    public array $invoiceItemSuggestions = [];
 
     public function mount(): void
     {
@@ -31,6 +32,8 @@ new #[Title('Edit Credit Note')] class extends Component {
         $this->credited_invoice_id = $this->document->credited_invoice_id;
         $this->assigned_to = $this->document->assigned_to ?? $this->document->created_by;
         $this->assigneeName = $this->document->assignee?->name ?? $this->document->creator?->name ?? '';
+        $this->global_amount = $this->document->global_amount > 0 ? (string) $this->document->global_amount : '';
+        $fromInvoice = (bool) $this->document->credited_invoice_id;
         $this->items = $this->document->items->map(fn ($item) => [
             'id' => $item->id,
             'details' => $item->details,
@@ -38,9 +41,13 @@ new #[Title('Edit Credit Note')] class extends Component {
             'quantity' => (string) $item->quantity,
             'price' => (string) $item->price,
             'per' => $item->per ?? '',
+            'original_amount' => (string) ($item->original_amount ?? '0.00'),
+            'refund_amount' => (string) ($item->refund_amount ?? '0.00'),
+            'from_invoice' => $fromInvoice && $item->original_amount > 0,
         ])->toArray();
         $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
         $this->users = \App\Models\User::orderBy('name')->get(['id', 'name'])->toArray();
+        $this->invoiceItemSuggestions = $this->buildInvoiceSuggestions($this->credited_invoice_id);
 
         if (session()->has('success')) {
             Flux::toast(
@@ -54,9 +61,10 @@ new #[Title('Edit Credit Note')] class extends Component {
 
     public function save(): void
     {
-        $this->items = array_values(array_filter($this->items, fn ($i) => trim((string) ($i['details'] ?? '')) !== ''
+        $this->items = array_values(array_filter($this->items, fn ($i) =>
+            trim((string) ($i['details'] ?? '')) !== ''
             || (float) ($i['quantity'] ?? 0) > 0
-            || (float) ($i['price'] ?? 0) > 0
+            || (float) ($i['refund_amount'] ?? 0) > 0
         ));
 
         $this->validate(
@@ -64,24 +72,23 @@ new #[Title('Edit Credit Note')] class extends Component {
                 'doc_date' => 'required|date',
                 'reason' => 'nullable|string|max:1000',
                 'assigned_to' => 'nullable|integer|exists:users,id',
-            ] + $this->documentItemRules(),
-            $this->documentItemMessages(),
+                'global_amount' => 'nullable|numeric|min:0',
+            ],
         );
 
-        $customer = $this->document->customer;
-        $calculator = new DocumentTotalsCalculator();
-        $totals = $calculator->calculate(collect($this->items), $customer);
+        $totalValue = \App\Services\DocumentTotalsCalculator::creditNoteTotal(collect($this->items), (float) ($this->global_amount ?: 0));
 
         $this->document->update([
-            'doc_date' => $this->doc_date,
-            'order_no' => $this->order_no ?: null,
-            'reason' => $this->reason ?: null,
-            'assigned_to' => $this->assigned_to,
-            'subtotal' => $totals['subtotal'],
-            'trade_discount' => $totals['discount'],
-            'discount_amount' => $totals['discount_amount'],
-            'vat_amount' => $totals['vat'],
-            'total_value' => $totals['total'],
+            'doc_date'       => $this->doc_date,
+            'order_no'       => $this->order_no ?: null,
+            'reason'         => $this->reason ?: null,
+            'assigned_to'    => $this->assigned_to,
+            'global_amount'  => (float) ($this->global_amount ?: 0),
+            'subtotal'       => 0,
+            'trade_discount' => 0,
+            'discount_amount'=> 0,
+            'vat_amount'     => 0,
+            'total_value'    => $totalValue,
         ]);
 
         $this->document->items()->delete();
@@ -92,37 +99,61 @@ new #[Title('Edit Credit Note')] class extends Component {
             $per = $isNote ? null : ($item['per'] ?: null);
 
             $this->document->items()->create([
-                'details' => $item['details'],
-                'is_note' => $isNote,
-                'quantity' => $qty,
-                'price' => $price,
-                'per' => $per,
-                'line_value' => $isNote ? 0 : round(\App\Services\DocumentTotalsCalculator::lineValue(['quantity' => $qty, 'price' => $price, 'per' => $per]), 2),
+                'details'         => $item['details'],
+                'is_note'         => $isNote,
+                'quantity'        => $qty,
+                'price'           => $price,
+                'per'             => $per,
+                'line_value'      => $isNote ? 0 : round(\App\Services\DocumentTotalsCalculator::lineValue(['quantity' => $qty, 'price' => $price, 'per' => $per]), 2),
+                'original_amount' => $isNote ? null : (isset($item['original_amount']) && (float) $item['original_amount'] > 0 ? (float) $item['original_amount'] : null),
+                'refund_amount'   => $isNote ? 0 : (float) ($item['refund_amount'] ?? 0),
             ]);
         }
 
-        if ($this->emailAfterSave) {
-            $this->emailAfterSave = false;
-            Flux::toast(variant: 'success', text: __('Credit note updated.'));
-            $this->dispatch('open-email-modal');
-        } else {
-            Flux::toast(variant: 'success', text: __('Credit note updated.'));
-            $this->redirect(route('credit-notes.show', $this->document), navigate: true);
-        }
+        Flux::toast(variant: 'success', text: __('Credit note updated.'));
+        $this->redirect(route('credit-notes.show', $this->document), navigate: true);
     }
 
-    public function saveAndEmail(): void
+    public function updatedCreditedInvoiceId(?int $value): void
     {
-        $this->emailAfterSave = true;
-        $this->save();
+        $this->invoiceItemSuggestions = $this->buildInvoiceSuggestions($value);
+    }
+
+    private function buildInvoiceSuggestions(?int $invoiceId): array
+    {
+        if (! $invoiceId) {
+            return [];
+        }
+
+        $invoice = Document::invoices()->with('items')->find($invoiceId);
+
+        if (! $invoice) {
+            return [];
+        }
+
+        return $invoice->items
+            ->filter(fn ($item) => ! $item->is_note)
+            ->map(fn ($item) => [
+                'id'              => null,
+                'details'         => $item->details,
+                'is_note'         => false,
+                'quantity'        => (string) $item->quantity,
+                'price'           => (string) $item->price,
+                'per'             => $item->per ?? '',
+                'original_amount' => (string) round(\App\Services\DocumentTotalsCalculator::lineValue([
+                    'quantity' => $item->quantity,
+                    'price'    => $item->price,
+                    'per'      => $item->per,
+                ]), 2),
+                'refund_amount'   => '',
+                'from_invoice'    => true,
+            ])
+            ->values()
+            ->toArray();
     }
 }; ?>
 
-<div
-    class="flex flex-col gap-4"
-    x-data
-    x-on:open-email-modal.window="$flux.modal('email-document-{{ $document->id }}').show()"
->
+<div class="flex flex-col gap-4">
 
     <x-ui.page-header
         :title="'Edit: '.$document->doc_number"
@@ -138,7 +169,7 @@ new #[Title('Edit Credit Note')] class extends Component {
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
 
     <form
-        x-data="lineItemForm(@js($items), @js($this->units), '{{ route('credit-notes.show', $document) }}', { line: { quantity: '1', price: '0.00' }, note: { price: '0.00' } })"
+        x-data="lineItemForm(@js($items), @js($this->units), '{{ route('credit-notes.show', $document) }}')"
         x-on:submit.prevent="submit()"
         x-on:keydown="handleKey($event)"
         x-on:exit-confirm-discard.window="cancel()"
@@ -193,9 +224,23 @@ new #[Title('Edit Credit Note')] class extends Component {
                         <span class="ml-auto text-xs text-zinc-400">Read-only</span>
                     </div>
                 </div>
-                <div class="md:col-span-2">
-                    <flux:textarea wire:model="reason" :label="__('Reason')" :placeholder="__('Optional reason for this credit note…')" rows="2" />
+                <div>
+                    <flux:input wire:model="reason" :label="__('Reason')" :placeholder="__('Optional reason for this credit note…')" />
                     @error('reason') <flux:error>{{ $message }}</flux:error> @enderror
+                </div>
+                <div>
+                    <flux:label>{{ __('Credit Amount') }}</flux:label>
+                    <div class="mt-1.5 flex items-center gap-1.5">
+                        <span class="text-sm text-zinc-500">£</span>
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            wire:model.live="global_amount"
+                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                        />
+                    </div>
+                    @error('global_amount') <flux:error>{{ $message }}</flux:error> @enderror
                 </div>
             </div>
         </div>
@@ -220,24 +265,39 @@ new #[Title('Edit Credit Note')] class extends Component {
                             <th class="w-36 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Qty</th>
                             <th class="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Price</th>
                             <th class="w-36 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Per</th>
-                            <th class="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Line Value</th>
+                            <th class="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Original</th>
+                            <th class="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Refund</th>
                             <th class="w-10 px-4 py-3"></th>
                         </tr>
                     </thead>
                     <tbody x-ref="rowsBody" class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                         <template x-for="(row, i) in rows" :key="i">
                             <tr :data-row-idx="i" :class="row.is_note ? 'bg-amber-50/50 dark:bg-amber-500/5' : ''">
-                                <td class="px-4 py-2.5" :colspan="row.is_note ? 5 : 1">
-                                    <div class="flex items-center gap-2">
+                                <td class="px-4 py-2.5" :colspan="row.is_note ? 6 : 1">
+                                    <div class="relative flex items-center gap-2">
                                         <flux:icon.chat-bubble-left x-show="row.is_note" class="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                                        <input
-                                            type="text"
-                                            data-row-details
-                                            x-model="row.details"
-                                            :placeholder="row.is_note ? '{{ __('Note…') }}' : '{{ __('Description…') }}'"
-                                            :class="row.is_note ? 'italic' : ''"
-                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 placeholder:font-normal placeholder:text-zinc-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
-                                        />
+                                        <div class="relative flex-1">
+                                            <input
+                                                type="text"
+                                                data-row-details
+                                                x-model="row.details"
+                                                @focus="thFocus(i)"
+                                                @input="thInput($event.target.value, i)"
+                                                @keydown="thKeydown($event, i)"
+                                                @blur="thBlur()"
+                                                :placeholder="row.is_note ? '{{ __('Note…') }}' : '{{ __('Description…') }}'"
+                                                :class="row.is_note ? 'italic' : ''"
+                                                class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 placeholder:font-normal placeholder:text-zinc-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                            />
+                                            <div
+                                                x-show="thOpen && thRowIdx === i && thGhostSuffix && !row.is_note"
+                                                class="pointer-events-none absolute inset-y-0 left-0 right-0 flex items-center px-3 text-sm leading-[1.375rem]"
+                                            >
+                                                <span class="invisible whitespace-pre font-semibold" x-text="thSearch"></span>
+                                                <span class="truncate whitespace-pre text-zinc-400 dark:text-zinc-500" x-text="thGhostSuffix"></span>
+                                                <span class="ms-2 text-[10px] font-medium uppercase tracking-wider text-zinc-400 opacity-70">↵</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </td>
                                 <template x-if="! row.is_note">
@@ -246,6 +306,7 @@ new #[Title('Edit Credit Note')] class extends Component {
                                             type="number"
                                             min="0.01"
                                             step="0.01"
+                                            data-row-qty
                                             x-model.number="row.quantity"
                                             class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                         />
@@ -276,8 +337,20 @@ new #[Title('Edit Credit Note')] class extends Component {
                                     </td>
                                 </template>
                                 <template x-if="! row.is_note">
-                                    <td class="px-4 py-2.5 text-right font-mono tabular-nums font-medium text-zinc-900 dark:text-white">
-                                        £<span x-text="lineValue(row).toFixed(2)">0.00</span>
+                                    <td class="px-4 py-2.5 text-right font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
+                                        <span x-show="row.from_invoice" x-text="'£' + Number(row.original_amount || 0).toFixed(2)"></span>
+                                        <span x-show="! row.from_invoice" class="text-zinc-300 dark:text-zinc-600">—</span>
+                                    </td>
+                                </template>
+                                <template x-if="! row.is_note">
+                                    <td class="px-4 py-2.5">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            x-model.number="row.refund_amount"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                        />
                                     </td>
                                 </template>
                                 <td class="px-4 py-2.5">
@@ -296,21 +369,62 @@ new #[Title('Edit Credit Note')] class extends Component {
             @error('items.*.per') <p class="px-6 pb-3 text-xs text-rose-600">{{ $message }}</p> @enderror
         </div>
 
+        {{-- Item typeahead dropdown (teleported to body to escape overflow clipping) --}}
+        <template x-teleport="body">
+            <div
+                x-show="thOpen && thFiltered.length > 0"
+                x-cloak
+                x-transition.opacity
+                :style="`position:fixed;top:${thPosition.top}px;left:${thPosition.left}px;width:${thPosition.width}px;z-index:9999`"
+                class="max-h-64 overflow-auto rounded-md border border-zinc-200 bg-white shadow-lg dark:border-white/10 dark:bg-zinc-900"
+            >
+                <template x-for="(s, si) in thFiltered" :key="si">
+                    <button
+                        type="button"
+                        @mousedown.prevent="thPick(s)"
+                        :class="si === thActiveIdx ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' : ''"
+                        class="block w-full cursor-pointer px-3 py-2 text-left text-sm text-zinc-900 transition-colors hover:bg-indigo-50 hover:text-indigo-700 dark:text-white dark:hover:bg-indigo-500/10 dark:hover:text-indigo-300"
+                        x-text="s.details"
+                    ></button>
+                </template>
+            </div>
+        </template>
+
+        {{-- Credit Totals --}}
+        <div class="rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
+            <div class="border-b border-zinc-200/70 px-4 py-3 dark:border-white/10">
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Credit Summary</h2>
+            </div>
+            <div class="p-4">
+                <div class="flex flex-col gap-3">
+                    <div class="border-t border-zinc-100 pt-3 dark:border-white/[0.06]">
+                        <div class="flex justify-between text-sm text-zinc-500 dark:text-zinc-400">
+                            <span>Items refund subtotal</span>
+                            <span class="font-mono tabular-nums" x-text="'£' + rows.filter(r => !r.is_note).reduce((s, r) => s + Number(r.refund_amount || 0), 0).toFixed(2)"></span>
+                        </div>
+                        <div class="mt-1 flex justify-between text-sm text-zinc-500 dark:text-zinc-400">
+                            <span>Credit Amount</span>
+                            <span class="font-mono tabular-nums" x-text="'£' + Number($wire.global_amount || 0).toFixed(2)"></span>
+                        </div>
+                        <div class="mt-2 flex justify-between border-t border-zinc-200 pt-2 dark:border-white/10">
+                            <span class="font-semibold text-zinc-900 dark:text-white">Total Credit</span>
+                            <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white" x-text="'£' + (rows.filter(r => !r.is_note).reduce((s, r) => s + Number(r.refund_amount || 0), 0) + Number($wire.global_amount || 0)).toFixed(2)"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         {{-- Sticky footer bar --}}
         <div class="sticky bottom-0 z-10 flex items-center justify-end gap-3 rounded-2xl border border-zinc-200/70 bg-white/95 px-4 py-3 shadow-[0_-1px_4px_rgba(16,24,40,0.06)] backdrop-blur dark:border-white/10 dark:bg-zinc-900/95">
             <x-ui.back-button :fallback="route('credit-notes.show', $document)" confirm data-form-nav />
-            <flux:button variant="filled" type="submit" data-form-nav>Save Changes</flux:button>
-            <flux:button variant="primary" type="button" x-on:click.prevent="submitAndEmail()" icon="envelope" data-form-nav>
-                Save &amp; Email
-            </flux:button>
+            <flux:button variant="primary" type="submit" data-form-nav>Save Changes</flux:button>
         </div>
     </form>
 
         <x-ui.form-shortcuts />
 
     </div>
-
-    <livewire:pages::documents.email-modal :document="$document" :key="'email-'.$document->id" />
 
     <x-ui.exit-confirm-modal />
 

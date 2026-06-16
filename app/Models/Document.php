@@ -37,6 +37,7 @@ class Document extends Model
         'converted_from_id',
         'credited_invoice_id',
         'reason',
+        'global_amount',
     ];
 
     protected function casts(): array
@@ -48,6 +49,7 @@ class Document extends Model
             'discount_amount' => 'decimal:2',
             'vat_amount' => 'decimal:2',
             'total_value' => 'decimal:2',
+            'global_amount' => 'decimal:2',
             'show_pricing' => 'boolean',
             'print_count' => 'integer',
             'type' => DocumentType::class,
@@ -125,5 +127,41 @@ class Document extends Model
     public function creditNotesIssued(): HasMany
     {
         return $this->hasMany(Document::class, 'credited_invoice_id');
+    }
+
+    public function paymentAllocations(): HasMany
+    {
+        return $this->hasMany(PaymentAllocation::class);
+    }
+
+    public function outstandingAmount(): float
+    {
+        return (float) $this->total_value - (float) ($this->payment_allocations_sum_allocated_amount ?? $this->paymentAllocations()->sum('allocated_amount'));
+    }
+
+    public function creditAllocations(): HasMany
+    {
+        return $this->hasMany(CreditAllocation::class, 'credit_note_id');
+    }
+
+    public function creditAllocationsReceived(): HasMany
+    {
+        return $this->hasMany(CreditAllocation::class, 'invoice_id');
+    }
+
+    public function availableCredit(): float
+    {
+        $used = (float) ($this->credit_allocations_sum_amount ?? $this->creditAllocations()->sum('amount'));
+
+        return max(0, (float) $this->total_value - $used);
+    }
+
+    public static function availableCreditForCustomer(int $customerId): float
+    {
+        return (float) self::creditNotes()
+            ->where('customer_id', $customerId)
+            ->withSum('creditAllocations', 'amount')
+            ->get()
+            ->sum(fn ($cn) => max(0, (float) $cn->total_value - (float) ($cn->credit_allocations_sum_amount ?? 0)));
     }
 }

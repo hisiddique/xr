@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             LookupCreditTermSeeder::class,
             LookupCreditLimitSeeder::class,
             LookupUnitSeeder::class,
+            PaymentMethodSeeder::class,
             CustomerSeeder::class,
             DocumentSeeder::class,
         ]);

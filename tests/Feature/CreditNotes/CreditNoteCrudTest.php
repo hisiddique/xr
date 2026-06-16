@@ -37,7 +37,7 @@ test('credit note can be created as a standalone with priced line items', functi
         ->set('customer_id', $customer->id)
         ->set('doc_date', '2026-06-11')
         ->set('items', [
-            ['id' => null, 'details' => 'Widget A', 'quantity' => '2', 'price' => '50', 'per' => 'each', 'is_note' => false],
+            ['id' => null, 'details' => 'Widget A', 'quantity' => '2', 'price' => '50', 'per' => 'each', 'is_note' => false, 'refund_amount' => '100', 'original_amount' => '0', 'from_invoice' => false],
         ])
         ->call('save')
         ->assertHasNoErrors()
@@ -48,7 +48,6 @@ test('credit note can be created as a standalone with priced line items', functi
         ->and($doc->doc_number)->toBe('CN-0001')
         ->and($doc->status)->toBe(DocumentStatus::Active)
         ->and($doc->credited_invoice_id)->toBeNull()
-        ->and((float) $doc->subtotal)->toBeGreaterThan(0)
         ->and((float) $doc->total_value)->toBeGreaterThan(0);
 });
 
@@ -84,6 +83,9 @@ test('create against an invoice dispatches cn-items-imported and links the invoi
                 'price' => (string) $invoiceItem->price,
                 'per' => $invoiceItem->per ?? 'each',
                 'is_note' => false,
+                'refund_amount' => (string) $invoiceItem->line_value,
+                'original_amount' => (string) $invoiceItem->line_value,
+                'from_invoice' => true,
             ],
         ])
         ->call('save')

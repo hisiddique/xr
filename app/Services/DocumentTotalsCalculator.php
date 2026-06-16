@@ -43,6 +43,22 @@ class DocumentTotalsCalculator
     }
 
     /**
+     * @param  Collection<int, array{refund_amount?: float|string, is_note?: bool}>  $items
+     */
+    public static function creditNoteTotal(Collection $items, float $globalAmount = 0.00): float
+    {
+        $itemsRefund = $items->sum(function (array $item) {
+            if (! empty($item['is_note'])) {
+                return 0;
+            }
+
+            return (float) ($item['refund_amount'] ?? 0);
+        });
+
+        return round($itemsRefund + $globalAmount, 2);
+    }
+
+    /**
      * Compute a single line value. When `per` is a positive numeric pack size,
      * the formula is (qty / per) * price; otherwise qty * price.
      *
