@@ -158,7 +158,8 @@ new #[Title('New Credit Note')] class extends Component {
                 'reason' => 'nullable|string|max:1000',
                 'credited_invoice_id' => 'nullable|integer|exists:documents,id',
                 'global_amount' => 'nullable|numeric|min:0',
-            ],
+            ] + $this->documentItemRules(),
+            $this->documentItemMessages(),
         );
 
         $document = $this->persistDocument();
