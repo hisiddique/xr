@@ -10,8 +10,8 @@ return new class extends Migration
     {
         Schema::create('credit_allocations', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('credit_note_id')->constrained('documents')->nullOnDelete();
-            $table->foreignId('invoice_id')->constrained('documents')->nullOnDelete();
+            $table->foreignId('credit_note_id')->nullable()->constrained('documents')->nullOnDelete();
+            $table->foreignId('invoice_id')->nullable()->constrained('documents')->nullOnDelete();
             $table->decimal('amount', 15, 2);
             $table->timestamps();
             $table->unique(['credit_note_id', 'invoice_id']);
