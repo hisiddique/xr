@@ -52,6 +52,7 @@ new #[Title('Dashboard')] class extends Component {
         ['key' => 'd', 'label' => 'Delivery Notes', 'icon' => 'truck',          'href' => route('delivery-notes.index')],
         ['key' => 'i', 'label' => 'Invoices',       'icon' => 'document-text',  'href' => route('invoices.index')],
         ['key' => 'n', 'label' => 'Credit Notes',   'icon' => 'receipt-refund', 'href' => route('credit-notes.index')],
+        ['key' => 'm', 'label' => 'Payments',       'icon' => 'banknotes',      'href' => route('payments.index')],
         $isAdmin ? ['key' => 'r', 'label' => 'References', 'icon' => 'tag', 'menu' => [
             ['label' => 'Titles',        'icon' => 'identification', 'href' => route('reference-data.titles')],
             ['label' => 'Credit Terms',  'icon' => 'calendar-days',  'href' => route('reference-data.credit-terms')],
