@@ -1598,6 +1598,8 @@ document.addEventListener('alpine:init', () => {
     window.Alpine.data('paymentAllocator', ({ rows }) => ({
         rows: rows.map(r => ({ ...r, amount: r.existing_allocation, creditAmount: 0 })),
         get creditBalance() { return parseFloat(this.$wire.creditBalance) || 0; },
+        get serverCreditBalance() { return parseFloat(this.$wire.creditBalance) || 0; },
+        get initialCreditUsed() { return parseFloat(this.$wire.initialCreditUsed) || 0; },
         get paymentAmount() { return parseFloat(this.$wire.amount) || 0; },
         get totalAllocated() {
             return this.rows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
@@ -1605,8 +1607,17 @@ document.addEventListener('alpine:init', () => {
         get totalCreditUsed() {
             return this.rows.reduce((sum, r) => sum + (parseFloat(r.creditAmount) || 0), 0);
         },
+        get creditsUsed() {
+            return this.rows.reduce((sum, r) => sum + (parseFloat(r.creditAmount) || 0), 0);
+        },
+        get cashUsed() {
+            return this.totalAllocated - this.creditsUsed;
+        },
+        get availableCreditsAfter() {
+            return this.serverCreditBalance + this.initialCreditUsed - this.creditsUsed;
+        },
         get budgetRemaining() {
-            return Math.max(0, this.paymentAmount - this.totalAllocated);
+            return this.paymentAmount - this.cashUsed;
         },
         get unallocatedBalance() {
             return Math.max(0, this.paymentAmount - this.totalAllocated);
