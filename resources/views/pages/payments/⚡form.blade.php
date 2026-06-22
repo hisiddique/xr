@@ -179,7 +179,7 @@ new #[Title('Payment')] class extends Component {
         $this->validate([
             'customer_id' => 'required|integer|exists:customers,id',
             'payment_method_id' => 'required|integer|exists:lookup_payment_methods,id',
-            'amount' => 'required|numeric|min:0.01|max:9999999.99',
+            'amount' => 'required|numeric|min:0.01',
             'payment_date' => 'required|date',
             'notes' => 'nullable|string|max:1000',
             'receipt' => 'nullable|file|mimes:pdf,png,jpg,jpeg,webp|max:5120',
@@ -474,6 +474,7 @@ new #[Title('Payment')] class extends Component {
                 wire:ignore
                 x-data="paymentAllocator({ rows: @js($this->invoiceRows) })"
                 @save-payment-form.window="$wire.save(rows)"
+                @payment-rows-updated.window="rows = $event.detail.rows.map(r => ({ ...r, amount: r.existing_allocation, creditAmount: 0 }))"
             >
                 <div x-show="$wire.customer_id" x-cloak>
 

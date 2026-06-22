@@ -7,8 +7,11 @@ use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 new #[Title('Customer Details')] class extends Component {
+    use WithPagination;
+
     public Customer $customer;
 
     #[Url(as: 'tab')]
@@ -23,7 +26,7 @@ new #[Title('Customer Details')] class extends Component {
     #[Computed]
     public function invoices()
     {
-        return $this->customer->invoices()->with('assignee')->latest()->limit(25)->get();
+        return $this->customer->invoices()->with('assignee')->latest()->paginate(100, pageName: 'inv_page');
     }
 
     #[Computed]
@@ -32,20 +35,28 @@ new #[Title('Customer Details')] class extends Component {
         return $this->customer->deliveryNotes()
             ->with('assignee')
             ->latest()
-            ->limit(25)
-            ->get();
+            ->paginate(25, pageName: 'dn_page');
     }
 
     #[Computed]
     public function creditNotes()
     {
-        return $this->customer->creditNotes()->with(['assignee', 'creditedInvoice'])->latest()->limit(25)->get();
+        return $this->customer->creditNotes()->with(['assignee', 'creditedInvoice'])->latest()->paginate(100, pageName: 'cn_page');
     }
 
     #[Computed]
     public function payments()
     {
-        return $this->customer->payments()->with('paymentMethod')->withSum('allocations', 'allocated_amount')->latest()->limit(25)->get();
+        return $this->customer->payments()->with('paymentMethod')->withSum('allocations', 'allocated_amount')->latest()->paginate(100, pageName: 'pay_page');
+    }
+
+    public function updatedActiveTab(): void
+    {
+        $this->resetPage('inv_page');
+        $this->resetPage('dn_page');
+        $this->resetPage('cn_page');
+        $this->resetPage('pay_page');
+        unset($this->invoices, $this->deliveryNotes, $this->creditNotes, $this->payments);
     }
 
     #[On('customer-deleted')]
@@ -253,6 +264,9 @@ new #[Title('Customer Details')] class extends Component {
                             @endforeach
                         </tbody>
                     </table>
+                    <div class="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800">
+                        {{ $this->invoices->links() }}
+                    </div>
                 </div>
             @endif
         @endif
@@ -305,6 +319,9 @@ new #[Title('Customer Details')] class extends Component {
                             @endforeach
                         </tbody>
                     </table>
+                    <div class="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800">
+                        {{ $this->deliveryNotes->links() }}
+                    </div>
                 </div>
             @endif
         @endif
@@ -353,6 +370,9 @@ new #[Title('Customer Details')] class extends Component {
                             @endforeach
                         </tbody>
                     </table>
+                    <div class="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800">
+                        {{ $this->creditNotes->links() }}
+                    </div>
                 </div>
             @endif
         @endif
@@ -395,6 +415,9 @@ new #[Title('Customer Details')] class extends Component {
                             @endforeach
                         </tbody>
                     </table>
+                    <div class="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800">
+                        {{ $this->payments->links() }}
+                    </div>
                 </div>
             @endif
         @endif
