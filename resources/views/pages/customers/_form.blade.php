@@ -63,4 +63,9 @@
             @endforeach
         </flux:select>
     </div>
+
+    <div class="flex items-center gap-3">
+        <flux:checkbox wire:model="vat_registered" id="vat_registered_form" />
+        <flux:label for="vat_registered_form">{{ __('VAT Registered') }}</flux:label>
+    </div>
 </div>

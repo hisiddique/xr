@@ -143,7 +143,7 @@ new #[Title('Users')] class extends Component {
                                         {{ ucfirst($user->role->value) }}
                                     </span>
                                 </td>
-                                <td class="px-6 py-4 text-zinc-500 dark:text-zinc-400">{{ $user->created_at->format('d M Y') }}</td>
+                                <td class="px-6 py-4 text-zinc-500 dark:text-zinc-400">{{ $user->created_at?->format('d M Y') ?? '—' }}</td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('users.edit', $user)" wire:navigate data-row-action="edit" />

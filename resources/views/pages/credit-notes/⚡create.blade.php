@@ -21,21 +21,24 @@ new #[Title('New Credit Note')] class extends Component {
     public ?int $assigned_to = null;
     public string $assigneeName = '';
     public string $doc_date = '';
-    public string $reason = '';
+    public string $notes = '';
     public ?int $credited_invoice_id = null;
     public array $items = [];
-    public string $global_amount = '';
-    public array $invoiceItemSuggestions = [];
     public array $units = [];
     public array $users = [];
+    public bool $vatRegistered = false;
+    public float $vatRate = 20.0;
+    public float $creditBalance = 0.0;
+    public array $invoiceItemSuggestions = [];
 
     public function mount(): void
     {
         $this->doc_date = now()->format('Y-m-d');
         $this->assigned_to = Auth::id();
         $this->assigneeName = Auth::user()->name;
+        $this->vatRate = (float) \App\Models\Setting::get('vat_rate', 20);
         $this->items = [
-            ['id' => null, 'details' => '', 'quantity' => '', 'price' => '', 'per' => '', 'is_note' => false, 'original_amount' => '0.00', 'refund_amount' => '0.00', 'from_invoice' => false],
+            ['id' => null, 'details' => '', 'quantity' => '', 'price' => '', 'per' => '', 'is_note' => false, 'discount_percent' => 0],
         ];
         $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
         $this->users = \App\Models\User::orderBy('name')->get(['id', 'name'])->toArray();
@@ -44,64 +47,10 @@ new #[Title('New Credit Note')] class extends Component {
             $this->customer_id = (int) request('customer_id');
             if ($customer = Customer::find($this->customer_id)) {
                 $this->customerName = $customer->typeahead_label;
+                $this->vatRegistered = (bool) $customer->vat_registered;
             }
+            $this->creditBalance = Document::availableCreditForCustomer($this->customer_id);
         }
-    }
-
-    #[Computed]
-    public function invoiceOptions(): \Illuminate\Support\Collection
-    {
-        if (! $this->customer_id) {
-            return collect();
-        }
-
-        return Document::invoices()
-            ->where('customer_id', $this->customer_id)
-            ->latest('doc_date')
-            ->get(['id', 'doc_number', 'doc_date']);
-    }
-
-    public function importItems(): void
-    {
-        if (! $this->credited_invoice_id) {
-            return;
-        }
-
-        $invoice = Document::invoices()->with('items')->find($this->credited_invoice_id);
-
-        if (! $invoice) {
-            return;
-        }
-
-        $rows = $invoice->items
-            ->filter(fn ($item) => ! $item->is_note)
-            ->map(fn ($item) => [
-                'id' => null,
-                'details' => $item->details,
-                'is_note' => false,
-                'quantity' => (string) $item->quantity,
-                'price' => (string) $item->price,
-                'per' => $item->per ?? '',
-                'original_amount' => (string) round(DocumentTotalsCalculator::lineValue([
-                    'quantity' => $item->quantity,
-                    'price' => $item->price,
-                    'per' => $item->per,
-                ]), 2),
-                'refund_amount' => (string) round(DocumentTotalsCalculator::lineValue([
-                    'quantity' => $item->quantity,
-                    'price' => $item->price,
-                    'per' => $item->per,
-                ]), 2),
-                'from_invoice' => true,
-            ])
-            ->values()
-            ->toArray();
-
-        if (empty($rows)) {
-            return;
-        }
-
-        $this->dispatch('cn-items-imported', items: $rows);
     }
 
     public function updatedCreditedInvoiceId(?int $value): void
@@ -124,21 +73,44 @@ new #[Title('New Credit Note')] class extends Component {
         return $invoice->items
             ->filter(fn ($item) => ! $item->is_note)
             ->map(fn ($item) => [
-                'id'              => null,
-                'details'         => $item->details,
-                'is_note'         => false,
-                'quantity'        => (string) $item->quantity,
-                'price'           => (string) $item->price,
-                'per'             => $item->per ?? '',
-                'original_amount' => (string) round(DocumentTotalsCalculator::lineValue([
-                    'quantity' => $item->quantity,
-                    'price'    => $item->price,
-                    'per'      => $item->per,
-                ]), 2),
-                'refund_amount'   => '',
-                'from_invoice'    => true,
+                'id'               => null,
+                'details'          => $item->details,
+                'is_note'          => false,
+                'quantity'         => (string) $item->quantity,
+                'price'            => (string) $item->price,
+                'per'              => $item->per ?? '',
+                'discount_percent' => 0,
             ])
             ->values()
+            ->toArray();
+    }
+
+    public function updatedCustomerId(): void
+    {
+        $this->credited_invoice_id = null;
+        $this->invoiceItemSuggestions = [];
+        if ($this->customer_id) {
+            $customer = Customer::find($this->customer_id);
+            $this->vatRegistered = (bool) ($customer?->vat_registered ?? false);
+        } else {
+            $this->vatRegistered = false;
+        }
+        $this->creditBalance = $this->customer_id
+            ? Document::availableCreditForCustomer($this->customer_id)
+            : 0.0;
+    }
+
+    #[Computed]
+    public function customerInvoices(): array
+    {
+        if (! $this->customer_id) {
+            return [];
+        }
+
+        return Document::invoices()
+            ->where('customer_id', $this->customer_id)
+            ->orderByDesc('doc_date')
+            ->get(['id', 'doc_number'])
             ->toArray();
     }
 
@@ -147,17 +119,16 @@ new #[Title('New Credit Note')] class extends Component {
         $this->items = array_values(array_filter($this->items, fn ($i) =>
             trim((string) ($i['details'] ?? '')) !== ''
             || (float) ($i['quantity'] ?? 0) > 0
-            || (float) ($i['refund_amount'] ?? 0) > 0
+            || (float) ($i['discount_percent'] ?? 0) > 0
         ));
 
         $this->validate(
             [
-                'customer_id' => 'required|integer|exists:customers,id',
-                'assigned_to' => 'nullable|integer|exists:users,id',
-                'doc_date' => 'required|date',
-                'reason' => 'nullable|string|max:1000',
+                'customer_id'         => 'required|integer|exists:customers,id',
+                'assigned_to'         => 'nullable|integer|exists:users,id',
+                'doc_date'            => 'required|date',
+                'notes'               => 'nullable|string|max:1000',
                 'credited_invoice_id' => 'nullable|integer|exists:documents,id',
-                'global_amount' => 'nullable|numeric|min:0',
             ] + $this->documentItemRules(),
             $this->documentItemMessages(),
         );
@@ -178,25 +149,25 @@ new #[Title('New Credit Note')] class extends Component {
         $generator = new DocumentNumberGenerator();
         $docNumber = $generator->nextFor('CN');
 
-        $totalValue = DocumentTotalsCalculator::creditNoteTotal(collect($this->items), (float) ($this->global_amount ?: 0));
+        $customer = Customer::findOrFail($this->customer_id);
+        $totals = DocumentTotalsCalculator::creditNoteTotal(collect($this->items), $customer);
 
         $document = Document::create([
-            'customer_id'          => $this->customer_id,
-            'type'                 => DocumentType::CreditNote,
-            'doc_number'           => $docNumber,
-            'doc_date'             => $this->doc_date,
-            'reason'               => $this->reason ?: null,
-            'credited_invoice_id'  => $this->credited_invoice_id ?: null,
-            'global_amount'        => (float) ($this->global_amount ?: 0),
-            'subtotal'             => 0,
-            'trade_discount'       => 0,
-            'discount_amount'      => 0,
-            'vat_amount'           => 0,
-            'total_value'          => $totalValue,
-            'show_pricing'         => true,
-            'status'               => DocumentStatus::Active,
-            'created_by'           => Auth::id(),
-            'assigned_to'          => $this->assigned_to,
+            'customer_id'         => $this->customer_id,
+            'type'                => DocumentType::CreditNote,
+            'doc_number'          => $docNumber,
+            'doc_date'            => $this->doc_date,
+            'notes'               => $this->notes ?: null,
+            'credited_invoice_id' => $this->credited_invoice_id ?: null,
+            'subtotal'            => $totals['subtotal'],
+            'trade_discount'      => 0,
+            'discount_amount'     => 0,
+            'vat_amount'          => $totals['vat'],
+            'total_value'         => $totals['total'],
+            'show_pricing'        => true,
+            'status'              => DocumentStatus::Active,
+            'created_by'          => Auth::id(),
+            'assigned_to'         => $this->assigned_to,
         ]);
 
         foreach ($this->items as $item) {
@@ -204,16 +175,19 @@ new #[Title('New Credit Note')] class extends Component {
             $qty = $isNote ? 0 : (float) ($item['quantity'] ?? 0);
             $price = $isNote ? 0 : (float) ($item['price'] ?? 0);
             $per = $isNote ? null : ($item['per'] ?: null);
+            $discountPercent = $isNote ? 0 : (float) ($item['discount_percent'] ?? 0);
+            $lineVal = $isNote ? 0 : round(DocumentTotalsCalculator::lineValue(['quantity' => $qty, 'price' => $price, 'per' => $per]), 2);
+            $netValue = $isNote ? 0 : round($lineVal * ($discountPercent / 100), 2);
 
             $document->items()->create([
-                'details'         => $item['details'],
-                'is_note'         => $isNote,
-                'quantity'        => $qty,
-                'price'           => $price,
-                'per'             => $per,
-                'line_value'      => $isNote ? 0 : round(DocumentTotalsCalculator::lineValue(['quantity' => $qty, 'price' => $price, 'per' => $per]), 2),
-                'original_amount' => $isNote ? null : (isset($item['original_amount']) && (float) $item['original_amount'] > 0 ? (float) $item['original_amount'] : null),
-                'refund_amount'   => $isNote ? 0 : (float) ($item['refund_amount'] ?? 0),
+                'details'          => $item['details'],
+                'is_note'          => $isNote,
+                'quantity'         => $qty,
+                'price'            => $price,
+                'per'              => $per,
+                'line_value'       => $lineVal,
+                'discount_percent' => $discountPercent,
+                'net_value'        => $netValue,
             ]);
         }
 
@@ -237,12 +211,11 @@ new #[Title('New Credit Note')] class extends Component {
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
 
     <form
-        x-data="lineItemForm(@js($items), @js($this->units), '{{ route('credit-notes.index') }}')"
+        x-data="lineItemForm(@js($items), @js($this->units), '{{ route('credit-notes.index') }}', { line: { discount_percent: 0 } })"
         x-on:submit.prevent="submit()"
         x-on:keydown="handleKey($event)"
         x-on:exit-confirm-discard.window="cancel()"
         x-on:exit-confirm-save.window="submit()"
-        x-on:cn-items-imported.window="importRows($event.detail.items)"
         class="flex min-w-0 flex-1 flex-col gap-4"
     >
 
@@ -266,6 +239,12 @@ new #[Title('New Credit Note')] class extends Component {
                     error-name="customer_id"
                     required
                 />
+                <div>
+                    <flux:label>{{ __('Available Credit Balance') }}</flux:label>
+                    <div class="mt-1.5 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-white/10 dark:bg-zinc-800">
+                        <span class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">£{{ number_format($creditBalance, 2) }}</span>
+                    </div>
+                </div>
                 <flux:input wire:model="doc_date" type="date" :label="__('Credit Note Date')" required />
                 <div>
                     <flux:label>{{ __('Sales Person') }}</flux:label>
@@ -279,38 +258,17 @@ new #[Title('New Credit Note')] class extends Component {
                 </div>
                 <div>
                     <flux:label>{{ __('Against Invoice') }}</flux:label>
-                    <div class="mt-1.5 flex items-center gap-2">
-                        <flux:select wire:model.live="credited_invoice_id" class="flex-1" x-on:focus="$el.showPicker?.()">
-                            <flux:select.option value="">— None —</flux:select.option>
-                            @foreach($this->invoiceOptions as $inv)
-                                <flux:select.option :value="$inv->id">
-                                    {{ $inv->doc_number }} ({{ $inv->doc_date->format('d M Y') }})
-                                </flux:select.option>
-                            @endforeach
-                        </flux:select>
-                        <flux:button type="button" wire:click="importItems" :disabled="! $credited_invoice_id" size="sm" variant="ghost" icon="arrow-down-tray" hidden>
-                            Import items
-                        </flux:button>
-                    </div>
+                    <flux:select wire:model.live="credited_invoice_id" class="mt-1.5" :disabled="! $customer_id" x-on:focus="$el.showPicker?.()">
+                        <flux:select.option value="">— None —</flux:select.option>
+                        @foreach($this->customerInvoices as $inv)
+                            <flux:select.option :value="$inv['id']">{{ $inv['doc_number'] }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
                     @error('credited_invoice_id') <flux:error>{{ $message }}</flux:error> @enderror
                 </div>
                 <div>
-                    <flux:input wire:model="reason" :label="__('Reason')" :placeholder="__('Optional reason for this credit note…')" />
-                    @error('reason') <flux:error>{{ $message }}</flux:error> @enderror
-                </div>
-                <div>
-                    <flux:label>{{ __('Credit Amount') }}</flux:label>
-                    <div class="mt-1.5 flex items-center gap-1.5">
-                        <span class="text-sm text-zinc-500">£</span>
-                        <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            wire:model.live="global_amount"
-                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
-                        />
-                    </div>
-                    @error('global_amount') <flux:error>{{ $message }}</flux:error> @enderror
+                    <flux:input wire:model="notes" :label="__('Notes')" :placeholder="__('Optional notes for this credit note…')" />
+                    @error('notes') <flux:error>{{ $message }}</flux:error> @enderror
                 </div>
             </div>
         </div>
@@ -335,8 +293,8 @@ new #[Title('New Credit Note')] class extends Component {
                             <th class="w-36 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Qty</th>
                             <th class="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Price</th>
                             <th class="w-36 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Per</th>
-                            <th class="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Original</th>
-                            <th class="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Refund</th>
+                            <th class="w-28 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Discount %</th>
+                            <th class="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Net Value</th>
                             <th class="w-10 px-4 py-3"></th>
                         </tr>
                     </thead>
@@ -407,20 +365,20 @@ new #[Title('New Credit Note')] class extends Component {
                                     </td>
                                 </template>
                                 <template x-if="! row.is_note">
-                                    <td class="px-4 py-2.5 text-right font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
-                                        <span x-show="row.from_invoice" x-text="'£' + Number(row.original_amount || 0).toFixed(2)"></span>
-                                        <span x-show="! row.from_invoice" class="text-zinc-300 dark:text-zinc-600">—</span>
-                                    </td>
-                                </template>
-                                <template x-if="! row.is_note">
                                     <td class="px-4 py-2.5">
                                         <input
                                             type="number"
                                             min="0"
+                                            max="100"
                                             step="0.01"
-                                            x-model.number="row.refund_amount"
+                                            x-model.number="row.discount_percent"
                                             class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                         />
+                                    </td>
+                                </template>
+                                <template x-if="! row.is_note">
+                                    <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">
+                                        £<span x-text="(lineValue(row) * (row.discount_percent / 100)).toFixed(2)">0.00</span>
                                     </td>
                                 </template>
                                 <td class="px-4 py-2.5">
@@ -440,7 +398,7 @@ new #[Title('New Credit Note')] class extends Component {
         </div>
 
         {{-- Item typeahead dropdown (teleported to body to escape overflow clipping) --}}
-        <template x-teleport="body">
+        <template x-teleport="body" wire:ignore>
             <div
                 x-show="thOpen && thFiltered.length > 0"
                 x-cloak
@@ -469,16 +427,16 @@ new #[Title('New Credit Note')] class extends Component {
                 <div class="flex flex-col gap-3">
                     <div class="border-t border-zinc-100 pt-3 dark:border-white/[0.06]">
                         <div class="flex justify-between text-sm text-zinc-500 dark:text-zinc-400">
-                            <span>Items refund subtotal</span>
-                            <span class="font-mono tabular-nums" x-text="'£' + rows.filter(r => !r.is_note).reduce((s, r) => s + Number(r.refund_amount || 0), 0).toFixed(2)"></span>
+                            <span>Items net subtotal</span>
+                            <span class="font-mono tabular-nums" x-text="'£' + rows.filter(r => !r.is_note).reduce((s, r) => s + lineValue(r) * (r.discount_percent / 100), 0).toFixed(2)"></span>
                         </div>
-                        <div class="mt-1 flex justify-between text-sm text-zinc-500 dark:text-zinc-400">
-                            <span>Credit Amount</span>
-                            <span class="font-mono tabular-nums" x-text="'£' + Number($wire.global_amount || 0).toFixed(2)"></span>
+                        <div class="mt-1 flex justify-between text-sm text-zinc-500 dark:text-zinc-400" x-show="$wire.vatRegistered && $wire.vatRate > 0">
+                            <span x-text="'VAT (' + $wire.vatRate + '%)'"></span>
+                            <span class="font-mono tabular-nums" x-text="'£' + (rows.filter(r => !r.is_note).reduce((s, r) => s + lineValue(r) * (r.discount_percent / 100), 0) * ($wire.vatRate / 100)).toFixed(2)"></span>
                         </div>
                         <div class="mt-2 flex justify-between border-t border-zinc-200 pt-2 dark:border-white/10">
                             <span class="font-semibold text-zinc-900 dark:text-white">Total Credit</span>
-                            <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white" x-text="'£' + (rows.filter(r => !r.is_note).reduce((s, r) => s + Number(r.refund_amount || 0), 0) + Number($wire.global_amount || 0)).toFixed(2)"></span>
+                            <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white" x-text="'£' + (function() { const sub = rows.filter(r => !r.is_note).reduce((s, r) => s + lineValue(r) * (r.discount_percent / 100), 0); const vat = $wire.vatRegistered ? sub * ($wire.vatRate / 100) : 0; return (sub + vat).toFixed(2); })()"></span>
                         </div>
                     </div>
                 </div>

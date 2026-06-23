@@ -37,7 +37,7 @@ test('credit note can be created as a standalone with priced line items', functi
         ->set('customer_id', $customer->id)
         ->set('doc_date', '2026-06-11')
         ->set('items', [
-            ['id' => null, 'details' => 'Widget A', 'quantity' => '2', 'price' => '50', 'per' => 'each', 'is_note' => false, 'refund_amount' => '100', 'original_amount' => '0', 'from_invoice' => false],
+            ['id' => null, 'details' => 'Widget A', 'quantity' => '2', 'price' => '50', 'per' => 'each', 'is_note' => false, 'discount_percent' => 10],
         ])
         ->call('save')
         ->assertHasNoErrors()
@@ -51,24 +51,18 @@ test('credit note can be created as a standalone with priced line items', functi
         ->and((float) $doc->total_value)->toBeGreaterThan(0);
 });
 
-test('create against an invoice dispatches cn-items-imported and links the invoice', function () {
+test('create linked to an invoice saves credited_invoice_id and total', function () {
     $user = User::factory()->admin()->create(['email_verified_at' => now()]);
     $customer = Customer::factory()->create(['trade_discount' => 0]);
 
     $invoice = Document::factory()->invoice()->for($customer)->create();
-    DocumentItem::factory()->count(2)->create([
+    $invoiceItem = DocumentItem::factory()->create([
         'document_id' => $invoice->id,
         'is_note' => false,
+        'quantity' => 2,
+        'price' => 50,
+        'line_value' => 100,
     ]);
-
-    Livewire::actingAs($user)
-        ->test('pages::credit-notes.create')
-        ->set('customer_id', $customer->id)
-        ->set('credited_invoice_id', $invoice->id)
-        ->call('importItems')
-        ->assertDispatched('cn-items-imported');
-
-    $invoiceItem = $invoice->items->first();
 
     Livewire::actingAs($user)
         ->test('pages::credit-notes.create')
@@ -83,9 +77,7 @@ test('create against an invoice dispatches cn-items-imported and links the invoi
                 'price' => (string) $invoiceItem->price,
                 'per' => $invoiceItem->per ?? 'each',
                 'is_note' => false,
-                'refund_amount' => (string) $invoiceItem->line_value,
-                'original_amount' => (string) $invoiceItem->line_value,
-                'from_invoice' => true,
+                'discount_percent' => 50,
             ],
         ])
         ->call('save')
@@ -96,7 +88,7 @@ test('create against an invoice dispatches cn-items-imported and links the invoi
         ->and((float) $cn->total_value)->toBeGreaterThan(0);
 });
 
-test('credit note can be edited and reason + item changes are persisted', function () {
+test('credit note can be edited and notes + item changes are persisted', function () {
     $user = User::factory()->admin()->create(['email_verified_at' => now()]);
     $customer = Customer::factory()->create(['trade_discount' => 0]);
 
@@ -112,15 +104,15 @@ test('credit note can be edited and reason + item changes are persisted', functi
 
     Livewire::actingAs($user)
         ->test('pages::credit-notes.edit', ['document' => $cn])
-        ->set('reason', 'Defective goods returned')
+        ->set('notes', 'Defective goods returned')
         ->set('items', [
-            ['id' => null, 'details' => 'New item', 'is_note' => false, 'quantity' => '3', 'price' => '20', 'per' => 'each'],
+            ['id' => null, 'details' => 'New item', 'is_note' => false, 'quantity' => '3', 'price' => '20', 'per' => 'each', 'discount_percent' => 0],
         ])
         ->call('save')
         ->assertHasNoErrors();
 
     $cn->refresh();
-    expect($cn->reason)->toBe('Defective goods returned')
+    expect($cn->notes)->toBe('Defective goods returned')
         ->and($cn->items->count())->toBe(1)
         ->and($cn->items->first()->details)->toBe('New item');
 });
@@ -201,7 +193,7 @@ test('credit note show page renders with reason and credited-against link', func
     $invoice = Document::factory()->invoice()->for($customer)->create();
     $cn = Document::factory()->creditNote()->for($customer)->create([
         'credited_invoice_id' => $invoice->id,
-        'reason' => 'Damaged goods',
+        'notes' => 'Damaged goods',
     ]);
     DocumentItem::factory()->create(['document_id' => $cn->id, 'is_note' => false]);
 

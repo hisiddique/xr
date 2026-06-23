@@ -139,7 +139,7 @@ test('delivery note saves prices and computes totals when show_pricing is on', f
     Setting::flushCache();
 
     $user = User::factory()->admin()->create(['email_verified_at' => now()]);
-    $customer = Customer::factory()->create(['trade_discount' => 0]);
+    $customer = Customer::factory()->create(['trade_discount' => 0, 'vat_registered' => true]);
 
     Livewire::actingAs($user)
         ->test('pages::delivery-notes.create')

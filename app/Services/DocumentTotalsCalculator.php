@@ -29,7 +29,7 @@ class DocumentTotalsCalculator
         $afterDiscount = $subtotal - $discountAmount;
 
         $vatRate = (float) Setting::get('vat_rate', 20);
-        $vatAmount = round($afterDiscount * ($vatRate / 100), 2);
+        $vatAmount = $customer->vat_registered ? round($afterDiscount * ($vatRate / 100), 2) : 0.0;
 
         $total = $afterDiscount + $vatAmount;
 
@@ -43,19 +43,30 @@ class DocumentTotalsCalculator
     }
 
     /**
-     * @param  Collection<int, array{refund_amount?: float|string, is_note?: bool}>  $items
+     * @param  Collection<int, array{quantity?: float|string, price?: float|string, per?: string|null, discount_percent?: float|string, is_note?: bool}>  $items
+     * @return array{subtotal: float, vat: float, total: float}
      */
-    public static function creditNoteTotal(Collection $items, float $globalAmount = 0.00): float
+    public static function creditNoteTotal(Collection $items, Customer $customer): array
     {
-        $itemsRefund = $items->sum(function (array $item) {
+        $subtotal = $items->sum(function (array $item) {
             if (! empty($item['is_note'])) {
                 return 0;
             }
+            $lineValue = self::lineValue($item);
+            $discountPercent = (float) ($item['discount_percent'] ?? 0);
 
-            return (float) ($item['refund_amount'] ?? 0);
+            return round($lineValue * ($discountPercent / 100), 2);
         });
 
-        return round($itemsRefund + $globalAmount, 2);
+        $subtotal = round($subtotal, 2);
+        $vatRate = (float) Setting::get('vat_rate', 20);
+        $vatAmount = $customer->vat_registered ? round($subtotal * ($vatRate / 100), 2) : 0.0;
+
+        return [
+            'subtotal' => $subtotal,
+            'vat' => $vatAmount,
+            'total' => round($subtotal + $vatAmount, 2),
+        ];
     }
 
     /**

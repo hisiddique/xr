@@ -325,8 +325,8 @@
                 <th class="right" style="width:14%">Value</th>
             @endif
             @if($showPricing && $isCN)
-                <th class="right" style="width:13%">Original</th>
-                <th class="right" style="width:13%">Refund</th>
+                <th class="right" style="width:13%">Discount %</th>
+                <th class="right" style="width:13%">Net Value</th>
             @endif
         </tr>
     </thead>
@@ -348,8 +348,8 @@
                         <td class="item-cell right">{{ number_format($item->line_value, 2) }}</td>
                     @endif
                     @if($showPricing && $isCN)
-                        <td class="item-cell right">{{ $item->original_amount > 0 ? number_format($item->original_amount, 2) : '—' }}</td>
-                        <td class="item-cell right">{{ number_format($item->refund_amount, 2) }}</td>
+                        <td class="item-cell right">{{ number_format($item->discount_percent, 2) }}%</td>
+                        <td class="item-cell right">{{ number_format($item->net_value, 2) }}</td>
                     @endif
                 </tr>
             @endif
@@ -485,9 +485,9 @@
                 <td colspan="2" class="split-cell">
                     <table class="split"><tr>
                         <td class="left cert-box">
-                            @if($document->reason)
-                                <div class="cert-title">Reason:</div>
-                                <div>{{ $document->reason }}</div>
+                            @if($document->notes)
+                                <div class="cert-title">Notes:</div>
+                                <div>{{ $document->notes }}</div>
                             @else
                                 &nbsp;
                             @endif
@@ -495,13 +495,13 @@
                         <td class="right cert-box">
                             <table class="totals-box">
                                 <tr>
-                                    <td class="l">Items Refund</td>
-                                    <td class="v">£{{ number_format($document->items->where('is_note', false)->sum('refund_amount'), 2) }}</td>
+                                    <td class="l">Items Net Subtotal</td>
+                                    <td class="v">£{{ number_format($document->subtotal, 2) }}</td>
                                 </tr>
-                                @if($document->global_amount > 0)
+                                @if($document->vat_amount > 0)
                                     <tr>
-                                        <td class="l">Global Credit</td>
-                                        <td class="v">£{{ number_format($document->global_amount, 2) }}</td>
+                                        <td class="l">VAT @ {{ number_format((float) \App\Models\Setting::get('vat_rate', 20), 2) }}%</td>
+                                        <td class="v">£{{ number_format($document->vat_amount, 2) }}</td>
                                     </tr>
                                 @endif
                                 <tr class="grand">

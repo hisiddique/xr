@@ -50,6 +50,7 @@ class Customer extends Model
         'post_code',
         'email_1',
         'trade_discount',
+        'vat_registered',
         'credit_term_id',
         'credit_limit_id',
         'created_by',
@@ -59,6 +60,7 @@ class Customer extends Model
     {
         return [
             'trade_discount' => 'decimal:2',
+            'vat_registered' => 'boolean',
         ];
     }
 

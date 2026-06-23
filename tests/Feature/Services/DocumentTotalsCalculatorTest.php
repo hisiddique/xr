@@ -13,7 +13,7 @@ beforeEach(function () {
 });
 
 test('calculates subtotal, vat and total correctly', function () {
-    $customer = Customer::factory()->make(['trade_discount' => 0]);
+    $customer = Customer::factory()->make(['trade_discount' => 0, 'vat_registered' => true]);
     $items = collect([
         ['quantity' => '2', 'price' => '50.00'],
         ['quantity' => '1', 'price' => '100.00'],
@@ -29,7 +29,7 @@ test('calculates subtotal, vat and total correctly', function () {
 });
 
 test('applies trade discount before VAT', function () {
-    $customer = Customer::factory()->make(['trade_discount' => 10]);
+    $customer = Customer::factory()->make(['trade_discount' => 10, 'vat_registered' => true]);
     $items = collect([
         ['quantity' => '1', 'price' => '100.00'],
     ]);
@@ -73,7 +73,7 @@ test('uses VAT rate from settings', function () {
     Setting::set('vat_rate', '5', 'float');
     Setting::flushCache();
 
-    $customer = Customer::factory()->make(['trade_discount' => 0]);
+    $customer = Customer::factory()->make(['trade_discount' => 0, 'vat_registered' => true]);
     $items = collect([
         ['quantity' => '1', 'price' => '100.00'],
     ]);

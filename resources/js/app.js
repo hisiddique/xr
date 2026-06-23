@@ -929,18 +929,15 @@ document.addEventListener('alpine:init', () => {
             });
 
             if (this.$wire) {
+                this.invoiceSuggestions = this.$wire.invoiceItemSuggestions ?? [];
                 this.$wire.$watch('invoiceItemSuggestions', (v) => { this.invoiceSuggestions = v ?? []; });
             }
 
-            const reposition = () => {
+            this._reposition = () => {
                 if (this.thOpen && this.thRowIdx !== null) this._thUpdatePosition(this.thRowIdx);
             };
-            window.addEventListener('scroll', reposition, true);
-            window.addEventListener('resize', reposition);
-            this.$cleanup(() => {
-                window.removeEventListener('scroll', reposition, true);
-                window.removeEventListener('resize', reposition);
-            });
+            window.addEventListener('scroll', this._reposition, true);
+            window.addEventListener('resize', this._reposition);
 
             this.$el.addEventListener('change', (e) => {
                 if (e.target.tagName !== 'SELECT') return;
@@ -1398,6 +1395,13 @@ document.addEventListener('alpine:init', () => {
             const i = all.indexOf(input);
             if (i < 0) return;
             this._focusField(all[i + dir]);
+        },
+
+        destroy() {
+            if (this._reposition) {
+                window.removeEventListener('scroll', this._reposition, true);
+                window.removeEventListener('resize', this._reposition);
+            }
         },
     }));
 

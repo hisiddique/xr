@@ -52,6 +52,9 @@ new #[Title('Edit Customer')] class extends Component {
     #[Validate('nullable|integer|exists:lookup_credit_limits,id')]
     public ?int $credit_limit_id = null;
 
+    #[Validate('boolean')]
+    public bool $vat_registered = false;
+
     public function mount(): void
     {
         $this->company_name = $this->customer->company_name;
@@ -67,6 +70,7 @@ new #[Title('Edit Customer')] class extends Component {
         $this->trade_discount = (string) $this->customer->trade_discount;
         $this->credit_term_id = $this->customer->credit_term_id;
         $this->credit_limit_id = $this->customer->credit_limit_id;
+        $this->vat_registered = (bool) $this->customer->vat_registered;
     }
 
     public function save(): void
@@ -85,6 +89,7 @@ new #[Title('Edit Customer')] class extends Component {
             'trade_discount' => 'numeric|min:0|max:100',
             'credit_term_id' => 'nullable|integer|exists:lookup_credit_terms,id',
             'credit_limit_id' => 'nullable|integer|exists:lookup_credit_limits,id',
+            'vat_registered' => 'boolean',
         ]);
 
         $this->customer->update($validated);
@@ -188,6 +193,10 @@ new #[Title('Edit Customer')] class extends Component {
                         <flux:select.option :value="$limit->id">£{{ number_format($limit->amount, 2) }}</flux:select.option>
                     @endforeach
                 </flux:select>
+            </div>
+            <div class="mt-4 flex items-center gap-3">
+                <flux:checkbox wire:model="vat_registered" id="vat_registered_edit" />
+                <flux:label for="vat_registered_edit">{{ __('VAT Registered') }}</flux:label>
             </div>
         </div>
 

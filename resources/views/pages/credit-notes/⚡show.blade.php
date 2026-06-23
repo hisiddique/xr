@@ -100,11 +100,11 @@ new #[Title('Credit Note')] class extends Component
                 </div>
             </div>
 
-            {{-- Reason --}}
-            @if($document->reason)
+            {{-- Notes --}}
+            @if($document->notes)
                 <div class="mt-4 rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-800/50">
-                    <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Reason</p>
-                    <p class="mt-1 text-sm text-zinc-700 dark:text-zinc-300">{{ $document->reason }}</p>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Notes</p>
+                    <p class="mt-1 text-sm text-zinc-700 dark:text-zinc-300">{{ $document->notes }}</p>
                 </div>
             @endif
         </div>
@@ -131,8 +131,8 @@ new #[Title('Credit Note')] class extends Component
                                 <th class="w-24 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Qty</th>
                                 <th class="w-28 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Price</th>
                                 <th class="w-20 px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Per</th>
-                                <th class="w-28 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Original</th>
-                                <th class="w-28 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Refund</th>
+                                <th class="w-28 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Discount %</th>
+                                <th class="w-28 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Net Value</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
@@ -150,14 +150,10 @@ new #[Title('Credit Note')] class extends Component
                                         <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-700 dark:text-zinc-300">{{ $item->quantity }}</td>
                                         <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-700 dark:text-zinc-300">£{{ number_format($item->price, 2) }}</td>
                                         <td class="px-4 py-2 font-semibold text-zinc-700 dark:text-zinc-300">{{ $item->per ?? '' }}</td>
-                                        <td class="px-4 py-2 text-right font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
-                                            @if($item->original_amount > 0)
-                                                £{{ number_format($item->original_amount, 2) }}
-                                            @else
-                                                <span class="text-zinc-300 dark:text-zinc-600">—</span>
-                                            @endif
+                                        <td class="px-4 py-2 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">
+                                            {{ number_format($item->discount_percent, 2) }}%
                                         </td>
-                                        <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($item->refund_amount, 2) }}</td>
+                                        <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($item->net_value, 2) }}</td>
                                     </tr>
                                 @endif
                             @endforeach
@@ -169,13 +165,13 @@ new #[Title('Credit Note')] class extends Component
                 <div class="flex justify-end border-t border-zinc-100 p-4 dark:border-white/[0.06]">
                     <div class="w-72 space-y-2.5">
                         <div class="flex justify-between text-sm">
-                            <span class="text-zinc-500 dark:text-zinc-400">Items refund subtotal</span>
-                            <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($document->items->where('is_note', false)->sum('refund_amount'), 2) }}</span>
+                            <span class="text-zinc-500 dark:text-zinc-400">Items net subtotal</span>
+                            <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($document->subtotal, 2) }}</span>
                         </div>
-                        @if($document->global_amount > 0)
+                        @if($document->vat_amount > 0)
                             <div class="flex justify-between text-sm">
-                                <span class="text-zinc-500 dark:text-zinc-400">Global credit</span>
-                                <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($document->global_amount, 2) }}</span>
+                                <span class="text-zinc-500 dark:text-zinc-400">VAT</span>
+                                <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($document->vat_amount, 2) }}</span>
                             </div>
                         @endif
                         <div class="flex justify-between border-t border-zinc-200 pt-3 dark:border-white/10">

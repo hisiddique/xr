@@ -121,6 +121,7 @@ new #[Title('Customers')] class extends Component {
                             <x-ui.sortable-header column="company_name" :state="$this->sortStateFor('company_name')">Company</x-ui.sortable-header>
                             <th class="px-4 py-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Contact</th>
                             <x-ui.sortable-header column="email_1" :state="$this->sortStateFor('email_1')">Email</x-ui.sortable-header>
+                            <th class="px-4 py-1 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT</th>
                             <th class="px-4 py-1"></th>
                         </tr>
                     </thead>
@@ -156,6 +157,13 @@ new #[Title('Customers')] class extends Component {
                                     {{ trim(($customer->title?->name ? $customer->title->name.' ' : '').$customer->first_name.' '.$customer->last_name) ?: '—' }}
                                 </td>
                                 <td class="px-6 py-4 text-zinc-600 dark:text-zinc-400">@if($customer->email_1)<x-ui.highlight :text="$customer->email_1" :term="$search" />@else—@endif</td>
+                                <td class="px-4 py-2 text-center">
+                                    @if($customer->vat_registered)
+                                        <flux:icon.check-circle variant="solid" class="size-5 text-emerald-500" />
+                                    @else
+                                        <flux:icon.minus-circle variant="solid" class="size-5 text-zinc-300 dark:text-zinc-600" />
+                                    @endif
+                                </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
                                         <flux:button size="xs" variant="ghost" icon="eye" :href="route('customers.show', $customer)" wire:navigate data-row-action="view" />

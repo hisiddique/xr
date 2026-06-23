@@ -76,7 +76,7 @@ it('recomputes invoice totals from copied line items at conversion', function ()
     Setting::set('vat_rate', '20', 'integer');
     Setting::flushCache();
 
-    $customer = Customer::factory()->create(['trade_discount' => 0]);
+    $customer = Customer::factory()->create(['trade_discount' => 0, 'vat_registered' => true]);
 
     $dn = Document::factory()->deliveryNote()
         ->for($customer, 'customer')

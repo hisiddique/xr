@@ -36,8 +36,7 @@ class Document extends Model
         'assigned_to',
         'converted_from_id',
         'credited_invoice_id',
-        'reason',
-        'global_amount',
+        'notes',
     ];
 
     protected function casts(): array
@@ -49,7 +48,6 @@ class Document extends Model
             'discount_amount' => 'decimal:2',
             'vat_amount' => 'decimal:2',
             'total_value' => 'decimal:2',
-            'global_amount' => 'decimal:2',
             'show_pricing' => 'boolean',
             'print_count' => 'integer',
             'type' => DocumentType::class,

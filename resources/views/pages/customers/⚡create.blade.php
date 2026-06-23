@@ -51,6 +51,9 @@ new #[Title('New Customer')] class extends Component {
     #[Validate('nullable|string|max:50|unique:customers,reference')]
     public string $reference = '';
 
+    #[Validate('boolean')]
+    public bool $vat_registered = false;
+
     public function save(): void
     {
         $validated = $this->validate();
@@ -158,6 +161,10 @@ new #[Title('New Customer')] class extends Component {
                         <flux:select.option :value="$limit->id">£{{ number_format($limit->amount, 2) }}</flux:select.option>
                     @endforeach
                 </flux:select>
+            </div>
+            <div class="mt-4 flex items-center gap-3">
+                <flux:checkbox wire:model="vat_registered" id="vat_registered_create" />
+                <flux:label for="vat_registered_create">{{ __('VAT Registered') }}</flux:label>
             </div>
         </div>
 

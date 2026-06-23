@@ -19,8 +19,8 @@ class DocumentItem extends Model
         'price',
         'per',
         'line_value',
-        'original_amount',
-        'refund_amount',
+        'discount_percent',
+        'net_value',
     ];
 
     protected function casts(): array
@@ -30,8 +30,8 @@ class DocumentItem extends Model
             'quantity' => 'decimal:2',
             'price' => 'decimal:2',
             'line_value' => 'decimal:2',
-            'original_amount' => 'decimal:2',
-            'refund_amount' => 'decimal:2',
+            'discount_percent' => 'decimal:2',
+            'net_value' => 'decimal:2',
         ];
     }
 }
