@@ -71,8 +71,8 @@
                             type="button"
                             @class([
                                 'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-                                'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*'),
-                                'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*'),
+                                'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*', 'overheads.*'),
+                                'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*', 'overheads.*'),
                             ])
                         >
                             Documents
@@ -84,6 +84,7 @@
                             <flux:menu.item :href="route('invoices.index')" wire:navigate>Invoices</flux:menu.item>
                             <flux:menu.item :href="route('credit-notes.index')" wire:navigate>Credit Notes</flux:menu.item>
                             <flux:menu.item :href="route('payments.index')" wire:navigate>Payments</flux:menu.item>
+                            <flux:menu.item :href="route('overheads.index')" wire:navigate>Overheads</flux:menu.item>
                         </flux:menu>
                     </flux:dropdown>
 
@@ -109,6 +110,7 @@
                                 <flux:menu.item :href="route('reference-data.credit-limits')" wire:navigate>Credit Limits</flux:menu.item>
                                 <flux:menu.item :href="route('reference-data.units')" wire:navigate>Units</flux:menu.item>
                                 <flux:menu.item :href="route('reference-data.payment-methods')" wire:navigate>Payment Methods</flux:menu.item>
+                                <flux:menu.item :href="route('reference-data.expense-categories')" wire:navigate>Expense Categories</flux:menu.item>
                             </flux:menu>
                         </flux:dropdown>
 
@@ -158,6 +160,9 @@
                             </flux:menu.item>
                             <flux:menu.item :href="route('payments.create')" icon="banknotes" wire:navigate>
                                 {{ __('Payment') }}
+                            </flux:menu.item>
+                            <flux:menu.item :href="route('overheads.create')" icon="arrow-trending-up" wire:navigate>
+                                {{ __('Overhead') }}
                             </flux:menu.item>
                         </flux:menu>
                     </flux:dropdown>
@@ -280,6 +285,20 @@
                         </li>
                         <li>
                             <a
+                                href="{{ route('overheads.index') }}"
+                                wire:navigate
+                                @class([
+                                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('overheads.*'),
+                                    'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('overheads.*'),
+                                ])
+                            >
+                                <flux:icon.banknotes class="size-5 shrink-0" />
+                                Overheads
+                            </a>
+                        </li>
+                        <li>
+                            <a
                                 href="{{ route('invoices.index') }}"
                                 wire:navigate
                                 @class([
@@ -397,6 +416,20 @@
                             </li>
                             <li>
                                 <a
+                                    href="{{ route('reference-data.expense-categories') }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('reference-data.expense-categories'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('reference-data.expense-categories'),
+                                    ])
+                                >
+                                    <flux:icon.tag class="size-5 shrink-0" />
+                                    Expense Categories
+                                </a>
+                            </li>
+                            <li>
+                                <a
                                     href="{{ route('users.index') }}"
                                     wire:navigate
                                     @class([
@@ -458,7 +491,7 @@
         </main>
 
         @persist('toast')
-            <flux:toast.group position="middle center">
+            <flux:toast.group position="middle center" class="flex flex-col gap-2" @keydown.enter.window="document.querySelector('[data-flux-toast] button')?.click()">
                 <flux:toast class="in-[ui-toast-group]:w-sm sm:in-[ui-toast-group]:w-md" />
             </flux:toast.group>
         @endpersist

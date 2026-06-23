@@ -273,7 +273,13 @@ document.addEventListener('alpine:init', () => {
             // ── Backspace goes back ──
             if (key === 'Backspace') {
                 e.preventDefault();
-                window.history.back();
+                const path = window.location.pathname;
+                const showMatch = path.match(/^(\/[^/]+)\/\d+$/);
+                if (showMatch) {
+                    Livewire.navigate(showMatch[1]);
+                } else {
+                    window.history.back();
+                }
                 return;
             }
 
@@ -287,7 +293,7 @@ document.addEventListener('alpine:init', () => {
             // ── '+' creates new on scoped list & show pages ──
             if (key === '+') {
                 const path = window.location.pathname;
-                const scopes = ['/customers', '/delivery-notes', '/credit-notes', '/users'];
+                const scopes = ['/customers', '/delivery-notes', '/credit-notes', '/overheads', '/users'];
                 const scope = scopes.find((s) => path === s || new RegExp(`^${s}/\\d+$`).test(path));
                 if (scope) {
                     e.preventDefault();
@@ -1595,6 +1601,13 @@ document.addEventListener('alpine:init', () => {
 
             e.preventDefault();
             this._advanceFocus(e.target);
+        },
+    }));
+
+    // ─── Per-Page Select Component ──────────────────────────────────
+    window.Alpine.data('perPageSelect', () => ({
+        onChange(value) {
+            document.cookie = `crm_per_page=${value};path=/;max-age=31536000;SameSite=Lax`;
         },
     }));
 

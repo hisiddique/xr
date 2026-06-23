@@ -351,7 +351,7 @@ new #[Title('Payment')] class extends Component {
 <div class="flex flex-col gap-4">
 
     <x-ui.page-header
-        title="{{ $payment ? 'Edit Payment' : 'Record Payment' }}"
+        title="{{ $payment ? 'Edit: '.$payment->reference : 'Record Payment' }}"
         subtitle="{{ $payment ? 'Update payment details and manage invoice allocations.' : 'Log a received payment and allocate it to invoices.' }}"
     >
         <x-slot:action>

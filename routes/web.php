@@ -41,6 +41,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('payments/{payment}/edit', 'pages::payments.form')->name('payments.edit');
     Route::livewire('payments/{payment}', 'pages::payments.show')->name('payments.show');
 
+    // Overheads
+    Route::livewire('overheads', 'pages::overheads.index')->name('overheads.index');
+    Route::livewire('overheads/create', 'pages::overheads.form')->name('overheads.create');
+    Route::livewire('overheads/{overhead}/edit', 'pages::overheads.form')->name('overheads.edit');
+    Route::livewire('overheads/{overhead}', 'pages::overheads.show')->name('overheads.show');
+
     // Document PDF
     Route::get('documents/{document}/pdf', [DocumentPdfController::class, 'show'])->name('documents.pdf');
     Route::get('documents/{document}/pdf/download', [DocumentPdfController::class, 'download'])->name('documents.pdf.download');
@@ -61,6 +67,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::livewire('reference-data/credit-limits', 'pages::reference-data.credit-limits')->name('reference-data.credit-limits');
         Route::livewire('reference-data/units', 'pages::reference-data.units')->name('reference-data.units');
         Route::livewire('reference-data/payment-methods', 'pages::reference-data.payment-methods')->name('reference-data.payment-methods');
+        Route::livewire('reference-data/expense-categories', 'pages::reference-data.expense-categories')->name('reference-data.expense-categories');
     });
 });
 

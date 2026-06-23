@@ -2,6 +2,7 @@
 
 use App\Livewire\Concerns\WithSorting;
 use App\Models\Customer;
+use App\Traits\WithPerPage;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -9,6 +10,7 @@ use Livewire\Component;
 
 new #[Title('Customers')] class extends Component {
     use WithSorting;
+    use WithPerPage;
     use \Livewire\WithPagination;
 
     protected array $sortable = ['company_name', 'reference', 'email_1', 'created_at'];
@@ -70,28 +72,7 @@ new #[Title('Customers')] class extends Component {
                     class="max-w-sm"
                 />
             </div>
-            <div
-                x-data="{
-                    init() {
-                        const saved = localStorage.getItem('crm_per_page');
-                        const valid = [25, 50, 100, 250, 500, 1000];
-                        if (saved && valid.includes(Number(saved))) {
-                            $wire.set('perPage', Number(saved), false);
-                        }
-                    }
-                }"
-                x-init="init()"
-            >
-                <select
-                    wire:model.live="perPage"
-                    x-on:change="localStorage.setItem('crm_per_page', $event.target.value)"
-                    class="rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-700 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
-                >
-                    @foreach([25, 50, 100, 250, 500, 1000] as $n)
-                        <option value="{{ $n }}" @selected($perPage === $n)>{{ $n }} per page</option>
-                    @endforeach
-                </select>
-            </div>
+            <x-ui.per-page-select />
         </div>
     </div>
 

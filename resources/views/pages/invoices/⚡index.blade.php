@@ -3,6 +3,7 @@
 use App\DocumentStatus;
 use App\Livewire\Concerns\WithSorting;
 use App\Models\Document;
+use App\Traits\WithPerPage;
 use App\Models\DocumentEmailLog;
 use App\Models\User;
 use App\Services\DocumentEmailService;
@@ -21,6 +22,7 @@ new #[Title('Invoices')] class extends Component
 {
     use WithPagination;
     use WithSorting;
+    use WithPerPage;
 
     protected array $sortable = ['doc_number', 'doc_date', 'status', 'total_value', 'assignee', 'order_no', 'created_at'];
 
@@ -344,29 +346,7 @@ new #[Title('Invoices')] class extends Component
                     {{ __('Trash') }}
                 </button>
             </div>
-            <div
-                class="ml-auto"
-                x-data="{
-                    init() {
-                        const saved = localStorage.getItem('crm_per_page');
-                        const valid = [25, 50, 100, 250, 500, 1000];
-                        if (saved && valid.includes(Number(saved))) {
-                            $wire.set('perPage', Number(saved), false);
-                        }
-                    }
-                }"
-                x-init="init()"
-            >
-                <select
-                    wire:model.live="perPage"
-                    x-on:change="localStorage.setItem('crm_per_page', $event.target.value)"
-                    class="rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-700 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
-                >
-                    @foreach([25, 50, 100, 250, 500, 1000] as $n)
-                        <option value="{{ $n }}" @selected($perPage === $n)>{{ $n }} per page</option>
-                    @endforeach
-                </select>
-            </div>
+            <x-ui.per-page-select class="ml-auto" />
         </div>
 
         <x-ui.range-filters

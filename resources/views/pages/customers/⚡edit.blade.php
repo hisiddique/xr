@@ -95,6 +95,7 @@ new #[Title('Edit Customer')] class extends Component {
         $this->customer->update($validated);
 
         Flux::toast(variant: 'success', text: __('Customer updated successfully.'));
+        $this->redirect(route('customers.show', $this->customer), navigate: true);
     }
 
     #[Computed]

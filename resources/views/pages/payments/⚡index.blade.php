@@ -2,6 +2,7 @@
 
 use App\Livewire\Concerns\WithSorting;
 use App\Models\Payment;
+use App\Traits\WithPerPage;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Livewire\Attributes\Computed;
@@ -14,6 +15,7 @@ new #[Title('Payments')] class extends Component
 {
     use WithPagination;
     use WithSorting;
+    use WithPerPage;
 
     protected array $sortable = ['reference', 'payment_date', 'amount'];
 
@@ -116,28 +118,7 @@ new #[Title('Payments')] class extends Component
             </div>
 
             <div class="ml-auto flex items-center gap-2">
-                <div
-                    x-data="{
-                        init() {
-                            const saved = localStorage.getItem('crm_per_page');
-                            const valid = [25, 50, 100, 250, 500, 1000];
-                            if (saved && valid.includes(Number(saved))) {
-                                $wire.set('perPage', Number(saved), false);
-                            }
-                        }
-                    }"
-                    x-init="init()"
-                >
-                    <select
-                        wire:model.live="perPage"
-                        x-on:change="localStorage.setItem('crm_per_page', $event.target.value)"
-                        class="rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-700 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
-                    >
-                        @foreach([25, 50, 100, 250, 500, 1000] as $n)
-                            <option value="{{ $n }}" @selected($perPage === $n)>{{ $n }} per page</option>
-                        @endforeach
-                    </select>
-                </div>
+                <x-ui.per-page-select />
 
                 <flux:button variant="primary" icon="plus" :href="route('payments.create')" wire:navigate>
                     {{ __('Record Payment') }}
