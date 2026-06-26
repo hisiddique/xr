@@ -1125,6 +1125,11 @@ document.addEventListener('alpine:init', () => {
             return q * p;
         },
 
+        netValue(row) {
+            const v = this.lineValue(row);
+            return row.discount_percent ? v * (row.discount_percent / 100) : v;
+        },
+
         importRows(items) {
             this.rows = items;
             this.$nextTick(() => {

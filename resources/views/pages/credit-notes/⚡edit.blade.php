@@ -84,7 +84,7 @@ new #[Title('Edit Credit Note')] class extends Component {
             $per = $isNote ? null : ($item['per'] ?: null);
             $discountPercent = $isNote ? 0 : (float) ($item['discount_percent'] ?? 0);
             $lineVal = $isNote ? 0 : round(\App\Services\DocumentTotalsCalculator::lineValue(['quantity' => $qty, 'price' => $price, 'per' => $per]), 2);
-            $netValue = $isNote ? 0 : round($lineVal * ($discountPercent / 100), 2);
+            $netValue = $isNote ? 0 : ($discountPercent > 0 ? round($lineVal * ($discountPercent / 100), 2) : $lineVal);
 
             $this->document->items()->create([
                 'details' => $item['details'],
@@ -119,7 +119,7 @@ new #[Title('Edit Credit Note')] class extends Component {
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
 
     <form
-        x-data="lineItemForm(@js($items), @js($this->units), '{{ route('credit-notes.show', $document) }}', { line: { discount_percent: 0 } })"
+        x-data="lineItemForm(@js($items), @js($this->units), '{{ route('credit-notes.show', $document) }}', { line: { discount_percent: null } })"
         x-on:submit.prevent="submit()"
         x-on:keydown="handleKey($event)"
         x-on:exit-confirm-discard.window="cancel()"
@@ -287,7 +287,7 @@ new #[Title('Edit Credit Note')] class extends Component {
                                 </template>
                                 <template x-if="! row.is_note">
                                     <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">
-                                        £<span x-text="(lineValue(row) * (row.discount_percent / 100)).toFixed(2)">0.00</span>
+                                        £<span x-text="netValue(row).toFixed(2)">0.00</span>
                                     </td>
                                 </template>
                                 <td class="px-4 py-2.5">
@@ -337,15 +337,15 @@ new #[Title('Edit Credit Note')] class extends Component {
                     <div class="border-t border-zinc-100 pt-3 dark:border-white/[0.06]">
                         <div class="flex justify-between text-sm text-zinc-500 dark:text-zinc-400">
                             <span>Items net subtotal</span>
-                            <span class="font-mono tabular-nums" x-text="'£' + rows.filter(r => !r.is_note).reduce((s, r) => s + lineValue(r) * (r.discount_percent / 100), 0).toFixed(2)"></span>
+                            <span class="font-mono tabular-nums" x-text="'£' + rows.filter(r => !r.is_note).reduce((s, r) => s + netValue(r), 0).toFixed(2)"></span>
                         </div>
                         <div class="mt-1 flex justify-between text-sm text-zinc-500 dark:text-zinc-400" x-show="$wire.vatRegistered && $wire.vatRate > 0">
                             <span x-text="'VAT (' + $wire.vatRate + '%)'"></span>
-                            <span class="font-mono tabular-nums" x-text="'£' + (rows.filter(r => !r.is_note).reduce((s, r) => s + lineValue(r) * (r.discount_percent / 100), 0) * ($wire.vatRate / 100)).toFixed(2)"></span>
+                            <span class="font-mono tabular-nums" x-text="'£' + (rows.filter(r => !r.is_note).reduce((s, r) => s + netValue(r), 0) * ($wire.vatRate / 100)).toFixed(2)"></span>
                         </div>
                         <div class="mt-2 flex justify-between border-t border-zinc-200 pt-2 dark:border-white/10">
                             <span class="font-semibold text-zinc-900 dark:text-white">Total Credit</span>
-                            <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white" x-text="'£' + (function() { const sub = rows.filter(r => !r.is_note).reduce((s, r) => s + lineValue(r) * (r.discount_percent / 100), 0); const vat = $wire.vatRegistered ? sub * ($wire.vatRate / 100) : 0; return (sub + vat).toFixed(2); })()"></span>
+                            <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white" x-text="'£' + (function() { const sub = rows.filter(r => !r.is_note).reduce((s, r) => s + netValue(r), 0); const vat = $wire.vatRegistered ? sub * ($wire.vatRate / 100) : 0; return (sub + vat).toFixed(2); })()"></span>
                         </div>
                     </div>
                 </div>

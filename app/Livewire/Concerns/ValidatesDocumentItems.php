@@ -41,6 +41,8 @@ trait ValidatesDocumentItems
             if ($hasPer) {
                 $rules["items.{$i}.price"] = ['required', 'numeric', 'gt:0'];
             }
+
+            $rules["items.{$i}.discount_percent"] = ['nullable', 'numeric', 'min:0'];
         }
 
         return $rules;

@@ -44,6 +44,8 @@ class DocumentTotalsCalculator
 
     /**
      * @param  Collection<int, array{quantity?: float|string, price?: float|string, per?: string|null, discount_percent?: float|string, is_note?: bool}>  $items
+     *
+     * `discount_percent` is a % reduction applied to line value (0/null = no reduction, full line value used).
      * @return array{subtotal: float, vat: float, total: float}
      */
     public static function creditNoteTotal(Collection $items, Customer $customer): array
@@ -55,7 +57,9 @@ class DocumentTotalsCalculator
             $lineValue = self::lineValue($item);
             $discountPercent = (float) ($item['discount_percent'] ?? 0);
 
-            return round($lineValue * ($discountPercent / 100), 2);
+            return $discountPercent > 0
+                ? round($lineValue * ($discountPercent / 100), 2)
+                : round($lineValue, 2);
         });
 
         $subtotal = round($subtotal, 2);
