@@ -76,7 +76,7 @@ new #[Title('Customer Details')] class extends Component {
 
     {{-- Back link + actions --}}
     <div class="flex items-center justify-between gap-2">
-        <x-ui.back-button :fallback="route('customers.index')" icon="arrow-left" size="sm">Back</x-ui.back-button>
+        <flux:button variant="ghost" icon="arrow-left" size="sm" :href="route('customers.index')" wire:navigate>Back</flux:button>
         <div class="flex items-center gap-2">
             <flux:button variant="ghost" icon="pencil" size="sm" :href="route('customers.edit', $customer)" wire:navigate>
                 Edit

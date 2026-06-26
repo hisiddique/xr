@@ -19,6 +19,8 @@ class SettingSeeder extends Seeder
             ['key' => 'company_email', 'value' => 'info@deliverycrm.test', 'type' => 'string'],
             ['key' => 'dn_prefix', 'value' => 'DN', 'type' => 'string'],
             ['key' => 'inv_prefix', 'value' => 'INV', 'type' => 'string'],
+            ['key' => 'cn_prefix', 'value' => 'CN', 'type' => 'string'],
+            ['key' => 'sup_prefix', 'value' => 'SUP', 'type' => 'string'],
             ['key' => 'number_padding', 'value' => '4', 'type' => 'integer'],
             ['key' => 'dn_start_number', 'value' => '1', 'type' => 'integer'],
         ];

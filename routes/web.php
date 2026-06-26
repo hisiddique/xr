@@ -17,6 +17,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('customers/{customer}/edit', 'pages::customers.edit')->name('customers.edit');
     Route::livewire('customers/{customer}', 'pages::customers.show')->name('customers.show');
 
+    // Suppliers
+    Route::livewire('suppliers', 'pages::suppliers.index')->name('suppliers.index');
+    Route::livewire('suppliers/create', 'pages::suppliers.form')->name('suppliers.create');
+    Route::livewire('suppliers/{supplier}/edit', 'pages::suppliers.form')->name('suppliers.edit');
+    Route::livewire('suppliers/{supplier}', 'pages::suppliers.show')->name('suppliers.show');
+
     // Delivery Notes
     Route::livewire('delivery-notes', 'pages::delivery-notes.index')->name('delivery-notes.index');
     Route::livewire('delivery-notes/create', 'pages::delivery-notes.create')->name('delivery-notes.create');

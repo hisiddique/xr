@@ -40,18 +40,25 @@
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 font-mono text-[10px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F9</kbd>
                     </a>
 
-                    <a
-                        href="{{ route('customers.index') }}"
-                        wire:navigate
-                        @class([
-                            'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-                            'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('customers.*'),
-                            'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('customers.*'),
-                        ])
-                    >
-                        Customers
-                        <kbd x-show="$store.hotkeys.showLabels" x-cloak class="rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 font-mono text-[10px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F4</kbd>
-                    </a>
+                    <flux:dropdown>
+                        <button
+                            type="button"
+                            @class([
+                                'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                                'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('customers.*', 'suppliers.*'),
+                                'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('customers.*', 'suppliers.*'),
+                            ])
+                        >
+                            Accounts
+                            <svg class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </button>
+                        <flux:menu>
+                            <flux:menu.item :href="route('customers.index')" wire:navigate>Customers</flux:menu.item>
+                            <flux:menu.item :href="route('suppliers.index')" wire:navigate>Suppliers</flux:menu.item>
+                        </flux:menu>
+                    </flux:dropdown>
 
                     <a
                         href="{{ route('delivery-notes.index') }}"
@@ -151,6 +158,9 @@
                             <flux:menu.item :href="route('customers.create')" icon="user-plus" wire:navigate>
                                 {{ __('Customer') }}
                                 <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-2 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 font-mono text-[10px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F1</kbd>
+                            </flux:menu.item>
+                            <flux:menu.item :href="route('suppliers.create')" icon="building-office" wire:navigate>
+                                {{ __('Supplier') }}
                             </flux:menu.item>
                             <flux:menu.item :href="route('delivery-notes.create')" icon="truck" wire:navigate>
                                 {{ __('Delivery Note') }}
@@ -267,6 +277,20 @@
                             >
                                 <flux:icon.users class="size-5 shrink-0" />
                                 Customers
+                            </a>
+                        </li>
+                        <li>
+                            <a
+                                href="{{ route('suppliers.index') }}"
+                                wire:navigate
+                                @class([
+                                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('suppliers.*'),
+                                    'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('suppliers.*'),
+                                ])
+                            >
+                                <flux:icon.building-office class="size-5 shrink-0" />
+                                Suppliers
                             </a>
                         </li>
                         <li>
