@@ -1,5 +1,5 @@
 @aware(['perPage' => 25])
-<div x-data="perPageSelect()">
+<div {{ $attributes->merge(['class' => '']) }} x-data="perPageSelect()">
     <select
         wire:model.live="perPage"
         x-on:change="onChange($event.target.value)"

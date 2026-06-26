@@ -1,0 +1,95 @@
+<?php
+
+namespace App\Models;
+
+use App\SupplierInvoiceStatus;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
+
+class SupplierInvoice extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'supplier_invoice_no',
+        'supplier_id',
+        'invoice_date',
+        'due_date',
+        'status',
+        'notes',
+        'attachments',
+        'created_by',
+    ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (SupplierInvoice $invoice): void {
+            if (blank($invoice->supplier_invoice_no)) {
+                $invoice->supplier_invoice_no = static::nextNumber();
+            }
+        });
+    }
+
+    public static function nextNumber(): string
+    {
+        return DB::transaction(function (): string {
+            $prefix = strtoupper((string) Setting::get('supinv_prefix', 'SUPINV'));
+            $padding = (int) Setting::get('number_padding', 4);
+            $highest = static::query()
+                ->where('supplier_invoice_no', 'LIKE', $prefix.'-%')
+                ->lockForUpdate()
+                ->pluck('supplier_invoice_no')
+                ->map(fn (string $no): int => (int) substr($no, strlen($prefix) + 1))
+                ->max() ?? 0;
+
+            return sprintf('%s-%s', $prefix, str_pad((string) ($highest + 1), $padding, '0', STR_PAD_LEFT));
+        });
+    }
+
+    protected function casts(): array
+    {
+        return [
+            'invoice_date' => 'date',
+            'due_date' => 'date',
+            'status' => SupplierInvoiceStatus::class,
+            'attachments' => 'array',
+        ];
+    }
+
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class)->withTrashed();
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(SupplierInvoiceItem::class)->orderBy('sort_order');
+    }
+
+    public function getGrossTotalAttribute(): float
+    {
+        return (float) $this->items->sum('line_total');
+    }
+
+    public function getVatTotalAttribute(): float
+    {
+        $rate = (float) Setting::get('vat_rate', 20);
+
+        return $this->items
+            ->filter(fn ($item) => $item->vat_applicable)
+            ->sum(fn ($item) => (float) $item->line_total * $rate / (100 + $rate));
+    }
+
+    public function getNetTotalAttribute(): float
+    {
+        return $this->grossTotal - $this->vatTotal;
+    }
+}

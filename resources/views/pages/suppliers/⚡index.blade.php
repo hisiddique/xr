@@ -99,7 +99,6 @@ new #[Title('Suppliers')] class extends Component {
                         <tr>
                             <x-ui.sortable-header column="reference" :state="$this->sortStateFor('reference')">Reference</x-ui.sortable-header>
                             <x-ui.sortable-header column="company_name" :state="$this->sortStateFor('company_name')">Company</x-ui.sortable-header>
-                            <th class="px-4 py-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Contact</th>
                             <th class="px-4 py-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Trade Discount</th>
                             <th class="px-4 py-1 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT Applied</th>
                             <th class="px-4 py-1"></th>
@@ -132,9 +131,6 @@ new #[Title('Suppliers')] class extends Component {
                                             <x-ui.highlight :text="$supplier->company_name" :term="$search" />
                                         </a>
                                     </div>
-                                </td>
-                                <td class="px-6 py-4 text-zinc-600 dark:text-zinc-400">
-                                    {{ trim(($supplier->title?->name ? $supplier->title->name.' ' : '').$supplier->first_name.' '.$supplier->last_name) ?: '—' }}
                                 </td>
                                 <td class="px-6 py-4 text-zinc-600 dark:text-zinc-400">
                                     @if($supplier->trade_discount > 0)

@@ -293,7 +293,7 @@ document.addEventListener('alpine:init', () => {
             // ── '+' creates new on scoped list & show pages ──
             if (key === '+') {
                 const path = window.location.pathname;
-                const scopes = ['/customers', '/suppliers', '/delivery-notes', '/credit-notes', '/overheads', '/users'];
+                const scopes = ['/customers', '/suppliers', '/delivery-notes', '/credit-notes', '/overheads', '/users', '/supplier-invoices'];
                 const scope = scopes.find((s) => path === s || new RegExp(`^${s}/\\d+$`).test(path));
                 if (scope) {
                     e.preventDefault();
@@ -1416,6 +1416,161 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 
+    // ─── Supplier Invoice Line Form Component ───────────────────
+    window.Alpine.data('supplierInvoiceLineForm', (initialRows = [], vatRate = 20) => ({
+        rows: initialRows.length ? initialRows : [{ product_code: '', quantity: 1, unit_amount: '', vat_applicable: false }],
+        vatRate,
+        _rowDefault: { product_code: '', quantity: 1, unit_amount: '', vat_applicable: false },
+        _rowCells: 'input, select',
+
+        init() {
+            this.$nextTick(() => {
+                this.$el.querySelector('input:not([type=hidden])')?.focus();
+            });
+        },
+
+        lineGross(row) {
+            return Math.round((parseFloat(row.quantity) || 0) * (parseFloat(row.unit_amount) || 0) * 100) / 100;
+        },
+
+        get grossTotal() {
+            return Math.round(this.rows.reduce((s, r) => s + this.lineGross(r), 0) * 100) / 100;
+        },
+
+        get vatTotal() {
+            return Math.round(
+                this.rows
+                    .filter(r => r.vat_applicable)
+                    .reduce((s, r) => s + this.lineGross(r) * this.vatRate / (100 + this.vatRate), 0)
+                * 100) / 100;
+        },
+
+        get netTotal() {
+            return Math.round((this.grossTotal - this.vatTotal) * 100) / 100;
+        },
+
+        add() {
+            this.rows.push({ ...this._rowDefault });
+            this.$nextTick(() => this.focusLast());
+        },
+
+        remove(i) {
+            if (this.rows.length > 1) this.rows.splice(i, 1);
+        },
+
+        focusLast() {
+            const inputs = this.$el.querySelectorAll('input[data-row-details]');
+            if (!inputs || !inputs.length) return;
+            const last = inputs[inputs.length - 1];
+            last.focus();
+            last.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        },
+
+        submit() {
+            this.$wire.set('items', this.rows, false);
+            this.$wire.save();
+        },
+
+        _focusField(el) {
+            if (!el) return;
+            el.focus();
+            if (typeof el.select === 'function' && el.type !== 'number') el.select();
+            if (el.tagName === 'SELECT' && typeof el.showPicker === 'function') {
+                try { el.showPicker(); } catch (_) {}
+            }
+        },
+
+        atTextBoundary(input, dir) {
+            if (input.type === 'number') return true;
+            if (typeof input.value !== 'string') return true;
+            try {
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                if (start === null || end === null) return true;
+                if (dir > 0) return start === input.value.length && end === input.value.length;
+                return start === 0 && end === 0;
+            } catch (_) { return true; }
+        },
+
+        moveVertical(target, dir) {
+            const cell = target.closest('input, select, button[data-row-remove]') ?? target;
+            const tr = cell.closest('tr[data-row-idx]');
+            if (!tr) return;
+            const rowIdx = parseInt(tr.dataset.rowIdx, 10);
+            const rowCells = Array.from(tr.querySelectorAll(this._rowCells));
+            const colIdx = rowCells.indexOf(cell);
+            const tbody = this.$el.querySelector('tbody');
+            const targetTr = tbody?.querySelector(`tr[data-row-idx="${rowIdx + dir}"]`);
+            if (!targetTr) return;
+            const targetCells = Array.from(targetTr.querySelectorAll(this._rowCells));
+            const next = targetCells[colIdx] ?? targetCells[0];
+            if (next) this._focusField(next);
+        },
+
+        moveHorizontal(target, dir) {
+            const cell = target.closest('input, select, button[data-row-remove]') ?? target;
+            const tbody = this.$el.querySelector('tbody');
+            const cells = Array.from(tbody?.querySelectorAll(this._rowCells) ?? []);
+            const idx = cells.indexOf(cell);
+            if (idx < 0) return;
+            const next = cells[idx + dir];
+            if (next) this._focusField(next);
+        },
+
+        advanceFromItem(target) {
+            const cell = target.closest('input, select, button[data-row-remove]') ?? target;
+            const tr = cell.closest('tr[data-row-idx]');
+            if (!tr) return;
+            const rowIdx = parseInt(tr.dataset.rowIdx, 10);
+            const cells = Array.from(tr.querySelectorAll(this._rowCells));
+            const colIdx = cells.indexOf(cell);
+            const nextSibling = cells[colIdx + 1];
+            if (nextSibling) { this._focusField(nextSibling); return; }
+            const tbody = this.$el.querySelector('tbody');
+            const nextTr = tbody?.querySelector(`tr[data-row-idx="${rowIdx + 1}"]`);
+            if (nextTr) {
+                const first = nextTr.querySelector(this._rowCells);
+                if (first) { this._focusField(first); return; }
+            }
+            this.add();
+        },
+
+        _advanceFormField(el) {
+            const focusables = Array.from(this.$el.querySelectorAll(
+                'input:not([type=hidden]):not([type=file]):not([disabled]), select:not([disabled])'
+            )).filter(f => f.offsetParent !== null);
+            const idx = focusables.indexOf(el);
+            const next = focusables[idx + 1];
+            if (next) this._focusField(next);
+        },
+
+        handleKey(e) {
+            const tag = e.target.tagName;
+            const isInput = tag === 'INPUT' || tag === 'SELECT';
+            const inItems = isInput && e.target.closest?.('[data-items-table]');
+            const ctrl = e.ctrlKey || e.metaKey;
+            const stop = () => { e.preventDefault(); e.stopPropagation(); };
+
+            if (ctrl && e.key === 'Enter') { e.preventDefault(); this.submit(); return; }
+            if (e.key === 'Escape') { e.preventDefault(); if (window.Flux) Flux.modal('exit-confirm').show(); return; }
+
+            if (inItems) {
+                if (e.key === 'Enter' && !ctrl)           { stop(); this.advanceFromItem(e.target); return; }
+                if (ctrl && (e.key === 'Backspace' || e.key === 'Delete')) { stop(); const tr = e.target.closest('tr[data-row-idx]'); if (tr) this.remove(parseInt(tr.dataset.rowIdx, 10)); return; }
+                if (e.key === 'ArrowDown')                { stop(); this.moveVertical(e.target, 1); return; }
+                if (e.key === 'ArrowUp')                  { stop(); this.moveVertical(e.target, -1); return; }
+                if (e.key === 'ArrowRight' && this.atTextBoundary(e.target, 1))  { stop(); this.moveHorizontal(e.target, 1); return; }
+                if (e.key === 'ArrowLeft'  && this.atTextBoundary(e.target, -1)) { stop(); this.moveHorizontal(e.target, -1); return; }
+            }
+
+            if (e.key === 'Enter' && !ctrl && tag === 'INPUT' && !inItems) {
+                stop();
+                this._advanceFormField(e.target);
+                return;
+            }
+        },
+    }));
+
     // ─── Exit-Confirm Modal Button Navigation ───────────────────────
     window.Alpine.data('fontSizePreview', (initial = 18) => ({
         size: initial,
@@ -1539,7 +1694,7 @@ document.addEventListener('alpine:init', () => {
     // Used by the typeahead to advance focus after a selection.
     window.focusNextFormField = (from) => {
         if (!from) return false;
-        const form = from.closest('form');
+        const form = from.closest('form') ?? from.closest('[data-form-root]');
         if (!form) return false;
         const selector = 'input:not([type=hidden]):not([disabled]):not([type=submit]):not([type=button]), select:not([disabled]), textarea:not([disabled]), [data-form-stop]:not([disabled]), [data-flux-switch]:not([disabled])';
         const all = Array.from(form.querySelectorAll(selector))

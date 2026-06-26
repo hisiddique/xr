@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ConvertDeliveryNoteController;
 use App\Http\Controllers\DocumentPdfController;
+use App\Http\Controllers\SupplierInvoiceAttachmentController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -22,6 +23,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('suppliers/create', 'pages::suppliers.form')->name('suppliers.create');
     Route::livewire('suppliers/{supplier}/edit', 'pages::suppliers.form')->name('suppliers.edit');
     Route::livewire('suppliers/{supplier}', 'pages::suppliers.show')->name('suppliers.show');
+
+    // Supplier Invoices
+    Route::livewire('supplier-invoices', 'pages::supplier-invoices.index')->name('supplier-invoices.index');
+    Route::livewire('supplier-invoices/create', 'pages::supplier-invoices.form')->name('supplier-invoices.create');
+    Route::livewire('supplier-invoices/{supplierInvoice}/edit', 'pages::supplier-invoices.form')->name('supplier-invoices.edit');
+    Route::livewire('supplier-invoices/{supplierInvoice}', 'pages::supplier-invoices.show')->name('supplier-invoices.show');
+    Route::get('supplier-invoices/{supplierInvoice}/attachments/download', [SupplierInvoiceAttachmentController::class, 'download'])->name('supplier-invoices.attachments.download');
 
     // Delivery Notes
     Route::livewire('delivery-notes', 'pages::delivery-notes.index')->name('delivery-notes.index');

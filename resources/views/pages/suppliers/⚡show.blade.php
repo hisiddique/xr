@@ -1,12 +1,29 @@
 <?php
 
 use App\Models\Supplier;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 new #[Title('Supplier Details')] class extends Component {
+    use WithPagination;
+
     public Supplier $supplier;
+
+    #[Url(as: 'tab')] public string $activeTab = 'invoices';
+
+    #[Computed]
+    public function supplierInvoices()
+    {
+        return $this->supplier
+            ->supplierInvoices()
+            ->with('items')
+            ->orderByDesc('invoice_date')
+            ->paginate(10, pageName: 'inv_page');
+    }
 
     #[On('supplier-deleted')]
     public function onDeleted(): void
@@ -104,6 +121,68 @@ new #[Title('Supplier Details')] class extends Component {
                 </div>
             </dl>
         </x-ui.section-card>
+    </div>
+
+    {{-- Tabs --}}
+    <div class="rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
+        {{-- Tab nav --}}
+        <div class="flex border-b border-zinc-200/70 px-4 dark:border-white/10">
+            <button
+                wire:click="$set('activeTab', 'invoices')"
+                @class([
+                    'border-b-2 px-3 py-3 text-sm font-medium transition-colors',
+                    'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400' => $activeTab === 'invoices',
+                    'border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200' => $activeTab !== 'invoices',
+                ])
+            >
+                Supplier Invoices
+            </button>
+        </div>
+
+        {{-- Invoices tab --}}
+        @if($activeTab === 'invoices')
+            <div class="p-4">
+                @if($this->supplierInvoices->isEmpty())
+                    <p class="py-8 text-center text-sm text-zinc-400 dark:text-zinc-500">No supplier invoices found.</p>
+                @else
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-zinc-100 dark:border-white/[0.06]">
+                                <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Invoice No</th>
+                                <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Date</th>
+                                <th class="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Gross (£)</th>
+                                <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Status</th>
+                                <th class="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Files</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-zinc-50 dark:divide-white/[0.03]">
+                            @foreach($this->supplierInvoices as $inv)
+                                <tr class="group">
+                                    <td class="py-2.5 pr-4">
+                                        <a href="{{ route('supplier-invoices.show', $inv) }}" wire:navigate class="font-mono text-indigo-600 hover:underline dark:text-indigo-400">
+                                            {{ $inv->supplier_invoice_no }}
+                                        </a>
+                                    </td>
+                                    <td class="py-2.5 pr-4 text-zinc-600 dark:text-zinc-400">{{ $inv->invoice_date->format('d M Y') }}</td>
+                                    <td class="py-2.5 pr-4 text-right font-mono text-zinc-900 dark:text-white">£{{ number_format($inv->grossTotal, 2) }}</td>
+                                    <td class="py-2.5 pr-4">
+                                        <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $inv->status->ringColor() }}">
+                                            {{ $inv->status->label() }}
+                                        </span>
+                                    </td>
+                                    <td class="py-2.5 text-right text-zinc-400">
+                                        {{ count($inv->attachments ?? []) ?: '—' }}
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                    <div class="mt-4">
+                        {{ $this->supplierInvoices->links() }}
+                    </div>
+                @endif
+            </div>
+        @endif
     </div>
 
 </div>

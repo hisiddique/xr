@@ -54,6 +54,7 @@ new #[Title('Dashboard')] class extends Component {
         ['key' => 'n', 'label' => 'Credit Notes',   'icon' => 'receipt-refund', 'href' => route('credit-notes.index')],
         ['key' => 'm', 'label' => 'Payments',       'icon' => 'banknotes',      'href' => route('payments.index')],
         ['key' => 'o', 'label' => 'Overheads',      'icon' => 'arrow-trending-up', 'href' => route('overheads.index')],
+        ['key' => 'v', 'label' => 'Supplier Invoices', 'icon' => 'receipt-percent', 'href' => route('supplier-invoices.index')],
         $isAdmin ? ['key' => 'r', 'label' => 'References', 'icon' => 'tag', 'menu' => [
             ['label' => 'Titles',        'icon' => 'identification', 'href' => route('reference-data.titles')],
             ['label' => 'Credit Terms',  'icon' => 'calendar-days',  'href' => route('reference-data.credit-terms')],
