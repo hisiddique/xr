@@ -19,7 +19,7 @@ return new class extends Migration
             $table->timestamp('applied_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['supplier_invoice_id', 'supplier_debit_note_id']);
+            $table->unique(['supplier_invoice_id', 'supplier_debit_note_id'], 'sidn_invoice_debit_note_unique');
         });
     }
 
