@@ -23,6 +23,21 @@ class Overhead extends Model
         ];
     }
 
+    public function getVatAmountAttribute(): float
+    {
+        if (! $this->has_vat) {
+            return 0.0;
+        }
+        $rate = (float) Setting::get('vat_rate', 20);
+
+        return (float) $this->amount * $rate / (100 + $rate);
+    }
+
+    public function getNetAmountAttribute(): float
+    {
+        return (float) $this->amount - $this->vatAmount;
+    }
+
     public function category(): BelongsTo
     {
         return $this->belongsTo(ExpenseCategory::class, 'category_id');

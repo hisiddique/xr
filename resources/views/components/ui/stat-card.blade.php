@@ -25,6 +25,9 @@
         <div class="min-w-0 flex-1 pl-2">
             <p class="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ $label }}</p>
             <p class="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-white">{{ $value }}</p>
+            @if(isset($sublabel) && $sublabel->isNotEmpty())
+                <div class="mt-1 pl-2 text-xs text-zinc-500 dark:text-zinc-400">{{ $sublabel }}</div>
+            @endif
         </div>
         <div class="ml-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl {{ $c['icon'] }}">
             <flux:icon :icon="$icon" class="size-5 {{ $c['iconText'] }}" />

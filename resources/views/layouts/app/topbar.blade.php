@@ -78,6 +78,26 @@
                             type="button"
                             @class([
                                 'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                                'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('reports.*'),
+                                'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('reports.*'),
+                            ])
+                        >
+                            Reports
+                            <svg class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </button>
+                        <flux:menu>
+                            <flux:menu.item :href="route('reports.overheads')" wire:navigate>Overhead Report</flux:menu.item>
+                            <flux:menu.item :href="route('reports.supplier-purchasing')" wire:navigate>Supplier Purchasing</flux:menu.item>
+                        </flux:menu>
+                    </flux:dropdown>
+
+                    <flux:dropdown>
+                        <button
+                            type="button"
+                            @class([
+                                'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
                                 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*', 'overheads.*', 'supplier-invoices.*', 'supplier-debit-notes.*', 'supplier-payouts.*'),
                                 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*', 'overheads.*', 'supplier-invoices.*', 'supplier-debit-notes.*', 'supplier-payouts.*'),
                             ])
@@ -314,6 +334,34 @@
                             >
                                 <flux:icon.truck class="size-5 shrink-0" />
                                 Delivery Notes
+                            </a>
+                        </li>
+                        <li>
+                            <a
+                                href="{{ route('reports.overheads') }}"
+                                wire:navigate
+                                @class([
+                                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('reports.overheads'),
+                                    'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('reports.overheads'),
+                                ])
+                            >
+                                <flux:icon.chart-bar class="size-5 shrink-0" />
+                                Overhead Report
+                            </a>
+                        </li>
+                        <li>
+                            <a
+                                href="{{ route('reports.supplier-purchasing') }}"
+                                wire:navigate
+                                @class([
+                                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('reports.supplier-purchasing'),
+                                    'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('reports.supplier-purchasing'),
+                                ])
+                            >
+                                <flux:icon.building-storefront class="size-5 shrink-0" />
+                                Supplier Purchasing
                             </a>
                         </li>
                         <li>

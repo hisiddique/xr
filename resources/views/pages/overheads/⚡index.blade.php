@@ -15,7 +15,7 @@ new #[Title('Overheads')] class extends Component {
     use WithPerPage;
     use \Livewire\WithPagination;
 
-    protected array $sortable = ['expense_date', 'amount', 'payment_method'];
+    protected array $sortable = ['expense_date', 'net_total', 'vat_total', 'gross_total', 'payment_method'];
 
     #[Url]
     public string $search = '';
@@ -106,7 +106,23 @@ new #[Title('Overheads')] class extends Component {
     #[Computed]
     public function vatReclaimable(): string
     {
-        return '£' . number_format(Overhead::where('has_vat', true)->sum('amount'), 2);
+        $rate = (float) \App\Models\Setting::get('vat_rate', 20);
+        $total = Overhead::where('has_vat', true)
+            ->sum(\Illuminate\Support\Facades\DB::raw("amount * {$rate} / (100 + {$rate})"));
+
+        return '£' . number_format((float) $total, 2);
+    }
+
+    protected function applyCustomSort(\Illuminate\Contracts\Database\Eloquent\Builder $query, string $column, string $direction): ?\Illuminate\Contracts\Database\Eloquent\Builder
+    {
+        $rate = (float) \App\Models\Setting::get('vat_rate', 20);
+
+        return match ($column) {
+            'gross_total' => $query->orderBy('amount', $direction),
+            'vat_total'   => $query->orderByRaw("CASE WHEN has_vat = 1 THEN amount * {$rate} / (100 + {$rate}) ELSE 0 END {$direction}"),
+            'net_total'   => $query->orderByRaw("CASE WHEN has_vat = 1 THEN amount * 100 / (100 + {$rate}) ELSE amount END {$direction}"),
+            default       => null,
+        };
     }
 
     #[Computed]
@@ -244,7 +260,9 @@ new #[Title('Overheads')] class extends Component {
                         <tr>
                             <x-ui.sortable-header column="expense_date" :state="$this->sortStateFor('expense_date')">Date</x-ui.sortable-header>
                             <th class="px-4 py-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Category</th>
-                            <x-ui.sortable-header column="amount" :state="$this->sortStateFor('amount')">Amount</x-ui.sortable-header>
+                            <x-ui.sortable-header column="net_total" align="right" :state="$this->sortStateFor('net_total')">Net (£)</x-ui.sortable-header>
+                            <x-ui.sortable-header column="vat_total" align="right" :state="$this->sortStateFor('vat_total')">VAT (£)</x-ui.sortable-header>
+                            <x-ui.sortable-header column="gross_total" align="right" :state="$this->sortStateFor('gross_total')">Gross (£)</x-ui.sortable-header>
                             <th class="px-4 py-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT</th>
                             <x-ui.sortable-header column="payment_method" :state="$this->sortStateFor('payment_method')">Payment Method</x-ui.sortable-header>
                             <th class="px-4 py-1"></th>
@@ -268,8 +286,14 @@ new #[Title('Overheads')] class extends Component {
                                 <td class="px-4 py-2 font-medium text-zinc-900 dark:text-white">
                                     {{ $overhead->category->name }}
                                 </td>
-                                <td class="px-4 py-2 font-mono text-zinc-900 dark:text-white">
-                                    £{{ number_format($overhead->amount, 2) }}
+                                <td class="px-4 py-2 text-right font-mono text-zinc-900 dark:text-white">
+                                    {{ number_format($overhead->netAmount, 2) }}
+                                </td>
+                                <td class="px-4 py-2 text-right font-mono text-zinc-600 dark:text-zinc-400">
+                                    {{ number_format($overhead->vatAmount, 2) }}
+                                </td>
+                                <td class="px-4 py-2 text-right font-mono text-zinc-900 dark:text-white">
+                                    {{ number_format($overhead->amount, 2) }}
                                 </td>
                                 <td class="px-4 py-2">
                                     @if($overhead->has_vat)

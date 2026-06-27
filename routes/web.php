@@ -67,6 +67,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('supplier-debit-notes/{debitNote}/edit', 'pages::supplier-debit-notes.edit')->name('supplier-debit-notes.edit');
     Route::livewire('supplier-debit-notes/{debitNote}', 'pages::supplier-debit-notes.show')->name('supplier-debit-notes.show');
 
+    // Reports
+    Route::livewire('reports/overheads', 'pages::reports.overheads')->name('reports.overheads');
+    Route::livewire('reports/supplier-purchasing', 'pages::reports.supplier-purchasing')->name('reports.supplier-purchasing');
+
     // Supplier Payouts
     Route::livewire('supplier-payouts', 'pages::supplier-payouts.index')->name('supplier-payouts.index');
     Route::livewire('supplier-payouts/{payout}/edit', 'pages::supplier-payouts.edit')->name('supplier-payouts.edit');
