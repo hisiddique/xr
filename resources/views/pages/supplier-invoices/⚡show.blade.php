@@ -11,7 +11,7 @@ new #[Title('Supplier Invoice')] class extends Component {
 
     public function mount(): void
     {
-        $this->supplierInvoice->load(['supplier', 'items', 'creator']);
+        $this->supplierInvoice->load(['supplier', 'items', 'creator', 'debitNotes']);
     }
 
     #[On('supplier-invoice-deleted')]
@@ -188,8 +188,39 @@ new #[Title('Supplier Invoice')] class extends Component {
                     <dt class="text-base font-semibold text-zinc-900 dark:text-white">Total Final Payable Gross Sum</dt>
                     <dd class="font-mono text-lg font-bold text-violet-700 dark:text-violet-400">£{{ number_format($supplierInvoice->grossTotal, 2) }}</dd>
                 </div>
+                @if($supplierInvoice->debitNotes->isNotEmpty())
+                    @php $totalDeducted = $supplierInvoice->debitNotes->sum(fn ($dn) => (float) $dn->pivot->applied_amount); @endphp
+                    <div class="flex items-center justify-between gap-4">
+                        <dt class="text-sm text-zinc-600 dark:text-zinc-400">Debit Note Deductions</dt>
+                        <dd class="font-mono font-medium text-red-600 dark:text-red-400">−£{{ number_format($totalDeducted, 2) }}</dd>
+                    </div>
+                    <div class="flex items-center justify-between gap-4 border-t border-violet-200/70 pt-3 dark:border-violet-500/20">
+                        <dt class="text-base font-semibold text-zinc-900 dark:text-white">Net Payable After Deductions</dt>
+                        <dd class="font-mono text-lg font-bold text-emerald-600 dark:text-emerald-400">£{{ number_format(max(0, $supplierInvoice->grossTotal - $totalDeducted), 2) }}</dd>
+                    </div>
+                @endif
             </dl>
         </div>
+
+        {{-- Applied debit notes --}}
+        @if($supplierInvoice->debitNotes->isNotEmpty())
+            <div class="border-t border-zinc-200/70 dark:border-white/10">
+                <div class="px-6 py-4">
+                    <h3 class="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">Applied Debit Notes</h3>
+                    <div class="flex flex-col gap-2">
+                        @foreach($supplierInvoice->debitNotes as $dn)
+                            <div class="flex items-center justify-between text-sm">
+                                <div class="flex items-center gap-3">
+                                    <a href="{{ route('supplier-debit-notes.show', $dn) }}" wire:navigate class="font-mono font-semibold text-violet-600 hover:underline dark:text-violet-400">{{ $dn->reference }}</a>
+                                    <span class="text-zinc-500 dark:text-zinc-400">{{ $dn->doc_date->format('d M Y') }}</span>
+                                </div>
+                                <span class="font-mono font-semibold text-red-600 dark:text-red-400">−£{{ number_format($dn->pivot->applied_amount, 2) }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+        @endif
     </x-ui.section-card>
 
     {{-- Attachments --}}

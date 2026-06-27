@@ -78,8 +78,8 @@
                             type="button"
                             @class([
                                 'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-                                'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*', 'overheads.*', 'supplier-invoices.*'),
-                                'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*', 'overheads.*', 'supplier-invoices.*'),
+                                'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*', 'overheads.*', 'supplier-invoices.*', 'supplier-debit-notes.*', 'supplier-payouts.*'),
+                                'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*', 'overheads.*', 'supplier-invoices.*', 'supplier-debit-notes.*', 'supplier-payouts.*'),
                             ])
                         >
                             Documents
@@ -93,6 +93,8 @@
                             <flux:menu.item :href="route('payments.index')" wire:navigate>Payments</flux:menu.item>
                             <flux:menu.item :href="route('overheads.index')" wire:navigate>Overheads</flux:menu.item>
                             <flux:menu.item :href="route('supplier-invoices.index')" wire:navigate>Supplier Invoices</flux:menu.item>
+                            <flux:menu.item :href="route('supplier-debit-notes.index')" wire:navigate>Supplier Debit Notes</flux:menu.item>
+                            <flux:menu.item :href="route('supplier-payouts.index')" wire:navigate>Supplier Payouts</flux:menu.item>
                         </flux:menu>
                     </flux:dropdown>
 
@@ -177,6 +179,9 @@
                             </flux:menu.item>
                             <flux:menu.item :href="route('supplier-invoices.create')" icon="receipt-percent" wire:navigate>
                                 {{ __('Supplier Invoice') }}
+                            </flux:menu.item>
+                            <flux:menu.item :href="route('supplier-debit-notes.create')" icon="minus-circle" wire:navigate>
+                                {{ __('Supplier Debit Note') }}
                             </flux:menu.item>
                         </flux:menu>
                     </flux:dropdown>
@@ -379,6 +384,34 @@
                             >
                                 <flux:icon.receipt-percent class="size-5 shrink-0" />
                                 Supplier Invoices
+                            </a>
+                        </li>
+                        <li>
+                            <a
+                                href="{{ route('supplier-debit-notes.index') }}"
+                                wire:navigate
+                                @class([
+                                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('supplier-debit-notes.*'),
+                                    'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('supplier-debit-notes.*'),
+                                ])
+                            >
+                                <flux:icon.minus-circle class="size-5 shrink-0" />
+                                Supplier Debit Notes
+                            </a>
+                        </li>
+                        <li>
+                            <a
+                                href="{{ route('supplier-payouts.index') }}"
+                                wire:navigate
+                                @class([
+                                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('supplier-payouts.*'),
+                                    'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('supplier-payouts.*'),
+                                ])
+                            >
+                                <flux:icon.banknotes class="size-5 shrink-0" />
+                                Supplier Payouts
                             </a>
                         </li>
 

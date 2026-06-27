@@ -293,7 +293,7 @@ document.addEventListener('alpine:init', () => {
             // ── '+' creates new on scoped list & show pages ──
             if (key === '+') {
                 const path = window.location.pathname;
-                const scopes = ['/customers', '/suppliers', '/delivery-notes', '/credit-notes', '/overheads', '/users', '/supplier-invoices'];
+                const scopes = ['/customers', '/suppliers', '/delivery-notes', '/credit-notes', '/overheads', '/users', '/supplier-invoices', '/supplier-debit-notes'];
                 const scope = scopes.find((s) => path === s || new RegExp(`^${s}/\\d+$`).test(path));
                 if (scope) {
                     e.preventDefault();
@@ -602,6 +602,8 @@ document.addEventListener('alpine:init', () => {
             switch (num) {
                 case 1: Livewire.navigate('/customers/create'); break;
                 case 2: {
+                    const customPanel = document.activeElement?.closest?.('[data-f2-handler]');
+                    if (customPanel) { customPanel.dispatchEvent(new CustomEvent('f2-action', { bubbles: false })); break; }
                     const submitBtn = document.querySelector('[data-form-submit]');
                     if (submitBtn) { submitBtn.click(); break; }
                     const form = Array.from(document.querySelectorAll('form'))
@@ -1817,6 +1819,229 @@ document.addEventListener('alpine:init', () => {
                 r.creditAmount = Math.round(creditCover * 100) / 100;
                 r.amount = Math.round((creditCover + paymentCover) * 100) / 100;
             });
+        },
+    }));
+
+    window.Alpine.data('supplierDebitNoteItems', (initialItems) => ({
+        rows: initialItems.length ? initialItems : [{ description: '', quantity: '', amount: '', total: 0 }],
+        _rowCells: 'input',
+
+        addRow() {
+            this.rows.push({ description: '', quantity: '', amount: '', total: 0 });
+            this.$nextTick(() => {
+                const inputs = this.$el.querySelectorAll('[data-dn-row-desc]');
+                const last = inputs[inputs.length - 1];
+                if (last) { last.focus(); last.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+            });
+        },
+
+        removeRow(i) {
+            if (this.rows.length > 1) this.rows.splice(i, 1);
+        },
+
+        rowTotal(r) {
+            return (parseFloat(r.quantity) || 0) * (parseFloat(r.amount) || 0);
+        },
+
+        get subtotal() {
+            return this.rows.reduce((s, r) => s + this.rowTotal(r), 0);
+        },
+
+        _focusField(el) {
+            if (!el) return;
+            el.focus();
+            if (el.type !== 'number' && typeof el.select === 'function') el.select();
+        },
+
+        atTextBoundary(input, dir) {
+            if (input.type === 'number') return true;
+            try {
+                const { selectionStart: s, selectionEnd: e } = input;
+                if (s === null) return true;
+                return dir > 0 ? s === input.value.length && e === input.value.length : s === 0 && e === 0;
+            } catch (_) { return true; }
+        },
+
+        moveVertical(target, dir) {
+            const tr = target.closest('tr[data-row-idx]');
+            if (!tr) return;
+            const rowIdx = parseInt(tr.dataset.rowIdx, 10);
+            const cells = Array.from(tr.querySelectorAll(this._rowCells));
+            const colIdx = cells.indexOf(target);
+            const tbody = this.$el.querySelector('tbody');
+            const targetTr = tbody?.querySelector(`tr[data-row-idx="${rowIdx + dir}"]`);
+            if (!targetTr) return;
+            const targetCells = Array.from(targetTr.querySelectorAll(this._rowCells));
+            this._focusField(targetCells[colIdx] ?? targetCells[0]);
+        },
+
+        moveHorizontal(target, dir) {
+            const tbody = this.$el.querySelector('tbody');
+            const cells = Array.from(tbody?.querySelectorAll(this._rowCells) ?? []);
+            const idx = cells.indexOf(target);
+            if (idx < 0) return;
+            const next = cells[idx + dir];
+            if (next) this._focusField(next);
+        },
+
+        advanceFromItem(target) {
+            const tr = target.closest('tr[data-row-idx]');
+            if (!tr) return;
+            const rowIdx = parseInt(tr.dataset.rowIdx, 10);
+            const cells = Array.from(tr.querySelectorAll(this._rowCells));
+            const colIdx = cells.indexOf(target);
+            const nextSibling = cells[colIdx + 1];
+            if (nextSibling) { this._focusField(nextSibling); return; }
+            const tbody = this.$el.querySelector('tbody');
+            const nextTr = tbody?.querySelector(`tr[data-row-idx="${rowIdx + 1}"]`);
+            if (nextTr) {
+                const first = nextTr.querySelector(this._rowCells);
+                if (first) { this._focusField(first); return; }
+            }
+            this.addRow();
+        },
+
+        handleKey(e) {
+            if (!e.target.closest('[data-dn-items-table]')) return;
+            const stop = () => { e.preventDefault(); e.stopPropagation(); };
+            if (e.key === 'Enter') { stop(); this.advanceFromItem(e.target); return; }
+            if (e.key === 'ArrowDown') { stop(); this.moveVertical(e.target, 1); return; }
+            if (e.key === 'ArrowUp') { stop(); this.moveVertical(e.target, -1); return; }
+            if (e.key === 'ArrowRight' && this.atTextBoundary(e.target, 1)) { stop(); this.moveHorizontal(e.target, 1); return; }
+            if (e.key === 'ArrowLeft' && this.atTextBoundary(e.target, -1)) { stop(); this.moveHorizontal(e.target, -1); return; }
+        },
+
+        preCommit() {
+            this.$wire.set('items', this.rows.map(r => ({ ...r, total: this.rowTotal(r) })), false)
+                .then(() => this.$flux.modal('confirm-commit-debit-note').show());
+        },
+    }));
+
+    window.Alpine.data('supplierDebitNoteForm', () => ({
+        init() {
+            document.addEventListener('modal-show', (e) => {
+                if (e.detail?.name !== 'confirm-commit-debit-note') return;
+                setTimeout(() => document.querySelector('[data-dn-commit-btn]')?.focus(), 60);
+            });
+            window.addEventListener('payout-focus-dn', () => {
+                this.$nextTick(() => {
+                    const el = this.$el.querySelector('[data-form-stop]') ?? this.$el.querySelector('input:not([type=hidden])');
+                    if (el) { el.focus(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+                });
+            });
+        },
+
+        _formInputs() {
+            return Array.from(this.$el.querySelectorAll(
+                'input:not([type=hidden]):not([type=file]):not([disabled]), select:not([disabled])'
+            )).filter(f => f.offsetParent !== null && !f.closest('[data-dn-items-table]'));
+        },
+
+        _focusField(el) {
+            if (!el) return;
+            el.focus();
+            if (el.type !== 'number' && typeof el.select === 'function') el.select();
+        },
+
+        handleKey(e) {
+            if (!this.$el.contains(e.target)) return;
+            if (e.target.closest('[data-dn-items-table]')) return;
+            const tag = e.target.tagName;
+            const stop = () => { e.preventDefault(); e.stopPropagation(); };
+
+            if (e.key === 'Enter' && tag !== 'TEXTAREA' && (tag === 'INPUT' || tag === 'SELECT')) {
+                stop();
+                const inputs = this._formInputs();
+                const idx = inputs.indexOf(e.target);
+                const next = inputs[idx + 1];
+                if (next) {
+                    this._focusField(next);
+                } else {
+                    window.dispatchEvent(new CustomEvent('dn-focus-first-item'));
+                }
+            }
+        },
+    }));
+
+    window.Alpine.data('supplierPayoutAllocator', ({ rows }) => ({
+        rows: rows.map(r => ({ ...r, allocated_amount: r.allocated_amount ?? 0 })),
+
+        init() {
+            document.addEventListener('modal-show', (e) => {
+                if (e.detail?.name !== 'confirm-allocation') return;
+                setTimeout(() => document.querySelector('[data-payout-confirm-btn]')?.focus(), 60);
+            });
+            window.addEventListener('dn-focus-payout', () => {
+                this.$nextTick(() => {
+                    const el = this.$el.querySelector('[data-form-stop]') ?? this.$el.querySelector('input');
+                    if (el) { el.focus(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+                });
+            });
+        },
+
+        get payoutAmount() {
+            return parseFloat(this.$wire.amount) || 0;
+        },
+
+        get totalAllocated() {
+            return this.rows.reduce((s, r) => s + (parseFloat(r.allocated_amount) || 0), 0);
+        },
+
+        get unallocated() {
+            return Math.max(0, this.payoutAmount - this.totalAllocated);
+        },
+
+        autoAllocate(amount) {
+            let remaining = (amount !== undefined && !isNaN(amount)) ? parseFloat(amount) : this.payoutAmount;
+            this.rows.forEach(r => {
+                const effective = parseFloat(r.effective_outstanding) || 0;
+                if (effective <= 0 || remaining <= 0) {
+                    r.allocated_amount = 0;
+                    return;
+                }
+                const alloc = Math.min(effective, remaining);
+                r.allocated_amount = Math.round(alloc * 100) / 100;
+                remaining = Math.round((remaining - alloc) * 100) / 100;
+            });
+        },
+
+        _allocInputs() {
+            return Array.from(this.$el.querySelectorAll('[data-payout-alloc-input]'))
+                .filter(f => f.offsetParent !== null);
+        },
+
+        _formInputs() {
+            return Array.from(this.$el.querySelectorAll(
+                'input:not([type=hidden]):not([type=file]):not([disabled]):not([data-payout-alloc-input]), select:not([disabled])'
+            )).filter(f => f.offsetParent !== null);
+        },
+
+        _focusField(el) {
+            if (!el) return;
+            el.focus();
+            if (el.type !== 'number' && typeof el.select === 'function') el.select();
+        },
+
+        handleKey(e) {
+            if (!this.$el.contains(e.target)) return;
+            const tag = e.target.tagName;
+            const isAllocInput = e.target.hasAttribute('data-payout-alloc-input');
+            const stop = () => { e.preventDefault(); e.stopPropagation(); };
+
+            if (e.key === 'Enter' && tag !== 'TEXTAREA') {
+                stop();
+                if (isAllocInput) {
+                    const inputs = this._allocInputs();
+                    const idx = inputs.indexOf(e.target);
+                    const next = inputs[idx + 1];
+                    if (next) this._focusField(next);
+                } else if (tag === 'INPUT' || tag === 'SELECT') {
+                    const inputs = this._formInputs();
+                    const idx = inputs.indexOf(e.target);
+                    const next = inputs[idx + 1];
+                    if (next) { this._focusField(next); } else { this._focusField(this._allocInputs()[0]); }
+                }
+            }
         },
     }));
 

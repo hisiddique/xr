@@ -61,6 +61,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('overheads/{overhead}/edit', 'pages::overheads.form')->name('overheads.edit');
     Route::livewire('overheads/{overhead}', 'pages::overheads.show')->name('overheads.show');
 
+    // Supplier Debit Notes
+    Route::livewire('supplier-debit-notes', 'pages::supplier-debit-notes.index')->name('supplier-debit-notes.index');
+    Route::livewire('supplier-debit-notes/create', 'pages::supplier-debit-notes.create')->name('supplier-debit-notes.create');
+    Route::livewire('supplier-debit-notes/{debitNote}/edit', 'pages::supplier-debit-notes.edit')->name('supplier-debit-notes.edit');
+    Route::livewire('supplier-debit-notes/{debitNote}', 'pages::supplier-debit-notes.show')->name('supplier-debit-notes.show');
+
+    // Supplier Payouts
+    Route::livewire('supplier-payouts', 'pages::supplier-payouts.index')->name('supplier-payouts.index');
+    Route::livewire('supplier-payouts/{payout}/edit', 'pages::supplier-payouts.edit')->name('supplier-payouts.edit');
+    Route::livewire('supplier-payouts/{payout}', 'pages::supplier-payouts.show')->name('supplier-payouts.show');
+
     // Document PDF
     Route::get('documents/{document}/pdf', [DocumentPdfController::class, 'show'])->name('documents.pdf');
     Route::get('documents/{document}/pdf/download', [DocumentPdfController::class, 'download'])->name('documents.pdf.download');

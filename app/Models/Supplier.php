@@ -85,6 +85,16 @@ class Supplier extends Model
         return $this->hasMany(SupplierInvoice::class);
     }
 
+    public function debitNotes(): HasMany
+    {
+        return $this->hasMany(SupplierDebitNote::class);
+    }
+
+    public function payouts(): HasMany
+    {
+        return $this->hasMany(SupplierPayout::class);
+    }
+
     public function getTypeaheadLabelAttribute(): string
     {
         return $this->reference

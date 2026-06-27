@@ -6,6 +6,7 @@ use App\SupplierInvoiceStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 
@@ -72,6 +73,26 @@ class SupplierInvoice extends Model
     public function items(): HasMany
     {
         return $this->hasMany(SupplierInvoiceItem::class)->orderBy('sort_order');
+    }
+
+    public function payoutAllocations(): HasMany
+    {
+        return $this->hasMany(SupplierPayoutAllocation::class);
+    }
+
+    public function debitNotes(): BelongsToMany
+    {
+        return $this->belongsToMany(SupplierDebitNote::class, 'supplier_invoice_debit_notes')
+            ->withPivot(['applied_amount', 'applied_at'])
+            ->withTimestamps();
+    }
+
+    public function getOutstandingAmountAttribute(): float
+    {
+        $paid = (float) $this->payoutAllocations->sum('allocated_amount');
+        $deducted = (float) $this->debitNotes->sum(fn ($dn) => (float) $dn->pivot->applied_amount);
+
+        return max(0, $this->grossTotal - $paid - $deducted);
     }
 
     public function getGrossTotalAttribute(): float

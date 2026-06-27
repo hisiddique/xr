@@ -4,6 +4,7 @@ use App\Models\Setting;
 use App\Models\SupplierInvoice;
 use Flux\Flux;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -22,6 +23,7 @@ new #[Title('Supplier Invoice')] class extends Component {
     public array $existingAttachments = [];
     public array $markedForDeletion = [];
     public $newAttachments = [];
+    public array $selectedDebitNoteIds = [];
 
     public function mount(): void
     {
@@ -40,6 +42,7 @@ new #[Title('Supplier Invoice')] class extends Component {
                 'unit_amount' => (float) $item->unit_amount,
                 'vat_applicable' => (bool) $item->vat_applicable,
             ])->toArray();
+            $this->selectedDebitNoteIds = $this->supplierInvoice->debitNotes()->pluck('supplier_debit_notes.id')->toArray();
         } else {
             $this->invoice_date = now()->format('Y-m-d');
             $this->items = [['product_code' => '', 'quantity' => 1, 'unit_amount' => '', 'vat_applicable' => false]];
@@ -63,6 +66,56 @@ new #[Title('Supplier Invoice')] class extends Component {
             unset($this->newAttachments[$index]);
             $this->newAttachments = array_values($this->newAttachments);
         }
+    }
+
+    #[Computed]
+    public function availableDebitNotes(): array
+    {
+        if (! $this->supplier_id) {
+            return [];
+        }
+
+        return \App\Models\SupplierDebitNote::where('supplier_id', $this->supplier_id)
+            ->whereDoesntHave('appliedInvoices')
+            ->where('status', 'committed')
+            ->orderBy('doc_date')
+            ->get(['id', 'reference', 'total', 'doc_date'])
+            ->toArray();
+    }
+
+    #[Computed]
+    public function appliedDebitNotes(): array
+    {
+        if (! $this->supplierInvoice) {
+            return [];
+        }
+
+        return $this->supplierInvoice->debitNotes()
+            ->withPivot('applied_amount', 'applied_at')
+            ->get()
+            ->toArray();
+    }
+
+    #[Computed]
+    public function selectedDebitNoteTotal(): float
+    {
+        if (empty($this->selectedDebitNoteIds)) {
+            return 0.0;
+        }
+
+        $available = collect($this->availableDebitNotes)->keyBy('id');
+        $applied = collect($this->appliedDebitNotes)->keyBy('id');
+
+        return (float) collect($this->selectedDebitNoteIds)->sum(function ($id) use ($available, $applied) {
+            if ($available->has($id)) {
+                return (float) $available->get($id)['total'];
+            }
+            if ($applied->has($id)) {
+                return (float) $applied->get($id)['pivot']['applied_amount'];
+            }
+
+            return 0.0;
+        });
     }
 
     public function save(): void
@@ -128,6 +181,23 @@ new #[Title('Supplier Invoice')] class extends Component {
             ];
         }
         $invoice->update(['attachments' => $attachments ?: null]);
+
+        if (! empty($this->selectedDebitNoteIds)) {
+            $toDetach = $invoice->debitNotes()->pluck('supplier_debit_notes.id')->toArray();
+            $invoice->debitNotes()->detach($toDetach);
+
+            foreach ($this->selectedDebitNoteIds as $dnId) {
+                $dn = \App\Models\SupplierDebitNote::find($dnId);
+                if ($dn) {
+                    $invoice->debitNotes()->attach($dnId, [
+                        'applied_amount' => $dn->total,
+                        'applied_at' => now(),
+                    ]);
+                }
+            }
+        } else {
+            $invoice->debitNotes()->detach();
+        }
 
         Flux::toast(variant: 'success', text: $this->supplierInvoice === null ? 'Supplier invoice created.' : 'Supplier invoice updated.');
         $this->redirect(route('supplier-invoices.show', $invoice), navigate: true);
@@ -284,6 +354,44 @@ new #[Title('Supplier Invoice')] class extends Component {
                         />
                     </div>
 
+                    @if($supplier_id && count($this->availableDebitNotes) > 0)
+                        <div class="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-700/30 dark:bg-amber-500/5">
+                            <h3 class="mb-3 text-sm font-semibold text-amber-800 dark:text-amber-400">Available Debit Notes — Apply to This Invoice</h3>
+                            <div class="flex flex-col gap-2">
+                                @foreach($this->availableDebitNotes as $dn)
+                                    <label class="flex cursor-pointer items-center gap-3 text-sm">
+                                        <flux:checkbox wire:model.live="selectedDebitNoteIds" :value="$dn['id']" />
+                                        <span class="font-mono font-semibold text-zinc-800 dark:text-zinc-200">{{ $dn['reference'] }}</span>
+                                        <span class="text-zinc-500 dark:text-zinc-400">{{ \Carbon\Carbon::parse($dn['doc_date'])->format('d M Y') }}</span>
+                                        <span class="ml-auto font-mono font-semibold text-red-600 dark:text-red-400">
+                                            −£{{ number_format($dn['total'], 2) }}
+                                        </span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
+                    @if($supplierInvoice && count($this->appliedDebitNotes) > 0)
+                        <div class="md:col-span-2 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-800">
+                            <h3 class="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">Applied Debit Notes</h3>
+                            <div class="flex flex-col gap-2">
+                                @foreach($this->appliedDebitNotes as $dn)
+                                    <div class="flex items-center justify-between text-sm">
+                                        <div class="flex items-center gap-3">
+                                            <flux:checkbox wire:model.live="selectedDebitNoteIds" :value="$dn['id']" />
+                                            <span class="font-mono font-semibold text-zinc-800 dark:text-zinc-200">{{ $dn['reference'] }}</span>
+                                            <span class="text-zinc-500 dark:text-zinc-400">{{ \Carbon\Carbon::parse($dn['doc_date'])->format('d M Y') }}</span>
+                                        </div>
+                                        <span class="font-mono font-semibold text-red-600 dark:text-red-400">
+                                            −£{{ number_format($dn['pivot']['applied_amount'], 2) }}
+                                        </span>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
                 </div>
             </div>
 
@@ -379,6 +487,16 @@ new #[Title('Supplier Invoice')] class extends Component {
                             <dt class="text-base font-semibold text-zinc-900 dark:text-white">Total Final Payable Gross Sum</dt>
                             <dd class="font-mono text-lg font-bold text-violet-700 dark:text-violet-400" x-text="'£' + grossTotal.toFixed(2)"></dd>
                         </div>
+                        @if($this->selectedDebitNoteTotal > 0)
+                        <div class="flex items-center justify-between gap-4">
+                            <dt class="text-sm text-zinc-600 dark:text-zinc-400">Debit Note Deductions</dt>
+                            <dd class="font-mono font-medium text-red-600 dark:text-red-400">−£{{ number_format($this->selectedDebitNoteTotal, 2) }}</dd>
+                        </div>
+                        <div class="flex items-center justify-between gap-4 border-t border-violet-200/70 pt-3 dark:border-violet-500/20">
+                            <dt class="text-base font-semibold text-zinc-900 dark:text-white">Net Payable After Deductions</dt>
+                            <dd class="font-mono text-lg font-bold text-emerald-600 dark:text-emerald-400" x-text="'£' + Math.max(0, grossTotal - {{ $this->selectedDebitNoteTotal }}).toFixed(2)"></dd>
+                        </div>
+                        @endif
                     </dl>
                 </div>
 
