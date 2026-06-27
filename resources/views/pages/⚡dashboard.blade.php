@@ -55,6 +55,10 @@ new #[Title('Dashboard')] class extends Component {
         ['key' => 'm', 'label' => 'Payments',       'icon' => 'banknotes',      'href' => route('payments.index')],
         ['key' => 'o', 'label' => 'Overheads',      'icon' => 'arrow-trending-up', 'href' => route('overheads.index')],
         ['key' => 'v', 'label' => 'Supplier Invoices', 'icon' => 'receipt-percent', 'href' => route('supplier-invoices.index')],
+        ['key' => 'e', 'label' => 'Reports', 'icon' => 'chart-bar', 'menu' => [
+            ['label' => 'Overhead Report',       'icon' => 'banknotes',        'href' => route('reports.overheads')],
+            ['label' => 'Supplier Purchasing',   'icon' => 'building-office',  'href' => route('reports.supplier-purchasing')],
+        ]],
         $isAdmin ? ['key' => 'r', 'label' => 'References', 'icon' => 'tag', 'menu' => [
             ['label' => 'Titles',        'icon' => 'identification', 'href' => route('reference-data.titles')],
             ['label' => 'Credit Terms',  'icon' => 'calendar-days',  'href' => route('reference-data.credit-terms')],
