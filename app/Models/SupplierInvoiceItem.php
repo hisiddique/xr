@@ -31,6 +31,17 @@ class SupplierInvoiceItem extends Model
         ];
     }
 
+    public function getLineGrossAttribute(): float
+    {
+        $net = (float) $this->line_total;
+        if (! $this->vat_applicable) {
+            return $net;
+        }
+        $rate = (float) Setting::get('vat_rate', 20);
+
+        return round($net + $net * $rate / 100, 2);
+    }
+
     public function supplierInvoice(): BelongsTo
     {
         return $this->belongsTo(SupplierInvoice::class);

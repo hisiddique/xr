@@ -161,7 +161,7 @@ new #[Title('Supplier Invoice')] class extends Component {
                                     <span class="text-xs text-zinc-400">No</span>
                                 @endif
                             </td>
-                            <td class="px-4 sm:px-6 py-3 text-right font-medium text-zinc-900 dark:text-white">{{ number_format((float) $item->line_total, 2) }}</td>
+                            <td class="px-4 sm:px-6 py-3 text-right font-medium text-zinc-900 dark:text-white">{{ number_format($item->line_gross, 2) }}</td>
                         </tr>
                     @empty
                         <tr>

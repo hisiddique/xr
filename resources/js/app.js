@@ -1431,24 +1431,29 @@ document.addEventListener('alpine:init', () => {
             });
         },
 
-        lineGross(row) {
+        lineNet(row) {
             return Math.round((parseFloat(row.quantity) || 0) * (parseFloat(row.unit_amount) || 0) * 100) / 100;
         },
 
-        get grossTotal() {
-            return Math.round(this.rows.reduce((s, r) => s + this.lineGross(r), 0) * 100) / 100;
+        lineGross(row) {
+            const net = this.lineNet(row);
+            return row.vat_applicable ? Math.round((net + net * this.vatRate / 100) * 100) / 100 : net;
+        },
+
+        get netTotal() {
+            return Math.round(this.rows.reduce((s, r) => s + this.lineNet(r), 0) * 100) / 100;
         },
 
         get vatTotal() {
             return Math.round(
                 this.rows
                     .filter(r => r.vat_applicable)
-                    .reduce((s, r) => s + this.lineGross(r) * this.vatRate / (100 + this.vatRate), 0)
+                    .reduce((s, r) => s + this.lineNet(r) * this.vatRate / 100, 0)
                 * 100) / 100;
         },
 
-        get netTotal() {
-            return Math.round((this.grossTotal - this.vatTotal) * 100) / 100;
+        get grossTotal() {
+            return Math.round((this.netTotal + this.vatTotal) * 100) / 100;
         },
 
         add() {

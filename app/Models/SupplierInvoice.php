@@ -95,7 +95,7 @@ class SupplierInvoice extends Model
         return max(0, $this->grossTotal - $paid - $deducted);
     }
 
-    public function getGrossTotalAttribute(): float
+    public function getNetTotalAttribute(): float
     {
         return (float) $this->items->sum('line_total');
     }
@@ -104,13 +104,13 @@ class SupplierInvoice extends Model
     {
         $rate = (float) Setting::get('vat_rate', 20);
 
-        return $this->items
+        return (float) $this->items
             ->filter(fn ($item) => $item->vat_applicable)
-            ->sum(fn ($item) => (float) $item->line_total * $rate / (100 + $rate));
+            ->sum(fn ($item) => round((float) $item->line_total * $rate / 100, 2));
     }
 
-    public function getNetTotalAttribute(): float
+    public function getGrossTotalAttribute(): float
     {
-        return $this->grossTotal - $this->vatTotal;
+        return round($this->netTotal + $this->vatTotal, 2);
     }
 }
