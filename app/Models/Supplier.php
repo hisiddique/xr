@@ -49,6 +49,12 @@ class Supplier extends Model
         'credit_limit_id',
         'credit_term_id',
         'supplier_vat_number',
+        'email',
+        'vat_registered',
+        'address_line_1',
+        'address_line_2',
+        'town_city',
+        'post_code',
         'created_by',
     ];
 
@@ -57,6 +63,7 @@ class Supplier extends Model
         return [
             'trade_discount' => 'decimal:2',
             'vat_applied' => 'boolean',
+            'vat_registered' => 'boolean',
         ];
     }
 

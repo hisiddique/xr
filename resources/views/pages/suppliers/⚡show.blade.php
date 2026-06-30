@@ -77,18 +77,32 @@ new #[Title('Supplier Details')] class extends Component {
     <div class="grid gap-4 md:grid-cols-2">
 
         {{-- Basic Information --}}
-        <div class="hidden">
+        <div>
             <x-ui.section-card title="Basic Information">
                 <dl class="space-y-4">
                     <div class="flex justify-between gap-4">
-                        <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Contact</dt>
-                        <dd class="text-sm text-zinc-900 dark:text-white text-right">
-                            {{ trim(($supplier->title?->name ? $supplier->title->name.' ' : '').$supplier->first_name.' '.$supplier->last_name) ?: '—' }}
+                        <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Reference</dt>
+                        <dd class="text-sm text-zinc-900 dark:text-white text-right">{{ $supplier->reference ?? '—' }}</dd>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                        <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Email</dt>
+                        <dd class="text-sm text-right">
+                            @if($supplier->email)
+                                <a href="mailto:{{ $supplier->email }}" class="text-indigo-600 hover:underline dark:text-indigo-400">{{ $supplier->email }}</a>
+                            @else
+                                <span class="text-zinc-400">—</span>
+                            @endif
                         </dd>
                     </div>
                     <div class="flex justify-between gap-4">
-                        <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Reference</dt>
-                        <dd class="text-sm text-zinc-900 dark:text-white text-right">{{ $supplier->reference ?? '—' }}</dd>
+                        <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">VAT Registered</dt>
+                        <dd>
+                            @if($supplier->vat_registered)
+                                <flux:icon.check-circle class="h-5 w-5 text-emerald-500 dark:text-emerald-400" />
+                            @else
+                                <flux:icon.x-circle class="h-5 w-5 text-zinc-400 dark:text-zinc-500" />
+                            @endif
+                        </dd>
                     </div>
                 </dl>
             </x-ui.section-card>
@@ -121,6 +135,29 @@ new #[Title('Supplier Details')] class extends Component {
                 </div>
             </dl>
         </x-ui.section-card>
+
+        {{-- Primary Address --}}
+        <div>
+            <x-ui.section-card title="Primary Address">
+                @php
+                    $addressLines = array_filter([
+                        $supplier->address_line_1,
+                        $supplier->address_line_2,
+                        $supplier->town_city,
+                        $supplier->post_code,
+                    ]);
+                @endphp
+                @if($addressLines)
+                    <address class="not-italic space-y-1 text-sm text-zinc-900 dark:text-white">
+                        @foreach($addressLines as $line)
+                            <div>{{ $line }}</div>
+                        @endforeach
+                    </address>
+                @else
+                    <span class="text-sm text-zinc-400 dark:text-zinc-500">—</span>
+                @endif
+            </x-ui.section-card>
+        </div>
     </div>
 
     {{-- Tabs --}}

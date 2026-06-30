@@ -1,0 +1,33 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('suppliers', function (Blueprint $table) {
+            $table->string('email')->nullable()->after('company_name');
+            $table->boolean('vat_registered')->default(false)->after('vat_applied');
+            $table->string('address_line_1')->nullable()->after('vat_registered');
+            $table->string('address_line_2')->nullable()->after('address_line_1');
+            $table->string('town_city', 100)->nullable()->after('address_line_2');
+            $table->string('post_code', 20)->nullable()->after('town_city');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('suppliers', function (Blueprint $table) {
+            $table->dropColumn(['email', 'vat_registered', 'address_line_1', 'address_line_2', 'town_city', 'post_code']);
+        });
+    }
+};

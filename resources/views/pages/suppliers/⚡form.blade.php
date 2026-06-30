@@ -22,6 +22,12 @@ new #[Title('Supplier')] class extends Component {
     public ?int $credit_limit_id = null;
     public ?int $credit_term_id = null;
     public string $supplier_vat_number = '';
+    public string $email = '';
+    public bool $vat_registered = false;
+    public string $address_line_1 = '';
+    public string $address_line_2 = '';
+    public string $town_city = '';
+    public string $post_code = '';
 
     public function mount(): void
     {
@@ -36,6 +42,12 @@ new #[Title('Supplier')] class extends Component {
             $this->credit_limit_id = $this->supplier->credit_limit_id;
             $this->credit_term_id = $this->supplier->credit_term_id;
             $this->supplier_vat_number = $this->supplier->supplier_vat_number ?? '';
+            $this->email = $this->supplier->email ?? '';
+            $this->vat_registered = (bool) $this->supplier->vat_registered;
+            $this->address_line_1 = $this->supplier->address_line_1 ?? '';
+            $this->address_line_2 = $this->supplier->address_line_2 ?? '';
+            $this->town_city = $this->supplier->town_city ?? '';
+            $this->post_code = $this->supplier->post_code ?? '';
         }
     }
 
@@ -56,6 +68,12 @@ new #[Title('Supplier')] class extends Component {
             'credit_limit_id' => 'nullable|integer|exists:lookup_credit_limits,id',
             'credit_term_id' => 'nullable|integer|exists:lookup_credit_terms,id',
             'supplier_vat_number' => 'nullable|string|max:50',
+            'email'          => 'nullable|email|max:255',
+            'vat_registered' => 'boolean',
+            'address_line_1' => 'nullable|string|max:255',
+            'address_line_2' => 'nullable|string|max:255',
+            'town_city'      => 'nullable|string|max:100',
+            'post_code'      => 'nullable|string|max:20',
         ]);
 
         if ($this->supplier === null) {
@@ -127,6 +145,26 @@ new #[Title('Supplier')] class extends Component {
                 <div class="grid gap-4 md:grid-cols-2" x-init="$nextTick(() => $el.querySelector('input')?.focus())">
                     <flux:input wire:model="company_name" :label="__('Company Name')" required />
                     <flux:input wire:model="reference" :label="__('Reference')" :placeholder="__('e.g. SUP-0001')" />
+                </div>
+                <div class="mt-4 grid gap-4 md:grid-cols-2">
+                    <flux:input wire:model="email" type="email" :label="__('Email Address')" />
+                    <flux:radio.group wire:model="vat_registered" :label="__('VAT Registered')" class="flex flex-row gap-6">
+                        <flux:radio :value="1" :label="__('Yes')" />
+                        <flux:radio :value="0" :label="__('No')" />
+                    </flux:radio.group>
+                </div>
+            </div>
+
+            {{-- Section: Primary Address --}}
+            <div class="border-t border-zinc-200/70 px-4 py-4 dark:border-white/10">
+                <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Primary Address</h2>
+                <div class="grid gap-4 md:grid-cols-2">
+                    <flux:input wire:model="address_line_1" :label="__('Address Line 1')" />
+                    <flux:input wire:model="address_line_2" :label="__('Address Line 2')" />
+                </div>
+                <div class="mt-4 grid gap-4 md:grid-cols-2">
+                    <flux:input wire:model="town_city" :label="__('Town / City')" />
+                    <flux:input wire:model="post_code" :label="__('Post Code')" />
                 </div>
             </div>
 
