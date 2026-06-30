@@ -46,7 +46,7 @@ test('number generation is gap-safe after delete', function () {
 });
 
 // ── Totals calculation ─────────────────────────────────────────
-test('grossTotal sums all line_totals', function () {
+test('grossTotal adds vat on top of net line totals', function () {
     $invoice = SupplierInvoice::factory()
         ->has(SupplierInvoiceItem::factory()->state(['quantity' => 2, 'unit_amount' => 100, 'vat_applicable' => false, 'line_total' => 200]), 'items')
         ->has(SupplierInvoiceItem::factory()->state(['quantity' => 3, 'unit_amount' => 50, 'vat_applicable' => true, 'line_total' => 150]), 'items')
@@ -54,10 +54,12 @@ test('grossTotal sums all line_totals', function () {
 
     $invoice->load('items');
 
-    expect($invoice->grossTotal)->toBe(350.0);
+    expect($invoice->netTotal)->toBe(350.0);
+    expect(round($invoice->vatTotal, 2))->toBe(30.0);
+    expect($invoice->grossTotal)->toBe(380.0);
 });
 
-test('vatTotal extracts vat from applicable lines only', function () {
+test('vatTotal applies only to vat_applicable lines', function () {
     $invoice = SupplierInvoice::factory()
         ->has(SupplierInvoiceItem::factory()->state(['quantity' => 1, 'unit_amount' => 120, 'vat_applicable' => true, 'line_total' => 120]), 'items')
         ->has(SupplierInvoiceItem::factory()->state(['quantity' => 1, 'unit_amount' => 50, 'vat_applicable' => false, 'line_total' => 50]), 'items')
@@ -65,9 +67,9 @@ test('vatTotal extracts vat from applicable lines only', function () {
 
     $invoice->load('items');
 
-    expect(round($invoice->vatTotal, 2))->toBe(20.0);
-    expect(round($invoice->netTotal, 2))->toBe(150.0);
-    expect($invoice->grossTotal)->toBe(170.0);
+    expect(round($invoice->vatTotal, 2))->toBe(24.0);
+    expect(round($invoice->netTotal, 2))->toBe(170.0);
+    expect($invoice->grossTotal)->toBe(194.0);
 });
 
 // ── Status enum ───────────────────────────────────────────────
