@@ -47,47 +47,49 @@ new #[Title('Dashboard')] class extends Component {
 @php
     $isAdmin = auth()->user()?->isAdmin();
 
-    $activeTiles = array_values(array_filter([
-        ['key' => 'c', 'label' => 'Customers',      'icon' => 'users',          'href' => route('customers.index')],
-        ['key' => 'd', 'label' => 'Delivery Notes', 'icon' => 'truck',          'href' => route('delivery-notes.index')],
-        ['key' => 'i', 'label' => 'Invoices',       'icon' => 'document-text',  'href' => route('invoices.index')],
-        ['key' => 'n', 'label' => 'Credit Notes',   'icon' => 'receipt-refund', 'href' => route('credit-notes.index')],
-        ['key' => 'm', 'label' => 'Payments',       'icon' => 'banknotes',      'href' => route('payments.index')],
-        ['key' => 'o', 'label' => 'Overheads',      'icon' => 'arrow-trending-up', 'href' => route('overheads.index')],
-        ['key' => 'v', 'label' => 'Supplier Invoices', 'icon' => 'receipt-percent', 'href' => route('supplier-invoices.index')],
-        ['key' => 'e', 'label' => 'Reports', 'icon' => 'chart-bar', 'menu' => [
-            ['label' => 'Overhead Report',       'icon' => 'banknotes',        'href' => route('reports.overheads')],
-            ['label' => 'Supplier Purchasing',   'icon' => 'building-office',  'href' => route('reports.supplier-purchasing')],
-        ]],
-        $isAdmin ? ['key' => 'r', 'label' => 'References', 'icon' => 'tag', 'menu' => [
-            ['label' => 'Titles',        'icon' => 'identification', 'href' => route('reference-data.titles')],
-            ['label' => 'Credit Terms',  'icon' => 'calendar-days',  'href' => route('reference-data.credit-terms')],
-            ['label' => 'Credit Limits', 'icon' => 'banknotes',      'href' => route('reference-data.credit-limits')],
-            ['label' => 'Units',         'icon' => 'scale',          'href' => route('reference-data.units')],
-        ]] : null,
-        $isAdmin ? ['key' => 's', 'label' => 'Settings',   'icon' => 'cog-6-tooth',   'href' => route('settings.crm')]            : null,
-        $isAdmin ? ['key' => 'u', 'label' => 'Users',      'icon' => 'user-group',    'href' => route('users.index')]             : null,
-        ['key' => 'p', 'label' => 'Profile',        'icon' => 'user-circle',   'href' => route('profile.edit')],
+    $categories = array_values(array_filter([
+        [
+            'label' => 'Customer Operations', 'icon' => 'user-group', 'color' => 'indigo',
+            'tiles' => [
+                ['label' => 'Customers',      'icon' => 'users',          'href' => route('customers.index')],
+                ['label' => 'Delivery Notes', 'icon' => 'truck',          'href' => route('delivery-notes.index')],
+                ['label' => 'Invoices',       'icon' => 'document-text',  'href' => route('invoices.index')],
+                ['label' => 'Credit Notes',   'icon' => 'receipt-refund', 'href' => route('credit-notes.index')],
+                ['label' => 'Payments',       'icon' => 'banknotes',      'href' => route('payments.index')],
+            ],
+        ],
+        [
+            'label' => 'Supplier Operations', 'icon' => 'building-storefront', 'color' => 'emerald',
+            'tiles' => [
+                ['label' => 'Supplier Invoices',   'icon' => 'receipt-percent', 'href' => route('supplier-invoices.index')],
+                ['label' => 'Supplier Purchasing', 'icon' => 'presentation-chart-line', 'href' => route('reports.supplier-purchasing'), 'badge' => 'Report'],
+            ],
+        ],
+        [
+            'label' => 'Overhead & Reports', 'icon' => 'chart-bar', 'color' => 'amber',
+            'tiles' => [
+                ['label' => 'Overheads',       'icon' => 'arrow-trending-up', 'href' => route('overheads.index')],
+                ['label' => 'Overhead Report', 'icon' => 'chart-pie',         'href' => route('reports.overheads'), 'badge' => 'Report'],
+            ],
+        ],
+        $isAdmin ? [
+            'label' => 'System References & Setup', 'icon' => 'cog-6-tooth', 'color' => 'slate',
+            'tiles' => [
+                ['label' => 'References', 'icon' => 'tag',         'modal' => 'references-menu'],
+                ['label' => 'Settings',   'icon' => 'cog-6-tooth', 'href' => route('settings.crm')],
+            ],
+        ] : null,
+        [
+            'label' => 'Identity & Team', 'icon' => 'identification', 'color' => 'violet',
+            'tiles' => array_values(array_filter([
+                $isAdmin ? ['label' => 'Users', 'icon' => 'user-group', 'href' => route('users.index')] : null,
+                ['label' => 'Profile', 'icon' => 'user-circle', 'href' => route('profile.edit')],
+            ])),
+        ],
     ]));
-
-    $disabledTiles = [
-        ['label' => 'Prospects',   'icon' => 'magnifying-glass'],
-        ['label' => 'Accounts',    'icon' => 'building-library'],
-        ['label' => 'Budgets',     'icon' => 'chart-pie'],
-        ['label' => 'Company',     'icon' => 'building-office-2'],
-        ['label' => 'Fax Queue',   'icon' => 'printer'],
-        ['label' => 'Suppliers',   'icon' => 'building-storefront'],
-        ['label' => 'Job Costing', 'icon' => 'clipboard-document-list'],
-        ['label' => 'Time Log',    'icon' => 'clock'],
-        ['label' => 'Contacts',    'icon' => 'identification'],
-    ];
 @endphp
 
-<div
-    class="flex flex-col gap-5"
-    x-data="dashboardShortcuts(@js(collect($activeTiles)->pluck('key')->all()))"
-    x-on:keydown.window="onKey($event)"
->
+<div class="flex flex-col gap-5">
 
     {{-- Welcome banner (compact) --}}
     <div class="relative overflow-hidden rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 px-5 py-3 text-white">
@@ -134,81 +136,42 @@ new #[Title('Dashboard')] class extends Component {
         @endforeach
     </div>
 
-    {{-- Quick Actions (formal-system tile grid) --}}
-    <div class="w-full">
-        <div class="mb-3 flex items-center justify-between">
-            <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Quick Actions</p>
-            <p class="text-[11px] text-zinc-400 dark:text-zinc-500">Press the highlighted letter to jump</p>
-        </div>
-
-        <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
-            @foreach($activeTiles as $tile)
-                @php
-                    $tileClasses = 'group relative flex flex-col items-center justify-center gap-2 rounded-xl border border-zinc-200/70 bg-white px-3 py-5 text-center shadow-[0_1px_2px_rgba(16,24,40,0.06)] transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md dark:border-white/10 dark:bg-zinc-900 dark:hover:border-indigo-500/40';
-                    $badgeClasses = 'absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded border border-zinc-200 bg-zinc-50 font-mono text-[10px] font-semibold uppercase text-zinc-500 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-400';
-                @endphp
-
-                @if(! empty($tile['menu']))
-                    <flux:dropdown position="bottom" align="center" class="!block w-full">
-                        <button type="button" data-shortcut="{{ $tile['key'] }}" class="{{ $tileClasses }} w-full cursor-pointer">
-                            <span class="{{ $badgeClasses }}">{{ $tile['key'] }}</span>
-                            <flux:icon :icon="$tile['icon']" class="size-6 text-indigo-600 dark:text-indigo-400" />
-                            <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ $tile['label'] }}</p>
-                        </button>
-                        <flux:menu>
-                            @foreach($tile['menu'] as $item)
-                                <flux:menu.item :href="$item['href']" :icon="$item['icon']" wire:navigate>
-                                    {{ $item['label'] }}
-                                </flux:menu.item>
-                            @endforeach
-                        </flux:menu>
-                    </flux:dropdown>
-                @else
-                    <a
-                        href="{{ $tile['href'] }}"
-                        wire:navigate
-                        data-shortcut="{{ $tile['key'] }}"
-                        class="{{ $tileClasses }}"
-                    >
-                        <span class="{{ $badgeClasses }}">{{ $tile['key'] }}</span>
-                        <flux:icon :icon="$tile['icon']" class="size-6 text-indigo-600 dark:text-indigo-400" />
-                        <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ $tile['label'] }}</p>
-                    </a>
-                @endif
-            @endforeach
-
-            @foreach($disabledTiles as $tile)
-                <div
-                    aria-disabled="true"
-                    title="Coming soon"
-                    class="relative flex cursor-not-allowed flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-200 bg-zinc-50/60 px-3 py-5 text-center opacity-60 dark:border-white/5 dark:bg-zinc-900/40"
-                >
-                    <flux:icon :icon="$tile['icon']" class="size-6 text-zinc-400 dark:text-zinc-600" />
-                    <p class="text-sm font-medium text-zinc-500 dark:text-zinc-500">{{ $tile['label'] }}</p>
-                </div>
-            @endforeach
-        </div>
+    {{-- Quick Actions (category-grouped tile blocks) --}}
+    <div class="flex flex-col gap-4">
+        @foreach($categories as $category)
+            <x-ui.category-block :label="$category['label']" :icon="$category['icon']" :color="$category['color']">
+                @foreach($category['tiles'] as $tile)
+                    <x-ui.action-tile
+                        :label="$tile['label']"
+                        :icon="$tile['icon']"
+                        :color="$category['color']"
+                        :href="$tile['href'] ?? null"
+                        :modal="$tile['modal'] ?? null"
+                        :badge="$tile['badge'] ?? null"
+                    />
+                @endforeach
+            </x-ui.category-block>
+        @endforeach
     </div>
 
-</div>
+    @if($isAdmin)
+        <flux:modal name="references-menu" focusable class="max-w-md">
+            <div class="space-y-6">
+                <div>
+                    <flux:heading size="lg">References</flux:heading>
+                    <flux:subheading>Manage reference data.</flux:subheading>
+                </div>
+                <div class="grid grid-cols-2 gap-2.5">
+                    <x-ui.action-tile label="Titles"        icon="identification" color="slate" :href="route('reference-data.titles')" />
+                    <x-ui.action-tile label="Credit Terms"  icon="calendar-days"  color="slate" :href="route('reference-data.credit-terms')" />
+                    <x-ui.action-tile label="Credit Limits" icon="banknotes"      color="slate" :href="route('reference-data.credit-limits')" />
+                    <x-ui.action-tile label="Units"         icon="scale"          color="slate" :href="route('reference-data.units')" />
+                </div>
+                <div class="flex justify-end">
+                    <flux:modal.close><flux:button variant="ghost" type="button">Close</flux:button></flux:modal.close>
+                </div>
+            </div>
+        </flux:modal>
+    @endif
 
-@script
-<script>
-    Alpine.data('dashboardShortcuts', (keys) => ({
-        keys,
-        onKey(e) {
-            const t = e.target;
-            if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return;
-            if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-            const k = e.key.toLowerCase();
-            if (!this.keys.includes(k)) return;
-            const el = document.querySelector(`[data-shortcut="${k}"]`);
-            if (el) {
-                e.preventDefault();
-                e.stopPropagation();
-                el.click();
-            }
-        },
-    }));
-</script>
-@endscript
+</div>
