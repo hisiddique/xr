@@ -132,22 +132,51 @@ new #[Title('Suppliers')] class extends Component {
                                         </a>
                                     </div>
                                 </td>
-                                <td class="px-6 py-4 text-zinc-600 dark:text-zinc-400">
+                                <td class="px-4 py-2 text-zinc-600 dark:text-zinc-400">
                                     @if($supplier->trade_discount > 0)
                                         <flux:badge color="sky">{{ $supplier->trade_discount }}%</flux:badge>
                                     @else
                                         —
                                     @endif
                                 </td>
-                                <td class="px-4 py-2 text-center">
-                                    @if($supplier->vat_applied)
-                                        <flux:icon.check-circle variant="solid" class="size-5 text-emerald-500" />
-                                    @else
-                                        <flux:icon.minus-circle variant="solid" class="size-5 text-zinc-300 dark:text-zinc-600" />
-                                    @endif
+                                <td class="px-4 py-2">
+                                    <div class="flex items-center justify-center">
+                                        @if($supplier->vat_applied)
+                                            <flux:icon.check-circle variant="solid" class="size-5 text-emerald-500" />
+                                        @else
+                                            <flux:icon.minus-circle variant="solid" class="size-5 text-zinc-300 dark:text-zinc-600" />
+                                        @endif
+                                    </div>
                                 </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
+                                        <a
+                                            href="{{ route('supplier-invoices.index').'?search='.urlencode($supplier->company_name) }}"
+                                            wire:navigate
+                                            data-row-action="invoices"
+                                            class="inline-flex items-center gap-1 rounded-md border border-indigo-600/30 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-400/30 dark:bg-indigo-400/10 dark:text-indigo-400 dark:hover:bg-indigo-400/20"
+                                        >
+                                            <flux:icon.receipt-percent class="h-3.5 w-3.5" />
+                                            Invoices
+                                        </a>
+                                        <a
+                                            href="{{ route('supplier-debit-notes.index').'?search='.urlencode($supplier->company_name) }}"
+                                            wire:navigate
+                                            data-row-action="debit-notes"
+                                            class="inline-flex items-center gap-1 rounded-md border border-amber-600/30 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-400 dark:hover:bg-amber-400/20"
+                                        >
+                                            <flux:icon.document-minus class="h-3.5 w-3.5" />
+                                            Debit Notes
+                                        </a>
+                                        <a
+                                            href="{{ route('supplier-payouts.index').'?search='.urlencode($supplier->company_name) }}"
+                                            wire:navigate
+                                            data-row-action="payouts"
+                                            class="inline-flex items-center gap-1 rounded-md border border-emerald-600/30 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-400 dark:hover:bg-emerald-400/20"
+                                        >
+                                            <flux:icon.banknotes class="h-3.5 w-3.5" />
+                                            Payouts
+                                        </a>
                                         <flux:button size="xs" variant="ghost" icon="eye" :href="route('suppliers.show', $supplier)" wire:navigate data-row-action="view" />
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('suppliers.edit', $supplier)" wire:navigate data-row-action="edit" />
                                         <livewire:pages::suppliers.delete-modal :supplier="$supplier" :key="'delete-'.$supplier->id" />

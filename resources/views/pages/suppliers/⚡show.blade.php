@@ -25,6 +25,26 @@ new #[Title('Supplier Details')] class extends Component {
             ->paginate(10, pageName: 'inv_page');
     }
 
+    #[Computed]
+    public function debitNotes()
+    {
+        return $this->supplier
+            ->debitNotes()
+            ->with('supplierInvoice')
+            ->orderByDesc('doc_date')
+            ->paginate(10, pageName: 'dn_page');
+    }
+
+    #[Computed]
+    public function payouts()
+    {
+        return $this->supplier
+            ->payouts()
+            ->withSum('allocations', 'allocated_amount')
+            ->orderByDesc('payout_date')
+            ->paginate(10, pageName: 'pay_page');
+    }
+
     #[On('supplier-deleted')]
     public function onDeleted(): void
     {
@@ -167,12 +187,35 @@ new #[Title('Supplier Details')] class extends Component {
             <button
                 wire:click="$set('activeTab', 'invoices')"
                 @class([
-                    'border-b-2 px-3 py-3 text-sm font-medium transition-colors',
+                    'flex items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors',
                     'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400' => $activeTab === 'invoices',
                     'border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200' => $activeTab !== 'invoices',
                 ])
             >
-                Supplier Invoices
+                <flux:icon.receipt-percent class="h-4 w-4" />
+                Invoices
+            </button>
+            <button
+                wire:click="$set('activeTab', 'debit-notes')"
+                @class([
+                    'flex items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors',
+                    'border-amber-600 text-amber-600 dark:border-amber-400 dark:text-amber-400' => $activeTab === 'debit-notes',
+                    'border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200' => $activeTab !== 'debit-notes',
+                ])
+            >
+                <flux:icon.document-minus class="h-4 w-4" />
+                Debit Notes
+            </button>
+            <button
+                wire:click="$set('activeTab', 'payouts')"
+                @class([
+                    'flex items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors',
+                    'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400' => $activeTab === 'payouts',
+                    'border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200' => $activeTab !== 'payouts',
+                ])
+            >
+                <flux:icon.banknotes class="h-4 w-4" />
+                Payouts
             </button>
         </div>
 
@@ -216,6 +259,94 @@ new #[Title('Supplier Details')] class extends Component {
                     </table>
                     <div class="mt-4">
                         {{ $this->supplierInvoices->links() }}
+                    </div>
+                @endif
+            </div>
+        @endif
+
+        {{-- Debit Notes tab --}}
+        @if($activeTab === 'debit-notes')
+            <div class="p-4">
+                @if($this->debitNotes->isEmpty())
+                    <p class="py-8 text-center text-sm text-zinc-400 dark:text-zinc-500">No debit notes found.</p>
+                @else
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-zinc-100 dark:border-white/[0.06]">
+                                <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Reference</th>
+                                <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Date</th>
+                                <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Invoice Linked</th>
+                                <th class="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Total (£)</th>
+                                <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-zinc-50 dark:divide-white/[0.03]">
+                            @foreach($this->debitNotes as $note)
+                                <tr class="group">
+                                    <td class="py-2.5 pr-4">
+                                        <a href="{{ route('supplier-debit-notes.show', $note) }}" wire:navigate class="font-mono text-amber-600 hover:underline dark:text-amber-400">
+                                            {{ $note->reference }}
+                                        </a>
+                                    </td>
+                                    <td class="py-2.5 pr-4 text-zinc-600 dark:text-zinc-400">{{ $note->doc_date->format('d M Y') }}</td>
+                                    <td class="py-2.5 pr-4 font-mono text-zinc-600 dark:text-zinc-400">
+                                        {{ $note->supplier_invoice_id ? ($note->supplierInvoice?->supplier_invoice_no ?? '—') : '—' }}
+                                    </td>
+                                    <td class="py-2.5 pr-4 text-right font-mono text-zinc-900 dark:text-white">£{{ number_format((float) $note->total, 2) }}</td>
+                                    <td class="py-2.5 pr-4">
+                                        <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $note->status->ringColor() }}">
+                                            {{ $note->status->label() }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                    <div class="mt-4">
+                        {{ $this->debitNotes->links() }}
+                    </div>
+                @endif
+            </div>
+        @endif
+
+        {{-- Payouts tab --}}
+        @if($activeTab === 'payouts')
+            <div class="p-4">
+                @if($this->payouts->isEmpty())
+                    <p class="py-8 text-center text-sm text-zinc-400 dark:text-zinc-500">No payouts found.</p>
+                @else
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-zinc-100 dark:border-white/[0.06]">
+                                <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Reference</th>
+                                <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Date</th>
+                                <th class="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Amount (£)</th>
+                                <th class="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Allocated (£)</th>
+                                <th class="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Unallocated (£)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-zinc-50 dark:divide-white/[0.03]">
+                            @foreach($this->payouts as $payout)
+                                @php
+                                    $allocated = $payout->allocations_sum_allocated_amount ?? 0;
+                                    $unallocated = max(0, $payout->amount - $allocated);
+                                @endphp
+                                <tr class="group">
+                                    <td class="py-2.5 pr-4">
+                                        <a href="{{ route('supplier-payouts.show', $payout) }}" wire:navigate class="font-mono text-emerald-600 hover:underline dark:text-emerald-400">
+                                            {{ $payout->reference }}
+                                        </a>
+                                    </td>
+                                    <td class="py-2.5 pr-4 text-zinc-600 dark:text-zinc-400">{{ $payout->payout_date->format('d M Y') }}</td>
+                                    <td class="py-2.5 pr-4 text-right font-mono text-zinc-900 dark:text-white">£{{ number_format($payout->amount, 2) }}</td>
+                                    <td class="py-2.5 pr-4 text-right font-mono {{ $allocated >= $payout->amount ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-600 dark:text-zinc-300' }}">£{{ number_format($allocated, 2) }}</td>
+                                    <td class="py-2.5 text-right font-mono {{ $unallocated > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400' }}">£{{ number_format($unallocated, 2) }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                    <div class="mt-4">
+                        {{ $this->payouts->links() }}
                     </div>
                 @endif
             </div>
