@@ -84,6 +84,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Admin-only routes
     Route::middleware('admin')->group(function () {
         Route::livewire('settings/crm', 'pages::settings.crm')->name('settings.crm');
+        Route::livewire('settings/legacy-migration', 'pages::settings.legacy-migration')->name('settings.legacy-migration');
 
         // Users
         Route::livewire('users', 'pages::users.index')->name('users.index');

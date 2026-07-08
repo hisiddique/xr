@@ -12,6 +12,7 @@ class DocumentItem extends Model
     use HasFactory;
 
     protected $fillable = [
+        'legacy_uid',
         'document_id',
         'details',
         'is_note',

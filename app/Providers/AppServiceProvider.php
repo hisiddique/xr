@@ -2,8 +2,11 @@
 
 namespace App\Providers;
 
+use App\Database\Connectors\DblibSqlServerConnector;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Connection;
+use Illuminate\Database\SqlServerConnection;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -17,7 +20,25 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->registerLegacyDblibDriver();
+    }
+
+    /**
+     * Register a custom 'legacy_dblib' DB driver used only by the `legacy`
+     * connection (config/database.php) — lets the legacy-migration feature
+     * connect via FreeTDS on hosts (e.g. Hostinger shared hosting) where the
+     * native sqlsrv PDO driver is present but unusable without root access
+     * to install Microsoft's msodbcsql. Fully isolated from the stock
+     * 'sqlsrv' driver/connection, which is untouched.
+     */
+    protected function registerLegacyDblibDriver(): void
+    {
+        $this->app->singleton('db.connector.legacy_dblib', fn () => new DblibSqlServerConnector);
+
+        Connection::resolverFor(
+            'legacy_dblib',
+            fn ($connection, $database, $prefix, $config) => new SqlServerConnection($connection, $database, $prefix, $config)
+        );
     }
 
     /**

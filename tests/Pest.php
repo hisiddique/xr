@@ -48,3 +48,5 @@ function something()
 {
     // ..
 }
+
+require __DIR__.'/Support/LegacyDatabase.php';

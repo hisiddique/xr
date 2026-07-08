@@ -11,6 +11,7 @@ class SupplierDebitNoteItem extends Model
     use HasFactory;
 
     protected $fillable = [
+        'legacy_uid',
         'supplier_debit_note_id',
         'description',
         'quantity',

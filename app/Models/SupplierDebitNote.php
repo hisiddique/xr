@@ -16,6 +16,7 @@ class SupplierDebitNote extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
+        'legacy_uid',
         'supplier_id',
         'reference',
         'doc_date',

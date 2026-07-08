@@ -39,6 +39,7 @@ class Supplier extends Model
     }
 
     protected $fillable = [
+        'legacy_uid',
         'company_name',
         'reference',
         'title_id',

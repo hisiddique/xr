@@ -11,6 +11,7 @@ class SupplierInvoiceItem extends Model
     use HasFactory;
 
     protected $fillable = [
+        'legacy_uid',
         'supplier_invoice_id',
         'product_code',
         'quantity',

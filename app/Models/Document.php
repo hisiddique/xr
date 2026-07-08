@@ -19,6 +19,7 @@ class Document extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
+        'legacy_uid',
         'customer_id',
         'type',
         'doc_number',

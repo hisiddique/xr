@@ -114,6 +114,17 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
+        'legacy' => [
+            'driver' => 'legacy_dblib',
+            'host' => env('LDB_HOST', 'localhost'),
+            'port' => env('LDB_PORT') ?: 1433,
+            'database' => env('LDB_DATABASE', ''),
+            'username' => env('LDB_USERNAME', ''),
+            'password' => env('LDB_PASSWORD', ''),
+            'prefix' => '',
+            'prefix_indexes' => true,
+        ],
+
     ],
 
     /*

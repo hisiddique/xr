@@ -155,6 +155,7 @@
                                 <flux:menu.item :href="route('reference-data.units')" icon="scale" wire:navigate>Units</flux:menu.item>
                                 <flux:menu.item :href="route('reference-data.payment-methods')" icon="wallet" wire:navigate>Payment Methods</flux:menu.item>
                                 <flux:menu.item :href="route('reference-data.expense-categories')" icon="rectangle-stack" wire:navigate>Expense Categories</flux:menu.item>
+                                <flux:menu.item :href="route('settings.legacy-migration')" icon="circle-stack" wire:navigate>Legacy Migration</flux:menu.item>
                             </flux:menu>
                         </flux:dropdown>
 
@@ -569,6 +570,20 @@
                                 >
                                     <flux:icon.tag class="size-5 shrink-0" />
                                     Expense Categories
+                                </a>
+                            </li>
+                            <li>
+                                <a
+                                    href="{{ route('settings.legacy-migration') }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('settings.legacy-migration'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('settings.legacy-migration'),
+                                    ])
+                                >
+                                    <flux:icon.circle-stack class="size-5 shrink-0" />
+                                    Legacy Migration
                                 </a>
                             </li>
                             <li>
