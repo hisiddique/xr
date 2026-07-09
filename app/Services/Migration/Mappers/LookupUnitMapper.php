@@ -6,6 +6,7 @@ use App\Models\LookupUnit;
 use App\Services\Migration\DuplicateStrategy;
 use App\Services\Migration\EntityMapper;
 use App\Services\Migration\MapOutcome;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 class LookupUnitMapper implements EntityMapper
@@ -22,19 +23,28 @@ class LookupUnitMapper implements EntityMapper
 
     public function count(): int
     {
-        return DB::connection('legacy')->table('Units')->where('Status', 'A')->count();
+        return $this->baseQuery()->count();
     }
 
     public function rows(int $chunkSize): iterable
     {
-        foreach (
-            DB::connection('legacy')->table('Units')
-                ->where('Status', 'A')
-                ->orderBy('Uid')
-                ->lazy($chunkSize) as $row
-        ) {
+        foreach ($this->baseQuery()->orderBy('uid')->lazy($chunkSize) as $row) {
             yield (array) $row;
         }
+    }
+
+    /**
+     * Matches the legacy app's own UnitDropdown() filter (DatabaseCustom/Document.cs):
+     * "AS".Contains(Status) && Recstate == "A" — i.e. Status must be 'A' or 'S', and
+     * Recstate 'A' means not soft-deleted. Confirmed against live data: the only
+     * Status='A' row is actually Recstate='D' (deleted), while every real active unit
+     * is Status='S' + Recstate='A' — a plain Status='A' filter picks the wrong row.
+     */
+    private function baseQuery(): Builder
+    {
+        return DB::connection('legacy')->table('Units')
+            ->whereIn('status', ['A', 'S'])
+            ->where('recstate', 'A');
     }
 
     /**

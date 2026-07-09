@@ -166,7 +166,7 @@ class MigrationRunner
             default => throw new \InvalidArgumentException("Unknown mapper key: {$mapperKey}"),
         };
 
-        if ($mapper instanceof DocumentMapper || $mapper instanceof SupplierInvoiceMapper || $mapper instanceof SupplierDebitNoteMapper) {
+        if ($mapper instanceof CustomerMapper || $mapper instanceof SupplierMapper || $mapper instanceof DocumentMapper || $mapper instanceof SupplierInvoiceMapper || $mapper instanceof SupplierDebitNoteMapper) {
             $mapper->setCreatedBy($createdByUserId);
         }
 

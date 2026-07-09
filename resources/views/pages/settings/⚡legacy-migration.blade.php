@@ -6,8 +6,10 @@ use App\Models\MigrationRun;
 use App\Models\User;
 use App\Services\Migration\DuplicateStrategy;
 use App\UserRole;
+use App\UserStatus;
 use Flux\Flux;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
@@ -223,6 +225,7 @@ new #[Title('Legacy Data Migration')] class extends Component {
             'activeRun' => $activeRun,
             'runInProgress' => $runInProgress,
             'adminUsers' => User::where('role', UserRole::Admin)->orderBy('name')->get(),
+            'migratedUserCount' => User::where('status', UserStatus::Migrated)->count(),
         ];
     }
 }; ?>
@@ -468,6 +471,12 @@ new #[Title('Legacy Data Migration')] class extends Component {
                         @if ($table->orphaned_in_legacy > 0)
                             <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">
                                 {{ number_format($table->orphaned_in_legacy) }} not migrated — reference a customer/parent that doesn't exist anywhere in the legacy data (not counted above; never fetched)
+                            </p>
+                        @endif
+                        @if ($table->entity === 'documents' && $migratedUserCount > 0)
+                            <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                                {{ number_format($migratedUserCount) }} {{ Str::plural('user', $migratedUserCount) }} added with status: Migrated.
+                                <a href="{{ route('users.index') }}" wire:navigate class="underline">View</a>.
                             </p>
                         @endif
                     </div>

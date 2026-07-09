@@ -46,7 +46,7 @@ new #[Title('Edit Credit Note')] class extends Component {
             'discount_percent' => (float) ($item->discount_percent ?? 0),
         ])->toArray();
         $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
-        $this->users = \App\Models\User::orderBy('name')->get(['id', 'name'])->toArray();
+        $this->users = \App\Models\User::orderBy('name')->get(['id', 'name', 'status'])->toArray();
     }
 
     public function save(): void
@@ -153,7 +153,7 @@ new #[Title('Edit Credit Note')] class extends Component {
                     <flux:select wire:model="assigned_to" class="mt-1.5" x-on:focus="$el.showPicker?.()">
                         <flux:select.option value="">— None —</flux:select.option>
                         @foreach($users as $user)
-                            <flux:select.option :value="$user['id']">{{ $user['name'] }}</flux:select.option>
+                            <flux:select.option :value="$user['id']">{{ $user['name'] }}@if($user['status'] !== 'active') ({{ ucfirst($user['status']) }})@endif</flux:select.option>
                         @endforeach
                     </flux:select>
                     @error('assigned_to') <flux:error>{{ $message }}</flux:error> @enderror

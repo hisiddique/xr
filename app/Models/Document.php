@@ -38,6 +38,7 @@ class Document extends Model
         'converted_from_id',
         'credited_invoice_id',
         'notes',
+        'deleted_at',
     ];
 
     protected function casts(): array

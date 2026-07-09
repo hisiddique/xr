@@ -34,6 +34,14 @@ function createLegacyTables(array $tables): void
                 $table->unsignedBigInteger('uid');
                 $table->string('name');
                 $table->string('status', 1);
+                $table->string('recstate', 1)->nullable();
+            });
+        },
+        'AppCodes' => function (): void {
+            Schema::connection('legacy')->create('AppCodes', function (Blueprint $table): void {
+                $table->string('codetype');
+                $table->integer('valueint')->nullable();
+                $table->string('description')->nullable();
             });
         },
         'CustSupps' => function (): void {
@@ -65,6 +73,8 @@ function createLegacyTables(array $tables): void
                 $table->text('notes')->nullable();
                 $table->string('ref')->nullable();
                 $table->unsignedBigInteger('bline')->nullable();
+                $table->string('deleteddate')->nullable();
+                $table->integer('salesman')->nullable();
             });
         },
         'DocumentDetails' => function (): void {
@@ -76,6 +86,7 @@ function createLegacyTables(array $tables): void
                 $table->decimal('qty', 12, 2)->nullable();
                 $table->decimal('price', 12, 2)->nullable();
                 $table->string('unitdesc')->nullable();
+                $table->unsignedBigInteger('unituid')->nullable();
                 $table->decimal('value', 12, 2)->nullable();
             });
         },

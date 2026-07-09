@@ -26,6 +26,7 @@ class SupplierDebitNote extends Model
         'total',
         'status',
         'created_by',
+        'deleted_at',
     ];
 
     protected static function booted(): void

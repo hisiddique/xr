@@ -74,6 +74,7 @@ class SupplierDebitNoteMapper implements BulkEntityMapper
             'status',
             'created_by',
             'reference',
+            'deleted_at',
         ];
     }
 
@@ -116,6 +117,7 @@ class SupplierDebitNoteMapper implements BulkEntityMapper
             'status' => SupplierDebitNoteStatus::Committed->value,
             'created_by' => $this->createdBy,
             'reference' => $reference,
+            'deleted_at' => LegacyDate::parse($legacyRow['deleteddate'] ?? null),
         ];
     }
 

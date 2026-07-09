@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
 beforeEach(function () {
     useLegacyDatabase();
-    createLegacyTables(['Documents', 'DocumentDetails']);
+    createLegacyTables(['Documents', 'DocumentDetails', 'Units']);
 
     $this->mapper = new DocumentItemMapper;
 });
@@ -30,6 +30,10 @@ test('apply resolves the parent document via matching Bline/Rtype and creates a 
 
     $document = Document::factory()->deliveryNote()->create(['legacy_uid' => 601]);
 
+    DB::connection('legacy')->table('Units')->insert([
+        'uid' => 300, 'name' => 'Box', 'status' => 'S', 'recstate' => 'A',
+    ]);
+
     DB::connection('legacy')->table('DocumentDetails')->insert([
         'uid' => 701,
         'rtype' => 'd',
@@ -37,7 +41,8 @@ test('apply resolves the parent document via matching Bline/Rtype and creates a 
         'details' => 'Widget',
         'qty' => 3,
         'price' => 10,
-        'unitdesc' => 'Box',
+        'unitdesc' => '          ',
+        'unituid' => 300,
         'value' => 30,
     ]);
 
@@ -51,7 +56,31 @@ test('apply resolves the parent document via matching Bline/Rtype and creates a 
 
     expect($item)->not->toBeNull()
         ->and($item->document_id)->toBe($document->id)
-        ->and($item->details)->toBe('Widget');
+        ->and($item->details)->toBe('Widget')
+        ->and($item->per)->toBe('Box');
+});
+
+test('transform resolves per via Units.Unituid, ignoring the always-blank Unitdesc column, and leaves per null when Unituid has no match', function () {
+    DB::connection('legacy')->table('Documents')->insert([
+        'uid' => 621, 'rtype' => 'd', 'acctuid' => 1, 'orderno' => null, 'date' => '2024-01-01',
+        'goods' => 0, 'value' => 0, 'notes' => null, 'ref' => '6211', 'bline' => 60,
+    ]);
+
+    Document::factory()->deliveryNote()->create(['legacy_uid' => 621]);
+
+    DB::connection('legacy')->table('Units')->insert([
+        'uid' => 0, 'name' => 'Each', 'status' => 'S', 'recstate' => 'A',
+    ]);
+
+    DB::connection('legacy')->table('DocumentDetails')->insert([
+        ['uid' => 901, 'rtype' => 'd', 'bline' => 60, 'details' => 'Matches Units.uid=0', 'qty' => 1, 'price' => 1, 'unitdesc' => '          ', 'unituid' => 0, 'value' => 1],
+        ['uid' => 902, 'rtype' => 'd', 'bline' => 60, 'details' => 'No matching Units row', 'qty' => 1, 'price' => 1, 'unitdesc' => '          ', 'unituid' => 999999, 'value' => 1],
+    ]);
+
+    $rows = collect($this->mapper->rows(500))->keyBy('uid');
+
+    expect($this->mapper->transform($rows[901])['per'])->toBe('Each');
+    expect($this->mapper->transform($rows[902])['per'])->toBeNull();
 });
 
 test('rows/count only include detail rows whose parent document exists in legacy Documents and was migrated locally', function () {

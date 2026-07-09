@@ -23,8 +23,8 @@ function seedLegacyMigrationDataset(): void
     createLegacyTables(['Units', 'CustSupps', 'Documents', 'DocumentDetails', 'Companies', 'CompanySettings']);
 
     DB::connection('legacy')->table('Units')->insert([
-        ['uid' => 1, 'name' => 'Box', 'status' => 'A'],
-        ['uid' => 2, 'name' => 'Pallet', 'status' => 'A'],
+        ['uid' => 1, 'name' => 'Box', 'status' => 'S', 'recstate' => 'A'],
+        ['uid' => 2, 'name' => 'Pallet', 'status' => 'S', 'recstate' => 'A'],
     ]);
 
     DB::connection('legacy')->table('CustSupps')->insert([

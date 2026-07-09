@@ -7,11 +7,12 @@ use App\Models\User;
 use App\Services\Migration\DuplicateStrategy;
 use App\Services\Migration\MapOutcome;
 use App\Services\Migration\Mappers\DocumentMapper;
+use App\UserStatus;
 use Illuminate\Support\Facades\DB;
 
 beforeEach(function () {
     useLegacyDatabase();
-    createLegacyTables(['Documents', 'CustSupps']);
+    createLegacyTables(['Documents', 'CustSupps', 'AppCodes']);
 
     $this->user = User::factory()->create();
     $this->mapper = (new DocumentMapper)->setCreatedBy($this->user->id);
@@ -121,6 +122,78 @@ test('apply resolves the customer and creates a document once the customer exist
     expect($document)->not->toBeNull()
         ->and($document->customer_id)->toBe($customer->id)
         ->and($document->type)->toBe(DocumentType::DeliveryNote);
+});
+
+test('apply carries a legacy Deleteddate through to deleted_at, so the document migrates soft-deleted', function () {
+    $customer = Customer::factory()->create(['legacy_uid' => 998]);
+
+    DB::connection('legacy')->table('Documents')->insert([
+        'uid' => 504,
+        'rtype' => 'd',
+        'acctuid' => 998,
+        'orderno' => null,
+        'date' => '2024-02-01',
+        'goods' => 10,
+        'value' => 12,
+        'notes' => null,
+        'ref' => '5004',
+        'bline' => 0,
+        'deleteddate' => 'Nov 22 2016 12:00:00:AM',
+    ]);
+
+    $row = (array) DB::connection('legacy')->table('Documents')->where('uid', 504)->first();
+
+    $this->mapper->apply($row, DuplicateStrategy::UpdateExisting);
+
+    $document = Document::withTrashed()->where('legacy_uid', 504)->first();
+
+    expect($document)->not->toBeNull()
+        ->and($document->deleted_at)->not->toBeNull()
+        ->and($document->trashed())->toBeTrue();
+});
+
+test('apply resolves Salesman via AppCodes into a placeholder Migrated user, reused across documents sharing the same code', function () {
+    $customer = Customer::factory()->create(['legacy_uid' => 997]);
+
+    DB::connection('legacy')->table('AppCodes')->insert([
+        'codetype' => 'Salesman', 'valueint' => 177, 'description' => 'Colin B',
+    ]);
+
+    DB::connection('legacy')->table('Documents')->insert([
+        ['uid' => 505, 'rtype' => 'd', 'acctuid' => 997, 'orderno' => null, 'date' => '2024-02-01', 'goods' => 10, 'value' => 12, 'notes' => null, 'ref' => '5005', 'bline' => 0, 'salesman' => 177],
+        ['uid' => 506, 'rtype' => 'i', 'acctuid' => 997, 'orderno' => null, 'date' => '2024-02-01', 'goods' => 10, 'value' => 12, 'notes' => null, 'ref' => '5006', 'bline' => 1, 'salesman' => 177],
+    ]);
+
+    foreach ([505, 506] as $uid) {
+        $row = (array) DB::connection('legacy')->table('Documents')->where('uid', $uid)->first();
+        $this->mapper->apply($row, DuplicateStrategy::UpdateExisting);
+    }
+
+    $documents = Document::whereIn('legacy_uid', [505, 506])->get();
+    $assignedIds = $documents->pluck('assigned_to')->unique();
+
+    expect($assignedIds)->toHaveCount(1);
+
+    $placeholder = User::find($assignedIds->first());
+
+    expect($placeholder)->not->toBeNull()
+        ->and($placeholder->name)->toBe('Colin B')
+        ->and($placeholder->status)->toBe(UserStatus::Migrated)
+        ->and($placeholder->canLogIn())->toBeFalse();
+});
+
+test('apply leaves assigned_to null when Salesman is 0 (no salesperson set)', function () {
+    $customer = Customer::factory()->create(['legacy_uid' => 996]);
+
+    DB::connection('legacy')->table('Documents')->insert([
+        'uid' => 507, 'rtype' => 'd', 'acctuid' => 996, 'orderno' => null, 'date' => '2024-02-01',
+        'goods' => 10, 'value' => 12, 'notes' => null, 'ref' => '5007', 'bline' => 0, 'salesman' => 0,
+    ]);
+
+    $row = (array) DB::connection('legacy')->table('Documents')->where('uid', 507)->first();
+    $this->mapper->apply($row, DuplicateStrategy::UpdateExisting);
+
+    expect(Document::where('legacy_uid', 507)->first()->assigned_to)->toBeNull();
 });
 
 test('apply skips a document with an unrecognized Rtype without throwing', function () {

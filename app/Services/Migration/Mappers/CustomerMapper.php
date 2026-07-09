@@ -4,6 +4,7 @@ namespace App\Services\Migration\Mappers;
 
 use App\Models\Customer;
 use App\Models\LookupCreditLimit;
+use App\Models\LookupCreditTerm;
 use App\Services\Migration\BulkEntityMapper;
 use App\Services\Migration\DuplicateStrategy;
 use App\Services\Migration\MapOutcome;
@@ -11,6 +12,18 @@ use Illuminate\Support\Facades\DB;
 
 class CustomerMapper implements BulkEntityMapper
 {
+    private ?int $createdBy = null;
+
+    /** @var array<int, string>|null Maps AppCodes.Valueint => Description for Codetype='Cust-CreditTerms' */
+    private ?array $creditTermLabelByValue = null;
+
+    public function setCreatedBy(int $userId): static
+    {
+        $this->createdBy = $userId;
+
+        return $this;
+    }
+
     public function key(): string
     {
         return 'customers';
@@ -62,6 +75,7 @@ class CustomerMapper implements BulkEntityMapper
             'credit_term_id',
             'credit_limit_id',
             'reference',
+            'created_by',
         ];
     }
 
@@ -87,11 +101,37 @@ class CustomerMapper implements BulkEntityMapper
             'email_1' => $legacyRow['email'] ?? null,
             'trade_discount' => $legacyRow['disc'] ?? 0,
             'vat_registered' => $vatRegistered,
-            // No clean numeric-to-name mapping exists from CustSupps.Term alone; left null as an open item.
-            'credit_term_id' => null,
+            'credit_term_id' => $this->resolveCreditTermId($legacyRow['term'] ?? null),
             'credit_limit_id' => $creditLimitId,
             'reference' => $reference,
+            'created_by' => $this->createdBy,
         ];
+    }
+
+    /**
+     * CustSupps.Term is resolved via AppCodes (Codetype='Cust-CreditTerms', Valueint -> Description),
+     * confirmed against the legacy UI's credit-terms dropdown (Views/CustSupp/_CustomerPagesPartial.cshtml).
+     */
+    private function resolveCreditTermId(mixed $term): ?int
+    {
+        if ($term === null || $term === '') {
+            return null;
+        }
+
+        if ($this->creditTermLabelByValue === null) {
+            $this->creditTermLabelByValue = DB::connection('legacy')->table('AppCodes')
+                ->where('codetype', 'Cust-CreditTerms')
+                ->pluck('description', 'valueint')
+                ->all();
+        }
+
+        $label = $this->creditTermLabelByValue[(int) $term] ?? null;
+
+        if ($label === null) {
+            return null;
+        }
+
+        return LookupCreditTerm::firstOrCreate(['name' => trim($label)])->id;
     }
 
     public function apply(array $legacyRow, DuplicateStrategy $strategy): MapOutcome

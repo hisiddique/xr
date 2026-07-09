@@ -11,9 +11,12 @@ beforeEach(function () {
     createLegacyTables(['Units']);
 
     DB::connection('legacy')->table('Units')->insert([
-        ['uid' => 1, 'name' => 'Box', 'status' => 'A'],
-        ['uid' => 2, 'name' => 'Pallet', 'status' => 'A'],
-        ['uid' => 3, 'name' => 'Retired Unit', 'status' => 'I'],
+        ['uid' => 1, 'name' => 'Box', 'status' => 'S', 'recstate' => 'A'],
+        ['uid' => 2, 'name' => 'Pallet', 'status' => 'A', 'recstate' => 'A'],
+        // A Status='A' row can still be deleted via Recstate — must be excluded.
+        ['uid' => 3, 'name' => 'Deleted Unit', 'status' => 'A', 'recstate' => 'D'],
+        // Status outside A/S entirely is never valid, regardless of Recstate.
+        ['uid' => 4, 'name' => 'Retired Unit', 'status' => 'I', 'recstate' => 'A'],
     ]);
 
     $this->mapper = new LookupUnitMapper;

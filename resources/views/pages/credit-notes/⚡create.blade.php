@@ -41,7 +41,7 @@ new #[Title('New Credit Note')] class extends Component {
             ['id' => null, 'details' => '', 'quantity' => '', 'price' => '', 'per' => '', 'is_note' => false, 'discount_percent' => null],
         ];
         $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
-        $this->users = \App\Models\User::orderBy('name')->get(['id', 'name'])->toArray();
+        $this->users = \App\Models\User::orderBy('name')->get(['id', 'name', 'status'])->toArray();
 
         if (request()->has('customer_id')) {
             $this->customer_id = (int) request('customer_id');
@@ -251,7 +251,7 @@ new #[Title('New Credit Note')] class extends Component {
                     <flux:select wire:model="assigned_to" class="mt-1.5" x-on:focus="$el.showPicker?.()">
                         <flux:select.option value="">— None —</flux:select.option>
                         @foreach($users as $user)
-                            <flux:select.option :value="$user['id']">{{ $user['name'] }}</flux:select.option>
+                            <flux:select.option :value="$user['id']">{{ $user['name'] }}@if($user['status'] !== 'active') ({{ ucfirst($user['status']) }})@endif</flux:select.option>
                         @endforeach
                     </flux:select>
                     @error('assigned_to') <flux:error>{{ $message }}</flux:error> @enderror

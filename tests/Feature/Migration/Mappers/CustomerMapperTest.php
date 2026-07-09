@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\Customer;
+use App\Models\LookupCreditTerm;
+use App\Models\User;
 use App\Services\Migration\DuplicateStrategy;
 use App\Services\Migration\MapOutcome;
 use App\Services\Migration\Mappers\CustomerMapper;
@@ -8,7 +10,11 @@ use Illuminate\Support\Facades\DB;
 
 beforeEach(function () {
     useLegacyDatabase();
-    createLegacyTables(['CustSupps']);
+    createLegacyTables(['CustSupps', 'AppCodes']);
+
+    DB::connection('legacy')->table('AppCodes')->insert([
+        ['codetype' => 'Cust-CreditTerms', 'valueint' => 3, 'description' => 'Net 30 days.'],
+    ]);
 
     DB::connection('legacy')->table('CustSupps')->insert([
         'uid' => 101,
@@ -23,7 +29,7 @@ beforeEach(function () {
         'vatcode' => '1',
         'vatdiff' => 0,
         'crlim' => 1000,
-        'term' => 30,
+        'term' => 3,
     ]);
 
     $this->mapper = new CustomerMapper;
@@ -59,6 +65,34 @@ test('re-running apply with UpdateExisting updates the existing customer instead
     expect($outcome)->toBe(MapOutcome::Updated);
     expect(Customer::count())->toBe(1);
     expect(Customer::first()->town)->toBe('Manchester');
+});
+
+test('apply attributes the migrated customer to the admin running the migration', function () {
+    $admin = User::factory()->create();
+
+    $this->mapper->setCreatedBy($admin->id);
+    $this->mapper->apply($this->legacyRow, DuplicateStrategy::UpdateExisting);
+
+    expect(Customer::first()->created_by)->toBe($admin->id);
+});
+
+test('apply resolves credit_term_id via the Cust-CreditTerms AppCodes lookup', function () {
+    $this->mapper->apply($this->legacyRow, DuplicateStrategy::UpdateExisting);
+
+    $customer = Customer::first();
+    $creditTerm = LookupCreditTerm::find($customer->credit_term_id);
+
+    expect($creditTerm)->not->toBeNull()
+        ->and($creditTerm->name)->toBe('Net 30 days.');
+});
+
+test('apply leaves credit_term_id null when Term has no matching AppCodes entry', function () {
+    $row = $this->legacyRow;
+    $row['term'] = 999;
+
+    $this->mapper->apply($row, DuplicateStrategy::UpdateExisting);
+
+    expect(Customer::first()->credit_term_id)->toBeNull();
 });
 
 test('re-running apply with SkipExisting leaves the existing customer untouched', function () {

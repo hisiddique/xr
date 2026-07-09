@@ -139,9 +139,16 @@ new #[Title('Users')] class extends Component {
                                 </td>
                                 <td class="px-6 py-4 text-zinc-600 dark:text-zinc-400"><x-ui.highlight :text="$user->email" :term="$search" /></td>
                                 <td class="px-4 py-2">
-                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $user->role->ringColor() }}">
-                                        {{ ucfirst($user->role->value) }}
-                                    </span>
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $user->role->ringColor() }}">
+                                            {{ ucfirst($user->role->value) }}
+                                        </span>
+                                        @unless($user->status === \App\UserStatus::Active)
+                                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $user->status->ringColor() }}">
+                                                {{ $user->status->label() }}
+                                            </span>
+                                        @endunless
+                                    </div>
                                 </td>
                                 <td class="px-6 py-4 text-zinc-500 dark:text-zinc-400">{{ $user->created_at?->format('d M Y') ?? '—' }}</td>
                                 <td class="px-4 py-2">

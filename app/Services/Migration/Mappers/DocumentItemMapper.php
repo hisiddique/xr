@@ -52,6 +52,12 @@ class DocumentItemMapper implements BulkEntityMapper
      * query) rather than reusing loadMapsOnce()'s cache: MigrationRunner calls count()
      * on every mapper up front, before any mapper (including documents) has actually
      * run — caching here would freeze in that empty/early state for the whole run.
+     *
+     * Also left-joins Units via Unituid to resolve the display unit name: confirmed
+     * against live data that DocumentDetails.Unitdesc is blank/whitespace on 100% of
+     * rows (the legacy app itself ignores it and resolves display units via Unituid,
+     * per DatabaseCustom/Document.cs). Left join (not inner) because ~7% of rows have
+     * a Unituid with no match — those items are still valid, just with no unit name.
      */
     private function baseQuery(): Builder
     {
@@ -62,9 +68,10 @@ class DocumentItemMapper implements BulkEntityMapper
                 $join->on('DocumentDetails.bline', '=', 'Documents.bline')
                     ->on('DocumentDetails.rtype', '=', 'Documents.rtype');
             })
+            ->leftJoin('Units', 'DocumentDetails.unituid', '=', 'Units.uid')
             ->whereIn('DocumentDetails.rtype', ['d', 'i', 'r'])
             ->whereIn('Documents.uid', $migratedLegacyUids)
-            ->select('DocumentDetails.*', 'Documents.uid as parent_legacy_uid');
+            ->select('DocumentDetails.*', 'Documents.uid as parent_legacy_uid', 'Units.name as unit_name');
     }
 
     public function targetModel(): string
@@ -110,7 +117,7 @@ class DocumentItemMapper implements BulkEntityMapper
             'is_note' => false,
             'quantity' => $legacyRow['qty'] ?? 0,
             'price' => $legacyRow['price'] ?? 0,
-            'per' => $legacyRow['unitdesc'] ?? null,
+            'per' => $legacyRow['unit_name'] ?? null,
             'line_value' => $value,
             // Confirmed against live data: legacy `discount` is a whole-number percentage,
             // e.g. price 21.6 * qty 1 * (1 - 40%) = 12.96 = the stored `value` exactly.

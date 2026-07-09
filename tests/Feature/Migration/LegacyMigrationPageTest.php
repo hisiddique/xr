@@ -1,8 +1,11 @@
 <?php
 
 use App\Jobs\RunLegacyMigrationJob;
+use App\MigrationRunStatus;
 use App\Models\MigrationRun;
+use App\Models\MigrationRunTable;
 use App\Models\User;
+use App\UserStatus;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
@@ -50,6 +53,31 @@ test('the configuration form is hidden while a migration is pending or running, 
         ->call('start')
         ->assertDontSee('Test Connection')
         ->assertSee('form is hidden until it finishes');
+});
+
+test('the documents row surfaces a note about placeholder Migrated staff accounts created for unrecognized Salesman codes', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    User::factory()->create(['name' => 'Colin B', 'status' => UserStatus::Migrated]);
+
+    $run = MigrationRun::create(['status' => MigrationRunStatus::Running, 'created_by' => $admin->id]);
+    MigrationRunTable::create([
+        'migration_run_id' => $run->id,
+        'entity' => 'documents',
+        'status' => MigrationRunStatus::Completed,
+        'rows_total' => 1,
+        'rows_processed' => 1,
+        'added' => 1,
+        'updated' => 0,
+        'skipped' => 0,
+        'failed' => 0,
+        'orphaned_in_legacy' => 0,
+    ]);
+
+    Livewire::test('pages::settings.legacy-migration')
+        ->set('activeRunId', $run->id)
+        ->assertSee('status: Migrated');
 });
 
 test('cancelRun requests cancellation on a pending or running migration, via a real modal not a native browser confirm', function () {

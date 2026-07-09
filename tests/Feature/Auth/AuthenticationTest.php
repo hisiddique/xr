@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\UserStatus;
 use Laravel\Fortify\Features;
 
 test('login screen can be rendered', function () {
@@ -34,6 +35,18 @@ test('users can not authenticate with invalid password', function () {
 
     $response->assertSessionHasErrorsIn('email');
 
+    $this->assertGuest();
+});
+
+test('users with a non-active status cannot authenticate even with the correct password', function () {
+    $user = User::factory()->create(['status' => UserStatus::Migrated]);
+
+    $response = $this->post(route('login.store'), [
+        'email' => $user->email,
+        'password' => 'password',
+    ]);
+
+    $response->assertSessionHasErrorsIn('email');
     $this->assertGuest();
 });
 
