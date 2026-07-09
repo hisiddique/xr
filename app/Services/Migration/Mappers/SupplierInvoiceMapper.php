@@ -7,6 +7,7 @@ use App\Models\SupplierInvoice;
 use App\Services\Migration\BulkEntityMapper;
 use App\Services\Migration\DuplicateStrategy;
 use App\Services\Migration\MapOutcome;
+use App\Services\Migration\Support\LegacyDate;
 use App\SupplierInvoiceStatus;
 use Illuminate\Support\Facades\DB;
 
@@ -81,14 +82,23 @@ class SupplierInvoiceMapper implements BulkEntityMapper
             return null;
         }
 
-        $ref = trim((string) ($legacyRow['ref'] ?? ''));
-        $supplierInvoiceNo = $ref !== '' ? 'LEGACY-INV-'.$ref : 'LEGACY-INV-UID'.$legacyRow['uid'];
+        $supplierInvoiceNo = trim((string) ($legacyRow['ref'] ?? ''));
+
+        if ($supplierInvoiceNo === '') {
+            return null;
+        }
+
+        $invoiceDate = LegacyDate::parse($legacyRow['date'] ?? null);
+
+        if ($invoiceDate === null) {
+            return null;
+        }
 
         return [
             'legacy_uid' => $legacyRow['uid'],
             'supplier_id' => $supplierId,
-            'invoice_date' => $legacyRow['date'],
-            'due_date' => $legacyRow['paymtdue'] ?? null,
+            'invoice_date' => $invoiceDate,
+            'due_date' => LegacyDate::parse($legacyRow['paymtdue'] ?? null),
             'status' => SupplierInvoiceStatus::Posted->value,
             'notes' => $legacyRow['notes'] ?? null,
             'supplier_invoice_no' => $supplierInvoiceNo,

@@ -41,7 +41,7 @@ test('apply resolves the parent document via matching Bline/Rtype and creates a 
         'value' => 30,
     ]);
 
-    $row = (array) DB::connection('legacy')->table('DocumentDetails')->where('uid', 701)->first();
+    $row = collect($this->mapper->rows(500))->firstWhere('uid', 701);
 
     $outcome = $this->mapper->apply($row, DuplicateStrategy::UpdateExisting);
 
@@ -52,6 +52,29 @@ test('apply resolves the parent document via matching Bline/Rtype and creates a 
     expect($item)->not->toBeNull()
         ->and($item->document_id)->toBe($document->id)
         ->and($item->details)->toBe('Widget');
+});
+
+test('rows/count only include detail rows whose parent document exists in legacy Documents and was migrated locally', function () {
+    DB::connection('legacy')->table('Documents')->insert([
+        ['uid' => 611, 'rtype' => 'd', 'acctuid' => 1, 'orderno' => null, 'date' => '2024-01-01', 'goods' => 0, 'value' => 0, 'notes' => null, 'ref' => '6111', 'bline' => 55],
+        ['uid' => 612, 'rtype' => 'd', 'acctuid' => 1, 'orderno' => null, 'date' => '2024-01-01', 'goods' => 0, 'value' => 0, 'notes' => null, 'ref' => '6112', 'bline' => 56],
+    ]);
+
+    // Only 611 has a corresponding local document — 612's legacy header exists but was never migrated.
+    Document::factory()->deliveryNote()->create(['legacy_uid' => 611]);
+
+    DB::connection('legacy')->table('DocumentDetails')->insert([
+        ['uid' => 801, 'rtype' => 'd', 'bline' => 55, 'details' => 'Has migrated parent', 'qty' => 1, 'price' => 1, 'unitdesc' => 'Each', 'value' => 1],
+        ['uid' => 802, 'rtype' => 'd', 'bline' => 56, 'details' => 'Parent exists in legacy but not migrated locally', 'qty' => 1, 'price' => 1, 'unitdesc' => 'Each', 'value' => 1],
+        ['uid' => 803, 'rtype' => 'd', 'bline' => 999, 'details' => 'No legacy parent at all', 'qty' => 1, 'price' => 1, 'unitdesc' => 'Each', 'value' => 1],
+    ]);
+
+    expect($this->mapper->count())->toBe(1);
+
+    $rows = collect($this->mapper->rows(500))->all();
+    expect($rows)->toHaveCount(1);
+    expect($rows[0]['uid'])->toBe(801);
+    expect($rows[0]['parent_legacy_uid'])->toBe(611);
 });
 
 test('apply skips a detail row with no matching legacy document header', function () {

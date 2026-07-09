@@ -7,6 +7,7 @@ use App\Models\SupplierDebitNote;
 use App\Services\Migration\BulkEntityMapper;
 use App\Services\Migration\DuplicateStrategy;
 use App\Services\Migration\MapOutcome;
+use App\Services\Migration\Support\LegacyDate;
 use App\SupplierDebitNoteStatus;
 use Illuminate\Support\Facades\DB;
 
@@ -91,13 +92,22 @@ class SupplierDebitNoteMapper implements BulkEntityMapper
             return null;
         }
 
-        $ref = trim((string) ($legacyRow['ref'] ?? ''));
-        $reference = $ref !== '' ? 'LEGACY-CN-'.$ref : 'LEGACY-CN-UID'.$legacyRow['uid'];
+        $reference = trim((string) ($legacyRow['ref'] ?? ''));
+
+        if ($reference === '') {
+            return null;
+        }
+
+        $docDate = LegacyDate::parse($legacyRow['date'] ?? null);
+
+        if ($docDate === null) {
+            return null;
+        }
 
         return [
             'legacy_uid' => $legacyRow['uid'],
             'supplier_id' => $supplierId,
-            'doc_date' => $legacyRow['date'],
+            'doc_date' => $docDate,
             // No reliable legacy column links a credit note back to a specific purchase invoice.
             'supplier_invoice_id' => null,
             'notes' => $legacyRow['notes'] ?? null,

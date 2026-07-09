@@ -465,6 +465,11 @@ new #[Title('Legacy Data Migration')] class extends Component {
                                 style="width: {{ $percent }}%"
                             ></div>
                         </div>
+                        @if ($table->orphaned_in_legacy > 0)
+                            <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                                {{ number_format($table->orphaned_in_legacy) }} not migrated — reference a customer/parent that doesn't exist anywhere in the legacy data (not counted above; never fetched)
+                            </p>
+                        @endif
                     </div>
                 @empty
                     <p class="text-sm text-zinc-500 dark:text-zinc-400">Waiting for the migration job to start processing…</p>

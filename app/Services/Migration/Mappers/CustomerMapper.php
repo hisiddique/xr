@@ -74,13 +74,8 @@ class CustomerMapper implements BulkEntityMapper
             $creditLimitId = LookupCreditLimit::firstOrCreate(['amount' => $legacyRow['crlim']])->id;
         }
 
-        // usrref is the legacy system's own customer reference code (confirmed via
-        // CustSuppController.cs, used to look customers up by reference) — preserve it
-        // instead of letting our own auto-generation manufacture a new CUST-00001-style
-        // number. Fall back to a deterministic legacy-uid-based value on the rare blank
-        // row, since bulk upsert() bypasses the model's auto-generation hook entirely.
         $usrref = trim((string) ($legacyRow['usrref'] ?? ''));
-        $reference = $usrref !== '' ? $usrref : 'LEGACY-'.$legacyRow['uid'];
+        $reference = $usrref !== '' ? $usrref : (string) $legacyRow['uid'];
 
         return [
             'legacy_uid' => $legacyRow['uid'],

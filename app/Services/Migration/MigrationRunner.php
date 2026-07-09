@@ -85,6 +85,7 @@ class MigrationRunner
                 'updated' => 0,
                 'skipped' => 0,
                 'failed' => 0,
+                'orphaned_in_legacy' => $mapper instanceof ReportsExcludedRows ? $mapper->excludedCount() : 0,
             ]);
         }
 

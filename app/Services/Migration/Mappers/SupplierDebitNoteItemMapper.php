@@ -130,7 +130,7 @@ class SupplierDebitNoteItemMapper implements BulkEntityMapper
 
         DB::connection('legacy')->table('Documents')
             ->where('Rtype', 'v')
-            ->select('Uid', 'Bline')
+            ->select('uid', 'bline')
             ->orderBy('Uid')
             ->each(function ($row): void {
                 $this->parentLegacyUidByBline[$row->bline] = $row->uid;

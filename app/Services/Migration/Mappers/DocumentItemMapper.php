@@ -7,13 +7,11 @@ use App\Models\DocumentItem;
 use App\Services\Migration\BulkEntityMapper;
 use App\Services\Migration\DuplicateStrategy;
 use App\Services\Migration\MapOutcome;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 class DocumentItemMapper implements BulkEntityMapper
 {
-    /** @var array<string, int>|null Maps "{Rtype}:{Bline}" => legacy Documents.Uid */
-    private ?array $parentLegacyUidByBlineRtype = null;
-
     /** @var array<int, int>|null Maps documents.legacy_uid => documents.id */
     private ?array $documentIdByLegacyUid = null;
 
@@ -29,19 +27,44 @@ class DocumentItemMapper implements BulkEntityMapper
 
     public function count(): int
     {
-        return DB::connection('legacy')->table('DocumentDetails')->whereIn('Rtype', ['d', 'i', 'r'])->count();
+        return $this->baseQuery()->count();
     }
 
     public function rows(int $chunkSize): iterable
     {
-        foreach (
-            DB::connection('legacy')->table('DocumentDetails')
-                ->whereIn('Rtype', ['d', 'i', 'r'])
-                ->orderBy('Uid')
-                ->lazy($chunkSize) as $row
-        ) {
+        foreach ($this->baseQuery()->orderBy('DocumentDetails.uid')->lazy($chunkSize) as $row) {
             yield (array) $row;
         }
+    }
+
+    /**
+     * Resolves each detail row's parent document server-side via a same-connection join
+     * (DocumentDetails.Bline/Rtype -> Documents.Bline/Rtype), instead of pulling the whole
+     * Documents table into a PHP-side lookup map — that approach used offset pagination
+     * over ~490k rows, which gets slower with every page on a remote MSSQL connection.
+     *
+     * Also restricts to parents that were actually migrated locally (their legacy_uid
+     * exists in our documents table), so items belonging to a skipped/excluded document
+     * are never fetched over the network in the first place, instead of being pulled and
+     * then discarded in transform().
+     *
+     * Deliberately re-queries the migrated-uid list fresh on every call (cheap local
+     * query) rather than reusing loadMapsOnce()'s cache: MigrationRunner calls count()
+     * on every mapper up front, before any mapper (including documents) has actually
+     * run — caching here would freeze in that empty/early state for the whole run.
+     */
+    private function baseQuery(): Builder
+    {
+        $migratedLegacyUids = Document::withTrashed()->whereNotNull('legacy_uid')->pluck('legacy_uid');
+
+        return DB::connection('legacy')->table('DocumentDetails')
+            ->join('Documents', function ($join) {
+                $join->on('DocumentDetails.bline', '=', 'Documents.bline')
+                    ->on('DocumentDetails.rtype', '=', 'Documents.rtype');
+            })
+            ->whereIn('DocumentDetails.rtype', ['d', 'i', 'r'])
+            ->whereIn('Documents.uid', $migratedLegacyUids)
+            ->select('DocumentDetails.*', 'Documents.uid as parent_legacy_uid');
     }
 
     public function targetModel(): string
@@ -66,9 +89,7 @@ class DocumentItemMapper implements BulkEntityMapper
     {
         $this->loadMapsOnce();
 
-        $rtype = strtolower(trim((string) $legacyRow['rtype']));
-        $parentKey = $rtype.':'.$legacyRow['bline'];
-        $parentLegacyUid = $this->parentLegacyUidByBlineRtype[$parentKey] ?? null;
+        $parentLegacyUid = $legacyRow['parent_legacy_uid'] ?? null;
 
         if ($parentLegacyUid === null) {
             return null;
@@ -100,20 +121,9 @@ class DocumentItemMapper implements BulkEntityMapper
 
     private function loadMapsOnce(): void
     {
-        if ($this->parentLegacyUidByBlineRtype !== null && $this->documentIdByLegacyUid !== null) {
+        if ($this->documentIdByLegacyUid !== null) {
             return;
         }
-
-        $this->parentLegacyUidByBlineRtype = [];
-
-        DB::connection('legacy')->table('Documents')
-            ->whereIn('Rtype', ['d', 'i', 'r'])
-            ->select('Uid', 'Bline', 'Rtype')
-            ->orderBy('Uid')
-            ->each(function ($row): void {
-                $key = strtolower(trim((string) $row->rtype)).':'.$row->bline;
-                $this->parentLegacyUidByBlineRtype[$key] = $row->uid;
-            });
 
         $this->documentIdByLegacyUid = Document::withTrashed()
             ->whereNotNull('legacy_uid')

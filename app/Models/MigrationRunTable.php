@@ -18,6 +18,7 @@ class MigrationRunTable extends Model
         'updated',
         'skipped',
         'failed',
+        'orphaned_in_legacy',
         'error',
     ];
 
@@ -31,6 +32,7 @@ class MigrationRunTable extends Model
             'updated' => 'integer',
             'skipped' => 'integer',
             'failed' => 'integer',
+            'orphaned_in_legacy' => 'integer',
         ];
     }
 
