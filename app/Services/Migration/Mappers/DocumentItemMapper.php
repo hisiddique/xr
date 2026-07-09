@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\DB;
 
 class DocumentItemMapper implements BulkEntityMapper
 {
+    private const ID_BATCH_SIZE = 10000;
+
     /** @var array<int, int>|null Maps documents.legacy_uid => documents.id */
     private ?array $documentIdByLegacyUid = null;
 
@@ -27,42 +29,35 @@ class DocumentItemMapper implements BulkEntityMapper
 
     public function count(): int
     {
-        return $this->baseQuery()->count();
+        $total = 0;
+
+        foreach ($this->migratedLegacyUidBatches() as $batch) {
+            $total += $this->baseQuery($batch)->count();
+        }
+
+        return $total;
     }
 
     public function rows(int $chunkSize): iterable
     {
-        foreach ($this->baseQuery()->orderBy('DocumentDetails.uid')->lazy($chunkSize) as $row) {
-            yield (array) $row;
+        foreach ($this->migratedLegacyUidBatches() as $batch) {
+            foreach ($this->baseQuery($batch)->orderBy('DocumentDetails.uid')->lazy($chunkSize) as $row) {
+                yield (array) $row;
+            }
         }
     }
 
-    /**
-     * Resolves each detail row's parent document server-side via a same-connection join
-     * (DocumentDetails.Bline/Rtype -> Documents.Bline/Rtype), instead of pulling the whole
-     * Documents table into a PHP-side lookup map — that approach used offset pagination
-     * over ~490k rows, which gets slower with every page on a remote MSSQL connection.
-     *
-     * Also restricts to parents that were actually migrated locally (their legacy_uid
-     * exists in our documents table), so items belonging to a skipped/excluded document
-     * are never fetched over the network in the first place, instead of being pulled and
-     * then discarded in transform().
-     *
-     * Deliberately re-queries the migrated-uid list fresh on every call (cheap local
-     * query) rather than reusing loadMapsOnce()'s cache: MigrationRunner calls count()
-     * on every mapper up front, before any mapper (including documents) has actually
-     * run — caching here would freeze in that empty/early state for the whole run.
-     *
-     * Also left-joins Units via Unituid to resolve the display unit name: confirmed
-     * against live data that DocumentDetails.Unitdesc is blank/whitespace on 100% of
-     * rows (the legacy app itself ignores it and resolves display units via Unituid,
-     * per DatabaseCustom/Document.cs). Left join (not inner) because ~7% of rows have
-     * a Unituid with no match — those items are still valid, just with no unit name.
-     */
-    private function baseQuery(): Builder
+    /** @return array<int, array<int, int>> */
+    private function migratedLegacyUidBatches(): array
     {
-        $migratedLegacyUids = Document::withTrashed()->whereNotNull('legacy_uid')->pluck('legacy_uid');
+        $ids = Document::withTrashed()->whereNotNull('legacy_uid')->pluck('legacy_uid')->all();
 
+        return array_chunk($ids, self::ID_BATCH_SIZE);
+    }
+
+    /** @param  array<int, int>  $migratedLegacyUidBatch */
+    private function baseQuery(array $migratedLegacyUidBatch): Builder
+    {
         return DB::connection('legacy')->table('DocumentDetails')
             ->join('Documents', function ($join) {
                 $join->on('DocumentDetails.bline', '=', 'Documents.bline')
@@ -70,7 +65,7 @@ class DocumentItemMapper implements BulkEntityMapper
             })
             ->leftJoin('Units', 'DocumentDetails.unituid', '=', 'Units.uid')
             ->whereIn('DocumentDetails.rtype', ['d', 'i', 'r'])
-            ->whereIn('Documents.uid', $migratedLegacyUids)
+            ->whereIn('Documents.uid', $migratedLegacyUidBatch)
             ->select('DocumentDetails.*', 'Documents.uid as parent_legacy_uid', 'Units.name as unit_name');
     }
 

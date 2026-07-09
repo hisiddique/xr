@@ -12,6 +12,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class RunLegacyMigrationJob implements ShouldQueue
 {
@@ -53,7 +54,7 @@ class RunLegacyMigrationJob implements ShouldQueue
             // connection) so the run record doesn't stay stuck at Running.
             $run->update([
                 'status' => MigrationRunStatus::Failed,
-                'error' => $e->getMessage(),
+                'error' => Str::limit($e->getMessage(), 2000),
                 'finished_at' => now(),
             ]);
 

@@ -89,32 +89,33 @@ class DocumentMapper implements BulkEntityMapper, ReportsExcludedRows
             ->select('Documents.*');
     }
 
-    /** @return array<string, array<int, int>> */
+    /** @return array<string, array<int, int>> ref => [legacy uid => ordinal] */
     private function refOrdinals(): array
     {
         if ($this->refOrdinals !== null) {
             return $this->refOrdinals;
         }
 
-        $duplicateRefs = $this->baseQuery()
-            ->select('Documents.ref')
-            ->groupBy('Documents.ref')
-            ->havingRaw('COUNT(*) > 1')
-            ->pluck('ref')
-            ->all();
+        $rows = $this->baseQuery()
+            ->select('Documents.uid', 'Documents.ref')
+            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY Documents.ref ORDER BY Documents.uid) as ref_ordinal')
+            ->whereIn('Documents.ref', function ($query) {
+                $query->select('Documents.ref')
+                    ->from('Documents')
+                    ->join('CustSupps', function ($join) {
+                        $join->on('Documents.Acctuid', '=', 'CustSupps.Uid')
+                            ->where('CustSupps.Rtype', '=', 'A');
+                    })
+                    ->whereIn('Documents.Rtype', ['d', 'i', 'r'])
+                    ->groupBy('Documents.ref')
+                    ->havingRaw('COUNT(*) > 1');
+            })
+            ->get();
 
         $this->refOrdinals = [];
 
-        if ($duplicateRefs !== []) {
-            $rows = $this->baseQuery()
-                ->select('Documents.uid', 'Documents.ref')
-                ->whereIn('Documents.ref', $duplicateRefs)
-                ->orderBy('Documents.uid')
-                ->get();
-
-            foreach ($rows as $row) {
-                $this->refOrdinals[trim((string) $row->ref)][] = (int) $row->uid;
-            }
+        foreach ($rows as $row) {
+            $this->refOrdinals[trim((string) $row->ref)][(int) $row->uid] = (int) $row->ref_ordinal;
         }
 
         return $this->refOrdinals;
@@ -218,14 +219,10 @@ class DocumentMapper implements BulkEntityMapper, ReportsExcludedRows
             return null;
         }
 
-        $ordinals = $this->refOrdinals();
+        $ordinal = $this->refOrdinals()[$docNumber][(int) $legacyRow['uid']] ?? null;
 
-        if (isset($ordinals[$docNumber])) {
-            $position = array_search((int) $legacyRow['uid'], $ordinals[$docNumber], true);
-
-            if ($position !== false) {
-                $docNumber .= '-'.($position + 1);
-            }
+        if ($ordinal !== null) {
+            $docNumber .= '-'.$ordinal;
         }
 
         $docDate = LegacyDate::parse($legacyRow['date'] ?? null);
