@@ -9,7 +9,11 @@ use Illuminate\Support\Facades\DB;
 
 beforeEach(function () {
     useLegacyDatabase();
-    createLegacyTables(['Documents', 'DocumentDetails', 'Units']);
+    createLegacyTables(['Documents', 'DocumentDetails', 'Units', 'CustSupps']);
+
+    DB::connection('legacy')->table('CustSupps')->insert([
+        'uid' => 1, 'rtype' => 'A', 'name' => 'Real Customer',
+    ]);
 
     $this->mapper = new DocumentItemMapper;
 });
@@ -83,7 +87,7 @@ test('transform resolves per via Units.Unituid, ignoring the always-blank Unitde
     expect($this->mapper->transform($rows[902])['per'])->toBeNull();
 });
 
-test('rows/count only include detail rows whose parent document exists in legacy Documents and was migrated locally', function () {
+test('rows/count include detail rows whenever their parent document has a real legacy customer, regardless of local migration state', function () {
     DB::connection('legacy')->table('Documents')->insert([
         ['uid' => 611, 'rtype' => 'd', 'acctuid' => 1, 'orderno' => null, 'date' => '2024-01-01', 'goods' => 0, 'value' => 0, 'notes' => null, 'ref' => '6111', 'bline' => 55],
         ['uid' => 612, 'rtype' => 'd', 'acctuid' => 1, 'orderno' => null, 'date' => '2024-01-01', 'goods' => 0, 'value' => 0, 'notes' => null, 'ref' => '6112', 'bline' => 56],
@@ -98,15 +102,33 @@ test('rows/count only include detail rows whose parent document exists in legacy
         ['uid' => 803, 'rtype' => 'd', 'bline' => 999, 'details' => 'No legacy parent at all', 'qty' => 1, 'price' => 1, 'unitdesc' => 'Each', 'value' => 1],
     ]);
 
-    expect($this->mapper->count())->toBe(1);
+    expect($this->mapper->count())->toBe(2);
 
-    $rows = collect($this->mapper->rows(500))->all();
-    expect($rows)->toHaveCount(1);
-    expect($rows[0]['uid'])->toBe(801);
-    expect($rows[0]['parent_legacy_uid'])->toBe(611);
+    $rows = collect($this->mapper->rows(500))->keyBy('uid');
+    expect($rows->has(801))->toBeTrue();
+    expect($rows->has(802))->toBeTrue();
+    expect($rows->has(803))->toBeFalse();
 });
 
-test('apply skips a detail row with no matching legacy document header', function () {
+test('apply skips a detail row whose parent document exists in legacy but was never migrated locally', function () {
+    DB::connection('legacy')->table('Documents')->insert([
+        'uid' => 612, 'rtype' => 'd', 'acctuid' => 1, 'orderno' => null, 'date' => '2024-01-01',
+        'goods' => 0, 'value' => 0, 'notes' => null, 'ref' => '6112', 'bline' => 56,
+    ]);
+
+    DB::connection('legacy')->table('DocumentDetails')->insert([
+        'uid' => 802, 'rtype' => 'd', 'bline' => 56, 'details' => 'Orphan-ish', 'qty' => 1, 'price' => 1, 'unitdesc' => 'Each', 'value' => 1,
+    ]);
+
+    $row = collect($this->mapper->rows(500))->firstWhere('uid', 802);
+
+    $outcome = $this->mapper->apply($row, DuplicateStrategy::UpdateExisting);
+
+    expect($outcome)->toBe(MapOutcome::Skipped);
+    expect(DocumentItem::count())->toBe(0);
+});
+
+test('apply skips a detail row with no matching legacy document header at all', function () {
     DB::connection('legacy')->table('DocumentDetails')->insert([
         'uid' => 702,
         'rtype' => 'd',

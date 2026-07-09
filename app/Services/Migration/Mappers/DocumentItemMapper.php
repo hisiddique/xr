@@ -12,8 +12,6 @@ use Illuminate\Support\Facades\DB;
 
 class DocumentItemMapper implements BulkEntityMapper
 {
-    private const ID_BATCH_SIZE = 10000;
-
     /** @var array<int, int>|null Maps documents.legacy_uid => documents.id */
     private ?array $documentIdByLegacyUid = null;
 
@@ -29,43 +27,29 @@ class DocumentItemMapper implements BulkEntityMapper
 
     public function count(): int
     {
-        $total = 0;
-
-        foreach ($this->migratedLegacyUidBatches() as $batch) {
-            $total += $this->baseQuery($batch)->count();
-        }
-
-        return $total;
+        return $this->baseQuery()->count();
     }
 
     public function rows(int $chunkSize): iterable
     {
-        foreach ($this->migratedLegacyUidBatches() as $batch) {
-            foreach ($this->baseQuery($batch)->orderBy('DocumentDetails.uid')->lazy($chunkSize) as $row) {
-                yield (array) $row;
-            }
+        foreach ($this->baseQuery()->orderBy('DocumentDetails.uid')->lazy($chunkSize) as $row) {
+            yield (array) $row;
         }
     }
 
-    /** @return array<int, array<int, int>> */
-    private function migratedLegacyUidBatches(): array
-    {
-        $ids = Document::withTrashed()->whereNotNull('legacy_uid')->pluck('legacy_uid')->all();
-
-        return array_chunk($ids, self::ID_BATCH_SIZE);
-    }
-
-    /** @param  array<int, int>  $migratedLegacyUidBatch */
-    private function baseQuery(array $migratedLegacyUidBatch): Builder
+    private function baseQuery(): Builder
     {
         return DB::connection('legacy')->table('DocumentDetails')
             ->join('Documents', function ($join) {
                 $join->on('DocumentDetails.bline', '=', 'Documents.bline')
                     ->on('DocumentDetails.rtype', '=', 'Documents.rtype');
             })
+            ->join('CustSupps', function ($join) {
+                $join->on('Documents.Acctuid', '=', 'CustSupps.Uid')
+                    ->where('CustSupps.Rtype', '=', 'A');
+            })
             ->leftJoin('Units', 'DocumentDetails.unituid', '=', 'Units.uid')
             ->whereIn('DocumentDetails.rtype', ['d', 'i', 'r'])
-            ->whereIn('Documents.uid', $migratedLegacyUidBatch)
             ->select('DocumentDetails.*', 'Documents.uid as parent_legacy_uid', 'Units.name as unit_name');
     }
 

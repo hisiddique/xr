@@ -62,11 +62,7 @@ new #[Title('Legacy Data Migration')] class extends Component {
         $this->legacyUsername = (string) ($legacyConfig['username'] ?? '');
         // Password is intentionally never pre-filled from .env — must be re-entered per run.
 
-        $activeRun = MigrationRun::whereIn('status', [MigrationRunStatus::Pending, MigrationRunStatus::Running])
-            ->latest('id')
-            ->first();
-
-        $this->activeRunId = $activeRun?->id;
+        $this->activeRunId = MigrationRun::latest('id')->value('id');
     }
 
     public function updatedSelectAll(): void

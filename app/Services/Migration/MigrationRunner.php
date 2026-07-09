@@ -33,7 +33,7 @@ use Illuminate\Support\Str;
 
 class MigrationRunner
 {
-    private const int CHUNK_SIZE = 3000;
+    private const int CHUNK_SIZE = 25000;
 
     /**
      * @var array<string, array<int, string>>
