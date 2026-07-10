@@ -43,7 +43,8 @@ class MigrationRunner
     private const array GROUPS = [
         'customers' => ['customers'],
         'suppliers' => ['suppliers'],
-        'delivery_documents' => ['documents', 'document_items'],
+        'documents' => ['documents'],
+        'document_items' => ['document_items'],
         'purchase_invoices' => ['supplier_invoices', 'supplier_invoice_items'],
         'purchase_credit_notes' => ['supplier_debit_notes', 'supplier_debit_note_items'],
     ];

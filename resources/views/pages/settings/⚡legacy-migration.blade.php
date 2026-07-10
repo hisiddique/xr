@@ -40,7 +40,8 @@ new #[Title('Legacy Data Migration')] class extends Component {
     public const array GROUPS = [
         'customers' => 'Customers',
         'suppliers' => 'Suppliers',
-        'delivery_documents' => 'Delivery Notes, Invoices & Credit Notes',
+        'documents' => 'Delivery Notes, Invoices & Credit Notes',
+        'document_items' => 'Document Line Items',
         'purchase_invoices' => 'Purchase Invoices',
         'purchase_credit_notes' => 'Purchase Credit Notes',
     ];

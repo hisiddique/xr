@@ -15,8 +15,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Seeds a small legacy dataset covering Units, CustSupps, Documents, DocumentDetails,
- * Companies and CompanySettings — enough for `customers` and `delivery_documents`
- * groups plus SettingsMapper to run without error.
+ * Companies and CompanySettings — enough for `customers`, `documents` and
+ * `document_items` groups plus SettingsMapper to run without error.
  */
 function seedLegacyMigrationDataset(): void
 {
@@ -59,7 +59,7 @@ test('fresh import processes lookups, settings, customers and documents', functi
     $run = MigrationRun::create(['status' => MigrationRunStatus::Pending]);
 
     (new MigrationRunner($run))->run(
-        ['customers', 'delivery_documents'],
+        ['customers', 'documents', 'document_items'],
         DuplicateStrategy::UpdateExisting,
         'none',
         $this->admin->id,
@@ -86,10 +86,10 @@ test('fresh import processes lookups, settings, customers and documents', functi
 
 test('re-running with UpdateExisting updates rather than duplicates', function () {
     $run1 = MigrationRun::create(['status' => MigrationRunStatus::Pending]);
-    (new MigrationRunner($run1))->run(['customers', 'delivery_documents'], DuplicateStrategy::UpdateExisting, 'none', $this->admin->id);
+    (new MigrationRunner($run1))->run(['customers', 'documents', 'document_items'], DuplicateStrategy::UpdateExisting, 'none', $this->admin->id);
 
     $run2 = MigrationRun::create(['status' => MigrationRunStatus::Pending]);
-    (new MigrationRunner($run2))->run(['customers', 'delivery_documents'], DuplicateStrategy::UpdateExisting, 'none', $this->admin->id);
+    (new MigrationRunner($run2))->run(['customers', 'documents', 'document_items'], DuplicateStrategy::UpdateExisting, 'none', $this->admin->id);
 
     $run2->refresh();
 
@@ -105,10 +105,10 @@ test('re-running with UpdateExisting updates rather than duplicates', function (
 
 test('re-running with SkipExisting leaves target rows unchanged', function () {
     $run1 = MigrationRun::create(['status' => MigrationRunStatus::Pending]);
-    (new MigrationRunner($run1))->run(['customers', 'delivery_documents'], DuplicateStrategy::UpdateExisting, 'none', $this->admin->id);
+    (new MigrationRunner($run1))->run(['customers', 'documents', 'document_items'], DuplicateStrategy::UpdateExisting, 'none', $this->admin->id);
 
     $run2 = MigrationRun::create(['status' => MigrationRunStatus::Pending]);
-    (new MigrationRunner($run2))->run(['customers', 'delivery_documents'], DuplicateStrategy::SkipExisting, 'none', $this->admin->id);
+    (new MigrationRunner($run2))->run(['customers', 'documents', 'document_items'], DuplicateStrategy::SkipExisting, 'none', $this->admin->id);
 
     $run2->refresh();
 
@@ -123,13 +123,13 @@ test('re-running with SkipExisting leaves target rows unchanged', function () {
 
 test('clearing migrated-only data then re-importing avoids duplicates', function () {
     $run1 = MigrationRun::create(['status' => MigrationRunStatus::Pending]);
-    (new MigrationRunner($run1))->run(['customers', 'delivery_documents'], DuplicateStrategy::UpdateExisting, 'none', $this->admin->id);
+    (new MigrationRunner($run1))->run(['customers', 'documents', 'document_items'], DuplicateStrategy::UpdateExisting, 'none', $this->admin->id);
 
     $firstCustomerId = Customer::where('legacy_uid', 201)->value('id');
     $firstDocumentId = Document::where('legacy_uid', 301)->value('id');
 
     $run2 = MigrationRun::create(['status' => MigrationRunStatus::Pending]);
-    (new MigrationRunner($run2))->run(['customers', 'delivery_documents'], DuplicateStrategy::UpdateExisting, 'migrated_only', $this->admin->id);
+    (new MigrationRunner($run2))->run(['customers', 'documents', 'document_items'], DuplicateStrategy::UpdateExisting, 'migrated_only', $this->admin->id);
 
     $run2->refresh();
 
@@ -180,7 +180,7 @@ test('a failing row does not halt earlier successful entities and leaves valid r
 test('a run cancelled before it starts stops immediately and marks everything Cancelled', function () {
     $run = MigrationRun::create(['status' => MigrationRunStatus::Pending, 'cancelled_at' => now()]);
 
-    (new MigrationRunner($run))->run(['customers', 'delivery_documents'], DuplicateStrategy::UpdateExisting, 'none', $this->admin->id);
+    (new MigrationRunner($run))->run(['customers', 'documents', 'document_items'], DuplicateStrategy::UpdateExisting, 'none', $this->admin->id);
 
     $run->refresh();
 
