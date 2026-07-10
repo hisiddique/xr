@@ -18,7 +18,7 @@ class RunLegacyMigrationJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $timeout = 3000;
+    public int $timeout = 14400;
 
     public int $tries = 1;
 

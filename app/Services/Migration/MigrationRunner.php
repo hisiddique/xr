@@ -35,6 +35,8 @@ class MigrationRunner
 {
     private const int CHUNK_SIZE = 25000;
 
+    private const int UPSERT_BATCH_SIZE = 3000;
+
     /**
      * @var array<string, array<int, string>>
      */
@@ -365,7 +367,11 @@ class MigrationRunner
 
         try {
             DB::transaction(function () use ($model, $toWrite, $uniqueBy, $mapper): void {
-                $model::upsert(array_values($toWrite), [$uniqueBy], $mapper->updatableColumns());
+                // MySQL caps a prepared statement at 65535 placeholders, so a single upsert()
+                // call can't take all of CHUNK_SIZE's rows at once — split into smaller batches.
+                foreach (array_chunk(array_values($toWrite), self::UPSERT_BATCH_SIZE) as $batch) {
+                    $model::upsert($batch, [$uniqueBy], $mapper->updatableColumns());
+                }
             });
 
             return [$added, $updated, $skipped, 0];
