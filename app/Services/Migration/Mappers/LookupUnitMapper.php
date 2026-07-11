@@ -28,7 +28,7 @@ class LookupUnitMapper implements EntityMapper
 
     public function rows(int $chunkSize): iterable
     {
-        foreach ($this->baseQuery()->orderBy('uid')->lazy($chunkSize) as $row) {
+        foreach ($this->baseQuery()->lazyById($chunkSize, 'uid') as $row) {
             yield (array) $row;
         }
     }

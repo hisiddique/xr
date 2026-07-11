@@ -37,8 +37,7 @@ class SupplierDebitNoteItemMapper implements BulkEntityMapper
         foreach (
             DB::connection('legacy')->table('DocumentDetails')
                 ->where('Rtype', 'v')
-                ->orderBy('Uid')
-                ->lazy($chunkSize) as $row
+                ->lazyById($chunkSize, 'Uid', 'uid') as $row
         ) {
             yield (array) $row;
         }

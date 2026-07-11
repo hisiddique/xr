@@ -44,8 +44,7 @@ class SupplierMapper implements BulkEntityMapper
         foreach (
             DB::connection('legacy')->table('CustSupps')
                 ->where('Rtype', 'B')
-                ->orderBy('Uid')
-                ->lazy($chunkSize) as $row
+                ->lazyById($chunkSize, 'Uid', 'uid') as $row
         ) {
             yield (array) $row;
         }

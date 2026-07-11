@@ -44,8 +44,7 @@ class CustomerMapper implements BulkEntityMapper
         foreach (
             DB::connection('legacy')->table('CustSupps')
                 ->where('Rtype', 'A')
-                ->orderBy('Uid')
-                ->lazy($chunkSize) as $row
+                ->lazyById($chunkSize, 'Uid', 'uid') as $row
         ) {
             yield (array) $row;
         }

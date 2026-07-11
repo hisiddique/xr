@@ -32,7 +32,7 @@ class DocumentItemMapper implements BulkEntityMapper
 
     public function rows(int $chunkSize): iterable
     {
-        foreach ($this->baseQuery()->orderBy('DocumentDetails.uid')->lazy($chunkSize) as $row) {
+        foreach ($this->baseQuery()->lazyById($chunkSize, 'DocumentDetails.uid', 'uid') as $row) {
             yield (array) $row;
         }
     }

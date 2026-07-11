@@ -55,7 +55,7 @@ class DocumentMapper implements BulkEntityMapper, ReportsExcludedRows
 
     public function rows(int $chunkSize): iterable
     {
-        foreach ($this->baseQuery()->orderBy('Documents.Uid')->lazy($chunkSize) as $row) {
+        foreach ($this->baseQuery()->lazyById($chunkSize, 'Documents.Uid', 'uid') as $row) {
             yield (array) $row;
         }
     }
