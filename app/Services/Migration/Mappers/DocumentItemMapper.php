@@ -92,7 +92,7 @@ class DocumentItemMapper implements BulkEntityMapper
         return [
             'legacy_uid' => $legacyRow['uid'],
             'document_id' => $documentId,
-            'details' => $legacyRow['details'] ?? null,
+            'details' => $legacyRow['details'] ?? '',
             'is_note' => false,
             'quantity' => $legacyRow['qty'] ?? 0,
             'price' => $legacyRow['price'] ?? 0,
