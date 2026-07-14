@@ -72,7 +72,7 @@ test('excludedCount reports documents whose customer does not exist in legacy at
     expect($this->mapper->count())->toBe(1);
 });
 
-test('transform disambiguates doc_number with -1/-2 suffixes when a ref is shared by multiple documents, e.g. a delivery note and its converted invoice', function () {
+test('transform prefixes doc_number by type and does not suffix a delivery note and its converted invoice sharing a ref', function () {
     DB::connection('legacy')->table('CustSupps')->insert([
         'uid' => 801, 'rtype' => 'A', 'name' => 'Real Customer',
     ]);
@@ -90,9 +90,30 @@ test('transform disambiguates doc_number with -1/-2 suffixes when a ref is share
 
     $docNumbers = $rows->mapWithKeys(fn ($row) => [$row['uid'] => $this->mapper->transform($row)['doc_number']]);
 
-    expect($docNumbers[901])->toBe('612883-1')
-        ->and($docNumbers[902])->toBe('612883-2')
-        ->and($docNumbers[903])->toBe('999999');
+    expect($docNumbers[901])->toBe('DN-612883')
+        ->and($docNumbers[902])->toBe('INV-612883')
+        ->and($docNumbers[903])->toBe('DN-999999');
+});
+
+test('transform disambiguates doc_number with -1/-2 suffixes when two documents of the same type genuinely share a ref', function () {
+    DB::connection('legacy')->table('CustSupps')->insert([
+        'uid' => 811, 'rtype' => 'A', 'name' => 'Real Customer',
+    ]);
+
+    DB::connection('legacy')->table('Documents')->insert([
+        ['uid' => 911, 'rtype' => 'i', 'acctuid' => 811, 'orderno' => null, 'date' => '2024-01-01', 'goods' => 35, 'value' => 42, 'notes' => null, 'ref' => '700100', 'bline' => 0],
+        ['uid' => 912, 'rtype' => 'i', 'acctuid' => 811, 'orderno' => null, 'date' => '2024-01-01', 'goods' => 10, 'value' => 12, 'notes' => null, 'ref' => '700100', 'bline' => 0],
+    ]);
+
+    Customer::factory()->create(['legacy_uid' => 811]);
+
+    $rows = collect(DB::connection('legacy')->table('Documents')->orderBy('uid')->get())
+        ->map(fn ($row) => (array) $row);
+
+    $docNumbers = $rows->mapWithKeys(fn ($row) => [$row['uid'] => $this->mapper->transform($row)['doc_number']]);
+
+    expect($docNumbers[911])->toBe('INV-700100-1')
+        ->and($docNumbers[912])->toBe('INV-700100-2');
 });
 
 test('apply resolves the customer and creates a document once the customer exists', function () {

@@ -89,7 +89,13 @@ class DocumentMapper implements BulkEntityMapper, ReportsExcludedRows
             ->select('Documents.*');
     }
 
-    /** @return array<string, array<int, int>> ref => [legacy uid => ordinal] */
+    /**
+     * Collision detection is scoped to Rtype+ref, not ref alone, because a delivery note
+     * and its converted invoice commonly share the same legacy ref — once prefixed
+     * (DN-x vs INV-x) they're different doc_numbers and must not be treated as colliding.
+     *
+     * @return array<string, array<int, int>> "rtype|ref" => [legacy uid => ordinal]
+     */
     private function refOrdinals(): array
     {
         if ($this->refOrdinals !== null) {
@@ -98,24 +104,20 @@ class DocumentMapper implements BulkEntityMapper, ReportsExcludedRows
 
         $rows = $this->baseQuery()
             ->select('Documents.uid', 'Documents.ref')
-            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY Documents.ref ORDER BY Documents.uid) as ref_ordinal')
-            ->whereIn('Documents.ref', function ($query) {
-                $query->select('Documents.ref')
-                    ->from('Documents')
-                    ->join('CustSupps', function ($join) {
-                        $join->on('Documents.Acctuid', '=', 'CustSupps.Uid')
-                            ->where('CustSupps.Rtype', '=', 'A');
-                    })
-                    ->whereIn('Documents.Rtype', ['d', 'i', 'r'])
-                    ->groupBy('Documents.ref')
-                    ->havingRaw('COUNT(*) > 1');
-            })
+            ->selectRaw('Documents.Rtype as rtype')
+            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY Documents.Rtype, Documents.ref ORDER BY Documents.uid) as ref_ordinal')
+            ->selectRaw('COUNT(*) OVER (PARTITION BY Documents.Rtype, Documents.ref) as ref_count')
             ->get();
 
         $this->refOrdinals = [];
 
         foreach ($rows as $row) {
-            $this->refOrdinals[trim((string) $row->ref)][(int) $row->uid] = (int) $row->ref_ordinal;
+            if ((int) $row->ref_count < 2) {
+                continue;
+            }
+
+            $key = strtolower(trim((string) $row->rtype)).'|'.trim((string) $row->ref);
+            $this->refOrdinals[$key][(int) $row->uid] = (int) $row->ref_ordinal;
         }
 
         return $this->refOrdinals;
@@ -213,13 +215,16 @@ class DocumentMapper implements BulkEntityMapper, ReportsExcludedRows
         $goods = (float) ($legacyRow['goods'] ?? 0);
         $value = (float) ($legacyRow['value'] ?? 0);
 
-        $docNumber = trim((string) ($legacyRow['ref'] ?? ''));
+        $ref = trim((string) ($legacyRow['ref'] ?? ''));
 
-        if ($docNumber === '') {
+        if ($ref === '') {
             return null;
         }
 
-        $ordinal = $this->refOrdinals()[$docNumber][(int) $legacyRow['uid']] ?? null;
+        $key = strtolower(trim((string) $legacyRow['rtype'])).'|'.$ref;
+        $ordinal = $this->refOrdinals()[$key][(int) $legacyRow['uid']] ?? null;
+
+        $docNumber = $type->value.'-'.$ref;
 
         if ($ordinal !== null) {
             $docNumber .= '-'.$ordinal;
