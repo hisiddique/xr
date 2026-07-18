@@ -338,18 +338,18 @@
                 </tr>
             @else
                 <tr>
-                    <td class="item-cell right">{{ rtrim(rtrim(number_format($item->quantity, 2, '.', ''), '0'), '.') }}</td>
+                    <td class="item-cell right">{{ $item->quantity ? rtrim(rtrim(number_format($item->quantity, 2, '.', ''), '0'), '.') : '' }}</td>
                     <td class="item-cell">{{ $item->details }}</td>
                     @if($showPricing)
-                        <td class="item-cell right">{{ number_format($item->price, 2) }}</td>
+                        <td class="item-cell right">{{ $item->price ? number_format($item->price, 2) : '' }}</td>
                     @endif
                     <td class="item-cell c">{{ $item->per ?? '' }}</td>
                     @if($showPricing && ! $isCN)
-                        <td class="item-cell right">{{ number_format($item->line_value, 2) }}</td>
+                        <td class="item-cell right">{{ $item->line_value ? number_format($item->line_value, 2) : '' }}</td>
                     @endif
                     @if($showPricing && $isCN)
-                        <td class="item-cell right">{{ number_format($item->discount_percent, 2) }}%</td>
-                        <td class="item-cell right">{{ number_format($item->net_value, 2) }}</td>
+                        <td class="item-cell right">{{ $item->discount_percent ? number_format($item->discount_percent, 2).'%' : '' }}</td>
+                        <td class="item-cell right">{{ $item->net_value ? number_format($item->net_value, 2) : '' }}</td>
                     @endif
                 </tr>
             @endif
