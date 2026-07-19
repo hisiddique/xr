@@ -343,7 +343,7 @@
                     @if($showPricing)
                         <td class="item-cell right">{{ (float) $item->price !== 0.0 ? number_format($item->price, 2) : '' }}</td>
                     @endif
-                    <td class="item-cell c">{{ $item->per ?? '' }}</td>
+                    <td class="item-cell c">{{ (float) $item->quantity !== 0.0 || (float) $item->price !== 0.0 ? $item->per : '' }}</td>
                     @if($showPricing && ! $isCN)
                         <td class="item-cell right">{{ (float) $item->line_value !== 0.0 ? number_format($item->line_value, 2) : '' }}</td>
                     @endif
