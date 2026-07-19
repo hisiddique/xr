@@ -152,10 +152,10 @@ new #[Title('Invoice')] class extends Component
                                     <tr>
                                         <td class="px-4 py-2 text-zinc-400 dark:text-zinc-500">{{ $i + 1 }}</td>
                                         <td class="px-4 py-2 font-semibold text-zinc-900 dark:text-white">{{ $item->details }}</td>
-                                        <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-700 dark:text-zinc-300">{{ $item->quantity ?: '' }}</td>
-                                        <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-700 dark:text-zinc-300">{{ $item->price ? '£'.number_format($item->price, 2) : '' }}</td>
+                                        <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-700 dark:text-zinc-300">{{ (float) $item->quantity !== 0.0 ? $item->quantity : '' }}</td>
+                                        <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-700 dark:text-zinc-300">{{ (float) $item->price !== 0.0 ? '£'.number_format($item->price, 2) : '' }}</td>
                                         <td class="px-4 py-2 font-semibold text-zinc-700 dark:text-zinc-300">{{ $item->per ?? '' }}</td>
-                                        <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">{{ $item->line_value ? '£'.number_format($item->line_value, 2) : '' }}</td>
+                                        <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">{{ (float) $item->line_value !== 0.0 ? '£'.number_format($item->line_value, 2) : '' }}</td>
                                     </tr>
                                 @endif
                             @endforeach
