@@ -3,6 +3,7 @@
 use App\Models\CreditAllocation;
 use App\Models\Customer;
 use App\Models\Document;
+use App\Models\LookupPaymentMethod;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use App\Models\User;
@@ -145,14 +146,16 @@ test('outstanding balance reflects all-time allocations, not just this payment',
         'total_value' => 1200,
     ]);
 
-    $otherPayment = Payment::factory()->create(['customer_id' => $customer->id]);
+    $paymentMethod = LookupPaymentMethod::factory()->create();
+
+    $otherPayment = Payment::factory()->create(['customer_id' => $customer->id, 'payment_method_id' => $paymentMethod->id]);
     PaymentAllocation::create([
         'payment_id' => $otherPayment->id,
         'document_id' => $invoice->id,
         'allocated_amount' => 500,
     ]);
 
-    $payment = Payment::factory()->create(['customer_id' => $customer->id]);
+    $payment = Payment::factory()->create(['customer_id' => $customer->id, 'payment_method_id' => $paymentMethod->id]);
     PaymentAllocation::create([
         'payment_id' => $payment->id,
         'document_id' => $invoice->id,
