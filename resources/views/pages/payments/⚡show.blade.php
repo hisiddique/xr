@@ -25,16 +25,29 @@ new #[Title('Payment')] class extends Component
             ->where('type', 'INV')
             ->orderBy('doc_date', 'asc')
             ->withSum('paymentAllocations', 'allocated_amount')
-            ->withSum(['creditAllocationsReceived as credit_for_payment_sum_amount' => function ($q) {
-                $q->where('payment_id', $this->payment->id);
-            }], 'amount')
+            ->withSum('creditAllocationsReceived', 'amount')
             ->get();
 
         $thisPaymentAllocations = $this->payment->allocations->keyBy('document_id');
 
-        return $invoices->map(function (Document $invoice) use ($thisPaymentAllocations) {
+        $thisPaymentCredits = CreditAllocation::where('payment_id', $this->payment->id)
+            ->with('creditNote')
+            ->get()
+            ->groupBy('invoice_id');
+
+        return $invoices->map(function (Document $invoice) use ($thisPaymentAllocations, $thisPaymentCredits) {
             $paymentAmount = (float) ($thisPaymentAllocations->get($invoice->id)?->allocated_amount ?? 0);
-            $creditAmount = (float) ($invoice->credit_for_payment_sum_amount ?? 0);
+            $totalPaidAllTime = (float) ($invoice->payment_allocations_sum_allocated_amount ?? 0);
+            $totalCreditedAllTime = (float) ($invoice->credit_allocations_received_sum_amount ?? 0);
+
+            $creditNotes = ($thisPaymentCredits->get($invoice->id) ?? collect())
+                ->map(fn (CreditAllocation $allocation) => [
+                    'reference' => $allocation->creditNote?->doc_number ?? '—',
+                    'amount' => (float) $allocation->amount,
+                ])->values()->toArray();
+
+            $creditAmount = array_sum(array_column($creditNotes, 'amount'));
+            $outstanding = max(0, (float) $invoice->total_value - $totalPaidAllTime - $totalCreditedAllTime);
 
             return [
                 'id' => $invoice->id,
@@ -42,7 +55,10 @@ new #[Title('Payment')] class extends Component
                 'doc_date' => $invoice->doc_date->format('d M Y'),
                 'total_value' => (float) $invoice->total_value,
                 'existing_allocation' => $paymentAmount,
+                'credit_notes' => $creditNotes,
                 'credit_amount' => $creditAmount,
+                'outstanding' => $outstanding,
+                'is_settled' => $outstanding <= 0.0,
             ];
         })->filter(fn ($row) => $row['existing_allocation'] > 0 || $row['credit_amount'] > 0)->values()->toArray();
     }
@@ -54,7 +70,25 @@ new #[Title('Payment')] class extends Component
     }
 
     #[Computed]
-    public function unallocatedBalance(): float
+    public function totalCredits(): float
+    {
+        return collect($this->invoiceRows)->sum('credit_amount');
+    }
+
+    #[Computed]
+    public function totalAllocatedAll(): float
+    {
+        return $this->totalAllocated + $this->totalCredits;
+    }
+
+    #[Computed]
+    public function totalOutstanding(): float
+    {
+        return collect($this->invoiceRows)->sum('outstanding');
+    }
+
+    #[Computed]
+    public function remainingToAllocate(): float
     {
         return max(0, (float) $this->payment->amount - $this->totalAllocated);
     }
@@ -123,15 +157,43 @@ new #[Title('Payment')] class extends Component
                 </x-slot:header>
 
                 @if(count($this->invoiceRows) > 0)
+                    <div class="mb-5 flex flex-wrap gap-3">
+                        @if($payment->amount > 0)
+                            <div class="min-w-[150px] flex-1 rounded-2xl border border-zinc-200/70 bg-zinc-50 p-3 dark:border-white/10 dark:bg-zinc-800/50">
+                                <p class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Payment Amount</p>
+                                <p class="mt-1 font-mono text-lg font-semibold text-zinc-900 dark:text-white">£{{ number_format($payment->amount, 2) }}</p>
+                            </div>
+                        @endif
+                        @if($this->totalCredits > 0)
+                            <div class="min-w-[150px] flex-1 rounded-2xl border border-violet-200/70 bg-violet-50 p-3 dark:border-violet-500/20 dark:bg-violet-500/10">
+                                <p class="text-xs font-medium text-violet-600 dark:text-violet-400">Credit Notes Applied</p>
+                                <p class="mt-1 font-mono text-lg font-semibold text-violet-700 dark:text-violet-300">£{{ number_format($this->totalCredits, 2) }}</p>
+                            </div>
+                        @endif
+                        @if($this->totalOutstanding > 0)
+                            <div class="min-w-[150px] flex-1 rounded-2xl border border-amber-200/70 bg-amber-50 p-3 dark:border-amber-500/20 dark:bg-amber-500/10">
+                                <p class="text-xs font-medium text-amber-600 dark:text-amber-400">Total Outstanding</p>
+                                <p class="mt-1 font-mono text-lg font-semibold text-amber-700 dark:text-amber-300">£{{ number_format($this->totalOutstanding, 2) }}</p>
+                            </div>
+                        @endif
+                        @if($this->remainingToAllocate > 0)
+                            <div class="min-w-[150px] flex-1 rounded-2xl border border-amber-200/70 bg-amber-50 p-3 dark:border-amber-500/20 dark:bg-amber-500/10">
+                                <p class="text-xs font-medium text-amber-600 dark:text-amber-400">Remaining to Allocate</p>
+                                <p class="mt-1 font-mono text-lg font-semibold text-amber-700 dark:text-amber-300">£{{ number_format($this->remainingToAllocate, 2) }}</p>
+                            </div>
+                        @endif
+                    </div>
+
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b border-zinc-200 dark:border-zinc-700">
                                     <th class="pb-3 pr-4 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">Invoice #</th>
                                     <th class="pb-3 pr-4 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">Date</th>
-                                    <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Invoice Total</th>
-                                    <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Credits</th>
-                                    <th class="pb-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Payment</th>
+                                    <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Total</th>
+                                    <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Credit</th>
+                                    <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Payment</th>
+                                    <th class="pb-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Outstanding</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -141,32 +203,34 @@ new #[Title('Payment')] class extends Component
                                         <td class="py-3 pr-4 text-zinc-600 dark:text-zinc-400">{{ $row['doc_date'] }}</td>
                                         <td class="py-3 pr-4 text-right font-mono text-zinc-900 dark:text-white">£{{ number_format($row['total_value'], 2) }}</td>
                                         <td class="py-3 pr-4 text-right font-mono {{ $row['credit_amount'] > 0 ? 'font-medium text-violet-600 dark:text-violet-400' : 'text-zinc-400 dark:text-zinc-600' }}">
-                                            {{ $row['credit_amount'] > 0 ? '£' . number_format($row['credit_amount'], 2) : '—' }}
+                                            @if(count($row['credit_notes']) > 0)
+                                                {{ collect($row['credit_notes'])->map(fn ($cn) => '£' . number_format($cn['amount'], 2) . ' (' . $cn['reference'] . ')')->implode(', ') }}
+                                            @else
+                                                —
+                                            @endif
                                         </td>
-                                        <td class="py-3 text-right font-mono font-medium {{ $row['existing_allocation'] > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400 dark:text-zinc-600' }}">
+                                        <td class="py-3 pr-4 text-right font-mono font-medium {{ $row['existing_allocation'] > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400 dark:text-zinc-600' }}">
                                             {{ $row['existing_allocation'] > 0 ? '£' . number_format($row['existing_allocation'], 2) : '—' }}
+                                        </td>
+                                        <td class="py-3 text-right font-mono font-medium {{ $row['is_settled'] ? 'text-zinc-400 dark:text-zinc-600' : 'text-amber-600 dark:text-amber-400' }}">
+                                            {{ $row['is_settled'] ? '—' : '£' . number_format($row['outstanding'], 2) }}
                                         </td>
                                     </tr>
                                 @endforeach
                             </tbody>
                             <tfoot class="border-t-2 border-zinc-200 dark:border-zinc-700">
                                 <tr>
-                                    <td colspan="2" class="pt-3 text-xs font-medium text-zinc-500 dark:text-zinc-400">Payment amount</td>
-                                    <td class="pt-3 pr-4 text-right font-mono font-semibold text-zinc-900 dark:text-white">£{{ number_format($payment->amount, 2) }}</td>
-                                    <td class="pt-3 pr-4 text-right font-mono font-semibold text-violet-600 dark:text-violet-400">£{{ number_format(collect($this->invoiceRows)->sum('credit_amount'), 2) }}</td>
-                                    <td class="pt-3 text-right font-mono font-semibold text-zinc-900 dark:text-white"></td>
-                                </tr>
-                                <tr>
-                                    <td colspan="2" class="pb-1 pt-0.5 text-xs text-zinc-400 dark:text-zinc-500">Total allocated</td>
-                                    <td></td>
-                                    <td></td>
-                                    <td class="pb-1 pt-0.5 text-right font-mono font-semibold text-zinc-900 dark:text-white">£{{ number_format($this->totalAllocated, 2) }}</td>
-                                </tr>
-                                <tr>
-                                    <td colspan="2" class="pb-1 pt-0.5 text-xs text-zinc-400 dark:text-zinc-500">Unallocated balance</td>
-                                    <td></td>
-                                    <td></td>
-                                    <td class="pb-1 pt-0.5 text-right font-mono font-semibold {{ $this->unallocatedBalance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400' }}">£{{ number_format($this->unallocatedBalance, 2) }}</td>
+                                    <td colspan="4" class="pt-3 text-xs text-zinc-400 dark:text-zinc-500">Total allocated</td>
+                                    <td class="pt-3 text-right font-mono font-semibold" colspan="2">
+                                        @if($this->totalCredits > 0 && $this->totalAllocated > 0)
+                                            <span class="text-zinc-900 dark:text-white">£{{ number_format($this->totalAllocatedAll, 2) }}</span>
+                                            <span class="text-xs font-normal text-zinc-400 dark:text-zinc-500">(<span class="text-violet-600 dark:text-violet-400">£{{ number_format($this->totalCredits, 2) }}</span> + <span class="text-emerald-600 dark:text-emerald-400">£{{ number_format($this->totalAllocated, 2) }}</span>)</span>
+                                        @elseif($this->totalCredits > 0)
+                                            <span class="text-violet-600 dark:text-violet-400">£{{ number_format($this->totalAllocatedAll, 2) }}</span>
+                                        @else
+                                            <span class="text-emerald-600 dark:text-emerald-400">£{{ number_format($this->totalAllocatedAll, 2) }}</span>
+                                        @endif
+                                    </td>
                                 </tr>
                             </tfoot>
                         </table>
