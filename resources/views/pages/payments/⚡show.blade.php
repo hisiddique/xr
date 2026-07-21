@@ -159,9 +159,9 @@ new #[Title('Payment')] class extends Component
                 @if(count($this->invoiceRows) > 0)
                     <div class="mb-5 flex flex-wrap gap-3">
                         @if($payment->amount > 0)
-                            <div class="min-w-[150px] flex-1 rounded-2xl border border-zinc-200/70 bg-zinc-50 p-3 dark:border-white/10 dark:bg-zinc-800/50">
-                                <p class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Payment Amount</p>
-                                <p class="mt-1 font-mono text-lg font-semibold text-zinc-900 dark:text-white">£{{ number_format($payment->amount, 2) }}</p>
+                            <div class="min-w-[150px] flex-1 rounded-2xl border border-emerald-200/70 bg-emerald-50 p-3 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+                                <p class="text-xs font-medium text-emerald-600 dark:text-emerald-400">Payment Amount</p>
+                                <p class="mt-1 font-mono text-lg font-semibold text-emerald-700 dark:text-emerald-300">£{{ number_format($payment->amount, 2) }}</p>
                             </div>
                         @endif
                         @if($this->totalCredits > 0)
@@ -177,9 +177,9 @@ new #[Title('Payment')] class extends Component
                             </div>
                         @endif
                         @if($this->remainingToAllocate > 0)
-                            <div class="min-w-[150px] flex-1 rounded-2xl border border-amber-200/70 bg-amber-50 p-3 dark:border-amber-500/20 dark:bg-amber-500/10">
-                                <p class="text-xs font-medium text-amber-600 dark:text-amber-400">Remaining to Allocate</p>
-                                <p class="mt-1 font-mono text-lg font-semibold text-amber-700 dark:text-amber-300">£{{ number_format($this->remainingToAllocate, 2) }}</p>
+                            <div class="min-w-[150px] flex-1 rounded-2xl border border-zinc-200/70 bg-zinc-50 p-3 dark:border-white/10 dark:bg-zinc-800/50">
+                                <p class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Remaining to Allocate</p>
+                                <p class="mt-1 font-mono text-lg font-semibold text-zinc-900 dark:text-white">£{{ number_format($this->remainingToAllocate, 2) }}</p>
                             </div>
                         @endif
                     </div>
@@ -204,7 +204,9 @@ new #[Title('Payment')] class extends Component
                                         <td class="py-3 pr-4 text-right font-mono text-zinc-900 dark:text-white">£{{ number_format($row['total_value'], 2) }}</td>
                                         <td class="py-3 pr-4 text-right font-mono {{ $row['credit_amount'] > 0 ? 'font-medium text-violet-600 dark:text-violet-400' : 'text-zinc-400 dark:text-zinc-600' }}">
                                             @if(count($row['credit_notes']) > 0)
-                                                {{ collect($row['credit_notes'])->map(fn ($cn) => '£' . number_format($cn['amount'], 2) . ' (' . $cn['reference'] . ')')->implode(', ') }}
+                                                @foreach($row['credit_notes'] as $creditNote)
+                                                    <div>£{{ number_format($creditNote['amount'], 2) }} ({{ $creditNote['reference'] }})</div>
+                                                @endforeach
                                             @else
                                                 —
                                             @endif
