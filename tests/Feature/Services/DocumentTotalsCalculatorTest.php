@@ -19,7 +19,7 @@ test('calculates subtotal, vat and total correctly', function () {
         ['quantity' => '1', 'price' => '100.00'],
     ]);
 
-    $calculator = new DocumentTotalsCalculator();
+    $calculator = new DocumentTotalsCalculator;
     $result = $calculator->calculate($items, $customer);
 
     expect($result['subtotal'])->toBe(200.0)
@@ -34,7 +34,7 @@ test('applies trade discount before VAT', function () {
         ['quantity' => '1', 'price' => '100.00'],
     ]);
 
-    $calculator = new DocumentTotalsCalculator();
+    $calculator = new DocumentTotalsCalculator;
     $result = $calculator->calculate($items, $customer);
 
     expect($result['subtotal'])->toBe(100.0)
@@ -47,7 +47,7 @@ test('empty items collection returns zero totals', function () {
     $customer = Customer::factory()->make(['trade_discount' => 0]);
     $items = collect([]);
 
-    $calculator = new DocumentTotalsCalculator();
+    $calculator = new DocumentTotalsCalculator;
     $result = $calculator->calculate($items, $customer);
 
     expect($result['subtotal'])->toBe(0.0)
@@ -61,12 +61,25 @@ test('100 percent discount results in zero total', function () {
         ['quantity' => '1', 'price' => '500.00'],
     ]);
 
-    $calculator = new DocumentTotalsCalculator();
+    $calculator = new DocumentTotalsCalculator;
     $result = $calculator->calculate($items, $customer);
 
     expect($result['discount_amount'])->toBe(500.0)
         ->and($result['vat'])->toBe(0.0)
         ->and($result['total'])->toBe(0.0);
+});
+
+test('lineValue multiplies quantity by price by default', function () {
+    expect(DocumentTotalsCalculator::lineValue(['quantity' => 3, 'price' => 10]))->toBe(30.0);
+});
+
+test('lineValue divides quantity by numeric per pack size', function () {
+    expect(DocumentTotalsCalculator::lineValue(['quantity' => 10, 'price' => 5, 'per' => '2']))->toBe(25.0);
+});
+
+test('lineValue ignores quantity when per is lot', function () {
+    expect(DocumentTotalsCalculator::lineValue(['quantity' => 7, 'price' => 150, 'per' => 'lot']))->toBe(150.0)
+        ->and(DocumentTotalsCalculator::lineValue(['quantity' => 0, 'price' => 150, 'per' => 'Lot']))->toBe(150.0);
 });
 
 test('uses VAT rate from settings', function () {
@@ -78,7 +91,7 @@ test('uses VAT rate from settings', function () {
         ['quantity' => '1', 'price' => '100.00'],
     ]);
 
-    $calculator = new DocumentTotalsCalculator();
+    $calculator = new DocumentTotalsCalculator;
     $result = $calculator->calculate($items, $customer);
 
     expect($result['vat'])->toBe(5.0)

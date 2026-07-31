@@ -3,7 +3,7 @@
 use App\Models\SupplierDebitNote;
 use Livewire\Attributes\Title;
 use Livewire\Component;
-use Livewire\Flux\Flux;
+use Flux\Flux;
 
 new #[Title('Supplier Debit Note')] class extends Component {
     public SupplierDebitNote $debitNote;

@@ -1120,6 +1120,9 @@ document.addEventListener('alpine:init', () => {
             const q = Number(row.quantity || 0);
             const p = Number(row.price || 0);
             const per = String(row.per ?? '').trim();
+            if (per.toLowerCase() === 'lot') {
+                return p;
+            }
             const n = Number(per);
             if (per !== '' && Number.isFinite(n) && n > 0) {
                 return (q / n) * p;
@@ -1695,6 +1698,22 @@ document.addEventListener('alpine:init', () => {
         e.preventDefault();
         e.stopPropagation();
         window.focusNextFormField?.(t);
+    }, true);
+
+    // ─── Global Enter-to-dismiss for Flux toasts ─────────────────────
+    // Flux only closes a toast on Enter when its close button has focus.
+    // showToast() appends the rendered dialog as a direct child of
+    // <ui-toast-group> (or <ui-toast> when used standalone), not nested
+    // under <ui-toast>, so the selector must not assume that ancestor.
+    // Capture-phase so it fires before any target-specific handler can
+    // stop propagation, and it never calls preventDefault/stopPropagation
+    // itself so normal Enter behavior elsewhere on the page is unaffected.
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        document.querySelectorAll('[data-flux-toast-dialog]').forEach((dialog) => {
+            dialog.querySelector('ui-close button')?.click();
+        });
     }, true);
 
     // ─── Focus next form field after `from` element ─────────────────

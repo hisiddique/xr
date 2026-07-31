@@ -39,7 +39,7 @@
             </div>
         </div>
         @persist('toast')
-            <flux:toast.group position="middle center" class="flex flex-col gap-2" @keydown.enter.window="document.querySelector('[data-flux-toast] button')?.click()">
+            <flux:toast.group position="middle center" class="flex flex-col gap-2">
                 <flux:toast />
             </flux:toast.group>
         @endpersist

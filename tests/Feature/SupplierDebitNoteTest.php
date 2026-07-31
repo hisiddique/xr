@@ -7,6 +7,7 @@ use App\Models\SupplierInvoice;
 use App\Models\User;
 use App\SupplierDebitNoteStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
 
@@ -118,6 +119,64 @@ test('totalDeductions sums applied_amount from pivot across multiple invoices', 
     $note->load('appliedInvoices');
 
     expect($note->totalDeductions())->toBe(200.0);
+});
+
+test('nextNumber does not reuse a reference belonging to a soft-deleted debit note', function () {
+    $supplier = Supplier::factory()->create();
+
+    $note = SupplierDebitNote::create([
+        'supplier_id' => $supplier->id,
+        'doc_date' => now(),
+        'status' => SupplierDebitNoteStatus::Committed,
+        'subtotal' => 100,
+        'total' => 100,
+        'created_by' => $this->user->id,
+    ]);
+
+    $note->delete();
+
+    $number = SupplierDebitNote::nextNumber();
+
+    expect($number)->toBe('SUPDN-0002');
+});
+
+test('deleting a debit note from the index page does not error', function () {
+    $supplier = Supplier::factory()->create();
+
+    $note = SupplierDebitNote::create([
+        'supplier_id' => $supplier->id,
+        'doc_date' => now(),
+        'status' => SupplierDebitNoteStatus::Committed,
+        'subtotal' => 100,
+        'total' => 100,
+        'created_by' => $this->user->id,
+    ]);
+
+    Livewire::test('pages::supplier-debit-notes.index')
+        ->call('delete', $note->id)
+        ->assertHasNoErrors();
+
+    expect(SupplierDebitNote::find($note->id))->toBeNull();
+});
+
+test('deleting a debit note from the show page does not error', function () {
+    $supplier = Supplier::factory()->create();
+
+    $note = SupplierDebitNote::create([
+        'supplier_id' => $supplier->id,
+        'doc_date' => now(),
+        'status' => SupplierDebitNoteStatus::Committed,
+        'subtotal' => 100,
+        'total' => 100,
+        'created_by' => $this->user->id,
+    ]);
+
+    Livewire::test('pages::supplier-debit-notes.show', ['debitNote' => $note])
+        ->call('delete')
+        ->assertHasNoErrors()
+        ->assertRedirect(route('supplier-debit-notes.index'));
+
+    expect(SupplierDebitNote::find($note->id))->toBeNull();
 });
 
 test('soft-deleted debit note is excluded from available debit notes query', function () {

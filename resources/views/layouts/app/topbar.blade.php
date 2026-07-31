@@ -649,7 +649,7 @@
         </main>
 
         @persist('toast')
-            <flux:toast.group position="middle center" class="flex flex-col gap-2" @keydown.enter.window="document.querySelector('[data-flux-toast] button')?.click()">
+            <flux:toast.group position="middle center" class="flex flex-col gap-2">
                 <flux:toast class="in-[ui-toast-group]:w-sm sm:in-[ui-toast-group]:w-md" />
             </flux:toast.group>
         @endpersist

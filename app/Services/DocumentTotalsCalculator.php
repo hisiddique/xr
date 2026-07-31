@@ -75,7 +75,8 @@ class DocumentTotalsCalculator
 
     /**
      * Compute a single line value. When `per` is a positive numeric pack size,
-     * the formula is (qty / per) * price; otherwise qty * price.
+     * the formula is (qty / per) * price. When `per` is "lot", quantity is
+     * ignored and the line value is the price alone. Otherwise qty * price.
      *
      * @param  array{quantity?: float|string, price?: float|string, per?: string|null}  $item
      */
@@ -84,6 +85,10 @@ class DocumentTotalsCalculator
         $qty = (float) ($item['quantity'] ?? 0);
         $price = (float) ($item['price'] ?? 0);
         $per = $item['per'] ?? null;
+
+        if (is_string($per) && strtolower(trim($per)) === 'lot') {
+            return $price;
+        }
 
         if (is_numeric($per) && (float) $per > 0) {
             return ($qty / (float) $per) * $price;

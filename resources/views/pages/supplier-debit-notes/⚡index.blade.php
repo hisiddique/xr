@@ -7,7 +7,7 @@ use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
-use Livewire\Flux\Flux;
+use Flux\Flux;
 
 new #[Title('Supplier Debit Notes')] class extends Component {
     use WithPagination;
