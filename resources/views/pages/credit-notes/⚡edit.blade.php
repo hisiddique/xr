@@ -273,9 +273,9 @@ new #[Title('Edit Credit Note')] class extends Component {
                                             class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                         >
                                             <option value="">—</option>
-                                            <template x-for="unit in units" :key="unit">
-                                                <option :value="unit" x-text="unit"></option>
-                                            </template>
+                                            @foreach($units as $unit)
+                                                <option value="{{ $unit }}">{{ $unit }}</option>
+                                            @endforeach
                                         </select>
                                     </td>
                                 </template>
