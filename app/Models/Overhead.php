@@ -6,11 +6,12 @@ use Database\Factories\OverheadFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Overhead extends Model
 {
     /** @use HasFactory<OverheadFactory> */
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = ['category_id', 'expense_date', 'amount', 'has_vat', 'payment_method'];
 

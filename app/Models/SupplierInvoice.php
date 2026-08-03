@@ -8,11 +8,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 
 class SupplierInvoice extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'legacy_uid',
@@ -32,6 +33,10 @@ class SupplierInvoice extends Model
             if (blank($invoice->supplier_invoice_no)) {
                 $invoice->supplier_invoice_no = static::nextNumber();
             }
+        });
+
+        static::deleting(function (SupplierInvoice $invoice): void {
+            $invoice->items()->delete();
         });
     }
 

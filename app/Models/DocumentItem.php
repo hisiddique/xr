@@ -5,11 +5,12 @@ namespace App\Models;
 use Database\Factories\DocumentItemFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class DocumentItem extends Model
 {
     /** @use HasFactory<DocumentItemFactory> */
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'legacy_uid',

@@ -4,9 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CreditAllocation extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = ['payment_id', 'credit_note_id', 'invoice_id', 'amount'];
 
     protected function casts(): array

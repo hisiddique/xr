@@ -4,9 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PaymentAllocation extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'payment_id',
         'document_id',
