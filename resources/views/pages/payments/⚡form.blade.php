@@ -5,9 +5,14 @@ use App\Models\Customer;
 use App\Models\Document;
 use App\Models\LookupPaymentMethod;
 use App\Models\Payment;
+use App\Models\PaymentDraw;
+use App\PaymentSourceType;
 use App\Services\PaymentAllocator;
 use Flux\Flux;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -19,14 +24,17 @@ new #[Title('Payment')] class extends Component {
 
     public ?int $customer_id = null;
     public string $customerName = '';
-    public ?int $payment_method_id = null;
+    public string $paymentMethodSelection = '';
+    public string $source_type = 'cash';
     public string $amount = '';
     public string $payment_date = '';
     public string $notes = '';
-    public float $creditBalance = 0.0;
-    public float $initialCreditUsed = 0.0;
+    public string $payment_reference = '';
     public $receipt = null;
     public string $existingReceiptPath = '';
+    public array $selectedCreditNoteIds = [];
+    public array $selectedOverPaymentIds = [];
+    public array $overPaymentExhaustIds = [];
 
     public function mount(): void
     {
@@ -34,11 +42,30 @@ new #[Title('Payment')] class extends Component {
             $this->payment->load(['customer', 'paymentMethod', 'creator', 'allocations.document']);
             $this->customer_id = $this->payment->customer_id;
             $this->customerName = $this->payment->customer->typeahead_label;
-            $this->payment_method_id = $this->payment->payment_method_id;
-            $this->amount = (string) $this->payment->amount;
+            $this->amount = number_format((float) $this->payment->amount, 2, '.', '');
             $this->payment_date = $this->payment->payment_date->format('Y-m-d');
             $this->notes = $this->payment->notes ?? '';
+            $this->payment_reference = $this->payment->payment_reference ?? '';
             $this->existingReceiptPath = $this->payment->receipt_path ?? '';
+            $this->source_type = $this->payment->source_type->value;
+
+            $this->paymentMethodSelection = match ($this->payment->source_type) {
+                PaymentSourceType::Cash => $this->payment->payment_method_id ? "lookup:{$this->payment->payment_method_id}" : '',
+                PaymentSourceType::CreditNote => 'credit_note',
+                PaymentSourceType::OverPayment => 'over_payment',
+            };
+
+            if ($this->payment->source_type === PaymentSourceType::CreditNote) {
+                $this->selectedCreditNoteIds = $this->payment->creditAllocations()->pluck('credit_note_id')->unique()->values()->toArray();
+            }
+
+            if ($this->payment->source_type === PaymentSourceType::OverPayment) {
+                $this->selectedOverPaymentIds = $this->payment->drawsReceived()->pluck('source_payment_id')->toArray();
+                $this->overPaymentExhaustIds = collect($this->availableOverPaymentSources)
+                    ->filter(fn ($src) => $src['is_exhausted'])
+                    ->pluck('id')
+                    ->toArray();
+            }
         } else {
             $this->payment_date = now()->format('Y-m-d');
 
@@ -49,166 +76,285 @@ new #[Title('Payment')] class extends Component {
                 }
             }
         }
-
-        $this->refreshCreditBalance();
-        $this->refreshInitialCreditUsed();
     }
 
     public function updatedCustomerId(): void
     {
-        $this->refreshCreditBalance();
-        $this->refreshInitialCreditUsed();
+        $this->selectedCreditNoteIds = [];
+        $this->selectedOverPaymentIds = [];
+        $this->overPaymentExhaustIds = [];
+        unset($this->availableCreditNotes, $this->availableOverPaymentSources, $this->selectedCreditNoteTotal, $this->selectedOverPaymentTotal);
         $this->dispatch('payment-rows-updated', rows: $this->invoiceRows);
     }
 
-    private function refreshCreditBalance(): void
+    public function updatedPaymentMethodSelection(): void
     {
-        $customerId = $this->payment?->customer_id ?? $this->customer_id;
-        $this->creditBalance = $customerId
-            ? Document::availableCreditForCustomer($customerId)
-            : 0.0;
-    }
+        $this->source_type = $this->resolveSourceType();
 
-    private function refreshInitialCreditUsed(): void
-    {
-        $this->initialCreditUsed = $this->payment
-            ? (float) CreditAllocation::where('payment_id', $this->payment->id)->sum('amount')
-            : 0.0;
-    }
-
-    /**
-     * @param  array<int, float>  $invoiceTotals  [invoice_id => total_to_cover], ordered oldest-first
-     * @return array<int, array<int, float>>  [credit_note_id => [invoice_id => credit_applied]]
-     */
-    private function buildCreditAllocations(int $customerId, array $invoiceTotals): array
-    {
-        $ownCredit = $this->payment
-            ? CreditAllocation::where('payment_id', $this->payment->id)
-                ->select('credit_note_id')
-                ->selectRaw('SUM(amount) as own')
-                ->groupBy('credit_note_id')
-                ->pluck('own', 'credit_note_id')
-            : collect();
-
-        $creditNotes = Document::creditNotes()
-            ->where('customer_id', $customerId)
-            ->withSum('creditAllocations', 'amount')
-            ->orderBy('doc_date', 'asc')
-            ->get()
-            ->map(fn ($cn) => [
-                'id' => $cn->id,
-                'remaining' => max(0, (float) $cn->total_value - (float) ($cn->credit_allocations_sum_amount ?? 0) + (float) ($ownCredit->get($cn->id) ?? 0)),
-            ])
-            ->filter(fn ($cn) => $cn['remaining'] > 0.001)
-            ->values()
-            ->toArray();
-
-        $result = [];
-        $cnIndex = 0;
-
-        foreach ($invoiceTotals as $invoiceId => $total) {
-            $needed = round((float) $total, 2);
-            $invoiceId = (int) $invoiceId;
-            while ($needed > 0.001 && $cnIndex < count($creditNotes)) {
-                $draw = round(min($needed, $creditNotes[$cnIndex]['remaining']), 2);
-                if ($draw > 0) {
-                    $result[$creditNotes[$cnIndex]['id']][$invoiceId] = ($result[$creditNotes[$cnIndex]['id']][$invoiceId] ?? 0) + $draw;
-                    $creditNotes[$cnIndex]['remaining'] = round($creditNotes[$cnIndex]['remaining'] - $draw, 2);
-                    $needed = round($needed - $draw, 2);
-                }
-                if ($creditNotes[$cnIndex]['remaining'] <= 0.001) {
-                    $cnIndex++;
-                }
-            }
+        if ($this->source_type !== 'cash') {
+            $this->payment_reference = '';
+        }
+        if ($this->source_type !== 'credit_note') {
+            $this->selectedCreditNoteIds = [];
+        }
+        if ($this->source_type !== 'over_payment') {
+            $this->selectedOverPaymentIds = [];
+            $this->overPaymentExhaustIds = [];
         }
 
-        return $result;
+        $this->syncAmountForSelection();
+
+        $this->dispatch('payment-method-resolved');
+    }
+
+    public function updatedSelectedCreditNoteIds(): void
+    {
+        unset($this->selectedCreditNoteTotal);
+        $this->syncAmountForSelection();
+    }
+
+    public function updatedSelectedOverPaymentIds(): void
+    {
+        unset($this->selectedOverPaymentTotal);
+        $this->syncAmountForSelection();
+    }
+
+    private function resolveSourceType(): string
+    {
+        return match (true) {
+            str_starts_with($this->paymentMethodSelection, 'lookup:') => PaymentSourceType::Cash->value,
+            $this->paymentMethodSelection === 'credit_note' => PaymentSourceType::CreditNote->value,
+            $this->paymentMethodSelection === 'over_payment' => PaymentSourceType::OverPayment->value,
+            default => PaymentSourceType::Cash->value,
+        };
+    }
+
+    private function resolvedPaymentMethodId(): ?int
+    {
+        if (str_starts_with($this->paymentMethodSelection, 'lookup:')) {
+            return (int) Str::after($this->paymentMethodSelection, 'lookup:');
+        }
+
+        return null;
+    }
+
+    private function syncAmountForSelection(): void
+    {
+        $this->amount = match ($this->source_type) {
+            'credit_note' => number_format($this->selectedCreditNoteTotal, 2, '.', ''),
+            'over_payment' => number_format($this->selectedOverPaymentTotal, 2, '.', ''),
+            default => $this->amount,
+        };
     }
 
     /**
      * @param  array<int, array{id:int, amount:float}>  $rows
-     * @return array{0: array<int, float>, 1: array<int, array<int, float>>, 2: int[]}
+     * @return array{0: array<int, float>, 1: int[]}
      */
-    private function deriveAllocations(int $customerId, array $rows): array
+    private function deriveAllocations(array $rows): array
     {
-        $ordered = $this->orderRowsByInvoiceDate($customerId, $rows);
-
-        $invoiceTotals = collect($ordered)
+        $allocations = collect($rows)
             ->mapWithKeys(fn ($r) => [(int) $r['id'] => round((float) ($r['amount'] ?? 0), 2)])
             ->filter(fn ($v) => $v > 0)
             ->toArray();
 
         $scope = collect($rows)->map(fn ($r) => (int) $r['id'])->filter()->values()->toArray();
 
-        $creditAllocations = $this->buildCreditAllocations($customerId, $invoiceTotals);
-
-        $paymentAllocations = [];
-        foreach ($invoiceTotals as $invoiceId => $total) {
-            $creditApplied = collect($creditAllocations)->sum(fn ($inv) => $inv[$invoiceId] ?? 0);
-            $cash = round($total - $creditApplied, 2);
-            if ($cash > 0) {
-                $paymentAllocations[$invoiceId] = $cash;
-            }
-        }
-
-        return [$paymentAllocations, $creditAllocations, $scope];
+        return [$allocations, $scope];
     }
 
-    private function orderRowsByInvoiceDate(int $customerId, array $rows): array
+    #[Computed]
+    public function paymentMethods(): Collection
     {
-        $order = Document::where('customer_id', $customerId)
-            ->where('type', 'INV')
-            ->orderBy('doc_date', 'asc')
-            ->pluck('id')
-            ->flip();
+        return LookupPaymentMethod::orderBy('name')->get();
+    }
 
-        return collect($rows)
-            ->sortBy(fn ($r) => $order->get((int) $r['id'], PHP_INT_MAX))
+    /**
+     * @return array<int, array{id:int, doc_number:string, doc_date:string, time:string, remaining:float}>
+     */
+    #[Computed]
+    public function availableCreditNotes(): array
+    {
+        $customerId = $this->payment?->customer_id ?? $this->customer_id;
+        if (! $customerId) {
+            return [];
+        }
+
+        $paymentId = $this->payment?->id;
+
+        return Document::creditNotes()
+            ->where('customer_id', $customerId)
+            ->withSum(['creditAllocations' => function ($query) use ($paymentId) {
+                if ($paymentId) {
+                    $query->where(fn ($q) => $q->whereNull('payment_id')->orWhere('payment_id', '!=', $paymentId));
+                }
+            }], 'amount')
+            ->orderBy('doc_date', 'asc')
+            ->get()
+            ->map(fn (Document $note) => [
+                'id' => $note->id,
+                'doc_number' => $note->doc_number,
+                'doc_date' => $note->doc_date->format('d M Y'),
+                'time' => $note->created_at->format('H:i'),
+                'remaining' => round((float) $note->total_value - (float) ($note->credit_allocations_sum_amount ?? 0), 2),
+            ])
+            ->filter(fn (array $note) => $note['remaining'] > 0.001)
+            ->values()
+            ->toArray();
+    }
+
+    /**
+     * @return array<int, array{id:int, reference:string, payment_reference:?string, method_label:string, credit_note_refs:string[], payment_date:string, time:string, remaining:float, is_exhausted:bool}>
+     */
+    #[Computed]
+    public function availableOverPaymentSources(): array
+    {
+        $customerId = $this->payment?->customer_id ?? $this->customer_id;
+        if (! $customerId) {
+            return [];
+        }
+
+        $ownDrawnIds = $this->payment
+            ? $this->payment->drawsReceived()->pluck('source_payment_id')->toArray()
+            : [];
+        $ownDrawnAmounts = $this->payment
+            ? $this->payment->drawsReceived()->pluck('amount', 'source_payment_id')
+            : collect();
+
+        return Payment::where('customer_id', $customerId)
+            ->where('source_type', '!=', PaymentSourceType::OverPayment)
+            ->when($this->payment, fn ($query) => $query->where('id', '!=', $this->payment->id))
+            ->with(['paymentMethod', 'creditAllocations.creditNote'])
+            ->withSum('allocations', 'allocated_amount')
+            ->withSum('drawsMade', 'amount')
+            ->orderByDesc('payment_date')
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (Payment $source) => [$source, round(
+                (float) $source->amount
+                    - (float) ($source->allocations_sum_allocated_amount ?? 0)
+                    - (float) ($source->draws_made_sum_amount ?? 0),
+                2
+            )])
+            ->filter(fn (array $pair) => in_array($pair[0]->id, $ownDrawnIds, true)
+                || (! $pair[0]->is_exhausted && $pair[1] > 0.001))
+            ->map(function (array $pair) use ($ownDrawnAmounts) {
+                [$source, $remaining] = $pair;
+                if ($ownDrawnAmounts->has($source->id)) {
+                    $remaining += (float) $ownDrawnAmounts->get($source->id);
+                }
+
+                return [
+                    'id' => $source->id,
+                    'reference' => $source->reference,
+                    'payment_reference' => $source->payment_reference,
+                    'method_label' => $source->paymentMethod?->name ?? $source->source_type->label(),
+                    'credit_note_refs' => $source->creditAllocations
+                        ->pluck('creditNote.doc_number')
+                        ->filter()
+                        ->values()
+                        ->toArray(),
+                    'payment_date' => $source->payment_date->format('d M Y'),
+                    'time' => $source->created_at->format('H:i'),
+                    'remaining' => round($remaining, 2),
+                    'is_exhausted' => (bool) $source->is_exhausted,
+                ];
+            })
             ->values()
             ->toArray();
     }
 
     #[Computed]
-    public function paymentMethods()
+    public function selectedCreditNoteTotal(): float
     {
-        return LookupPaymentMethod::orderBy('name')->get();
+        if (empty($this->selectedCreditNoteIds)) {
+            return 0.0;
+        }
+
+        return (float) collect($this->availableCreditNotes)
+            ->whereIn('id', $this->selectedCreditNoteIds)
+            ->sum('remaining');
+    }
+
+    #[Computed]
+    public function selectedOverPaymentTotal(): float
+    {
+        if (empty($this->selectedOverPaymentIds)) {
+            return 0.0;
+        }
+
+        return (float) collect($this->availableOverPaymentSources)
+            ->whereIn('id', $this->selectedOverPaymentIds)
+            ->sum('remaining');
     }
 
     public function save(array $rows = []): void
     {
+        $this->source_type = $this->resolveSourceType();
+
         $this->validate([
             'customer_id' => 'required|integer|exists:customers,id',
-            'payment_method_id' => 'required|integer|exists:lookup_payment_methods,id',
-            'amount' => 'required|numeric|min:0.01',
+            'paymentMethodSelection' => 'required|string',
             'payment_date' => 'required|date',
             'notes' => 'nullable|string|max:1000',
+            'payment_reference' => 'nullable|string|max:255',
             'receipt' => 'nullable|file|mimes:pdf,png,jpg,jpeg,webp|max:5120',
         ]);
 
-        if ($this->payment === null) {
-            $payment = Payment::create([
-                'customer_id' => $this->customer_id,
-                'payment_method_id' => $this->payment_method_id,
-                'amount' => $this->amount,
-                'payment_date' => $this->payment_date,
-                'notes' => $this->notes ?: null,
-                'created_by' => auth()->id(),
+        if ($this->source_type === 'cash') {
+            $this->validate([
+                'amount' => 'required|numeric|min:0.01',
+                'paymentMethodSelection' => 'required|string',
             ]);
+
+            if (! $this->resolvedPaymentMethodId() || ! LookupPaymentMethod::whereKey($this->resolvedPaymentMethodId())->exists()) {
+                Flux::toast(variant: 'danger', text: 'Select a valid payment method.');
+
+                return;
+            }
+        } elseif ($this->source_type === 'credit_note' && empty($this->selectedCreditNoteIds)) {
+            Flux::toast(variant: 'danger', text: 'Select at least one credit note.');
+
+            return;
+        } elseif ($this->source_type === 'over_payment' && empty($this->selectedOverPaymentIds)) {
+            Flux::toast(variant: 'danger', text: 'Select at least one source payment.');
+
+            return;
+        }
+
+        $paymentMethodId = $this->source_type === 'cash' ? $this->resolvedPaymentMethodId() : null;
+
+        if ($this->payment === null) {
+            try {
+                $payment = DB::transaction(function () use ($paymentMethodId, $rows) {
+                    $payment = Payment::create([
+                        'customer_id' => $this->customer_id,
+                        'payment_method_id' => $paymentMethodId,
+                        'source_type' => $this->source_type,
+                        'payment_reference' => $this->source_type === 'cash' ? ($this->payment_reference ?: null) : null,
+                        'amount' => $this->source_type === 'cash' ? $this->amount : 0,
+                        'payment_date' => $this->payment_date,
+                        'notes' => $this->notes ?: null,
+                        'created_by' => auth()->id(),
+                    ]);
+
+                    $this->fundPayment($payment);
+
+                    [$paymentAllocations, $scope] = $this->deriveAllocations($rows);
+                    app(PaymentAllocator::class)->saveAllocations($payment, $paymentAllocations, $scope);
+
+                    return $payment;
+                });
+            } catch (\InvalidArgumentException $e) {
+                Flux::toast(variant: 'danger', text: $e->getMessage());
+
+                return;
+            }
 
             if ($this->receipt) {
                 $ext = $this->receipt->getClientOriginalExtension();
                 $receiptPath = $this->receipt->storeAs('payment-receipts', $payment->reference . '.' . $ext, 'public');
                 $payment->update(['receipt_path' => $receiptPath]);
-            }
-
-            [$paymentAllocations, $creditAllocations, $scope] = $this->deriveAllocations($this->customer_id, $rows);
-
-            try {
-                app(PaymentAllocator::class)->saveWithCredits($payment, $paymentAllocations, $creditAllocations, $scope);
-            } catch (\InvalidArgumentException $e) {
-                Flux::toast(variant: 'danger', text: $e->getMessage());
-
-                return;
             }
 
             Flux::toast(variant: 'success', text: 'Payment recorded.');
@@ -219,11 +365,16 @@ new #[Title('Payment')] class extends Component {
 
         $updateData = [
             'customer_id' => $this->customer_id,
-            'payment_method_id' => $this->payment_method_id,
-            'amount' => $this->amount,
+            'payment_method_id' => $paymentMethodId,
+            'source_type' => $this->source_type,
+            'payment_reference' => $this->source_type === 'cash' ? ($this->payment_reference ?: null) : null,
             'payment_date' => $this->payment_date,
             'notes' => $this->notes ?: null,
         ];
+
+        if ($this->source_type === 'cash') {
+            $updateData['amount'] = $this->amount;
+        }
 
         if ($this->receipt) {
             if ($this->existingReceiptPath && Storage::disk('public')->exists($this->existingReceiptPath)) {
@@ -234,24 +385,54 @@ new #[Title('Payment')] class extends Component {
             $this->existingReceiptPath = $updateData['receipt_path'];
         }
 
-        $this->payment->update($updateData);
+        try {
+            DB::transaction(function () use ($updateData, $rows) {
+                $this->payment->update($updateData);
 
-        if (! empty($rows)) {
-            [$paymentAllocations, $creditAllocations, $scope] = $this->deriveAllocations($this->payment->customer_id, $rows);
+                $this->fundPayment($this->payment);
 
-            try {
-                app(PaymentAllocator::class)->saveWithCredits($this->payment, $paymentAllocations, $creditAllocations, $scope);
-                $this->refreshCreditBalance();
-                $this->refreshInitialCreditUsed();
-            } catch (\InvalidArgumentException $e) {
-                Flux::toast(variant: 'danger', text: $e->getMessage());
+                if (! empty($rows)) {
+                    [$paymentAllocations, $scope] = $this->deriveAllocations($rows);
+                    app(PaymentAllocator::class)->saveAllocations($this->payment, $paymentAllocations, $scope);
+                }
+            });
 
-                return;
-            }
+            $this->payment->refresh();
+            $this->amount = number_format((float) $this->payment->amount, 2, '.', '');
+        } catch (\InvalidArgumentException $e) {
+            Flux::toast(variant: 'danger', text: $e->getMessage());
+
+            return;
         }
 
         Flux::toast(variant: 'success', text: 'Payment updated.');
         $this->redirect(route('payments.show', $this->payment), navigate: true);
+    }
+
+    /**
+     * Applies this payment's funding source and tears down any stale funding
+     * left over from a since-changed source type (e.g. a payment switched
+     * from Over Payment back to Cash must release its old draws).
+     */
+    private function fundPayment(Payment $payment): void
+    {
+        if ($this->source_type !== 'credit_note') {
+            $payment->creditAllocations()->forceDelete();
+        }
+        if ($this->source_type !== 'over_payment') {
+            PaymentDraw::where('target_payment_id', $payment->id)->forceDelete();
+        }
+
+        if ($this->source_type === 'credit_note') {
+            app(PaymentAllocator::class)->fundFromCreditNotes($payment, $this->selectedCreditNoteIds);
+        } elseif ($this->source_type === 'over_payment') {
+            app(PaymentAllocator::class)->fundFromOverPayments(
+                $payment,
+                $this->selectedOverPaymentIds,
+                $this->overPaymentExhaustIds,
+                array_column($this->availableOverPaymentSources, 'id')
+            );
+        }
     }
 
     #[Computed]
@@ -301,51 +482,6 @@ new #[Title('Payment')] class extends Component {
           ->toArray();
     }
 
-    #[Computed]
-    public function totalAllocated(): float
-    {
-        if (! $this->payment) {
-            return 0.0;
-        }
-
-        return (float) $this->payment->allocations->sum('allocated_amount');
-    }
-
-    #[Computed]
-    public function unallocatedBalance(): float
-    {
-        if (! $this->payment) {
-            return 0.0;
-        }
-
-        return max(0, (float) $this->payment->amount - $this->totalAllocated);
-    }
-
-    public function saveAllocations(array $rows): void
-    {
-        if (! $this->payment) {
-            return;
-        }
-
-        $scope = collect($rows)->map(fn ($r) => (int) $r['id'])->filter()->values()->toArray();
-        $paymentAllocations = collect($rows)
-            ->mapWithKeys(fn ($r) => [(int) $r['id'] => max(0, (float) ($r['amount'] ?? 0) - (float) ($r['creditAmount'] ?? 0))])
-            ->filter(fn ($v) => $v > 0)
-            ->toArray();
-
-        $creditRows = collect($rows)->filter(fn ($r) => (float) ($r['creditAmount'] ?? 0) > 0)->values()->toArray();
-        $creditAllocations = $this->buildCreditAllocations($this->payment->customer_id, $creditRows);
-
-        try {
-            app(PaymentAllocator::class)->saveWithCredits($this->payment, $paymentAllocations, $creditAllocations, $scope);
-            $this->payment->load('allocations');
-            unset($this->totalAllocated, $this->unallocatedBalance, $this->invoiceRows);
-            $this->refreshCreditBalance();
-            Flux::toast(variant: 'success', text: 'Allocations saved.');
-        } catch (\InvalidArgumentException $e) {
-            Flux::toast(variant: 'danger', text: $e->getMessage());
-        }
-    }
 }; ?>
 
 <div class="flex flex-col gap-4">
@@ -374,6 +510,7 @@ new #[Title('Payment')] class extends Component {
             x-on:keydown="handleKey($event)"
             x-on:exit-confirm-discard.window="window.location.href = '{{ $payment ? route('payments.show', $payment) : route('payments.index') }}'"
             x-on:exit-confirm-save.window="$dispatch('save-payment-form')"
+            x-on:payment-method-resolved.window="_advanceFocus($refs.paymentMethodSelect)"
         >
 
             {{-- Payment Details form card --}}
@@ -403,26 +540,46 @@ new #[Title('Payment')] class extends Component {
                         {{-- Payment Method --}}
                         <div>
                             <flux:label>{{ __('Payment Method') }} <span class="text-red-500">*</span></flux:label>
-                            <flux:select wire:model="payment_method_id" class="mt-1.5" x-on:focus="$el.showPicker?.()">
+                            <flux:select
+                                wire:model.live="paymentMethodSelection"
+                                class="mt-1.5"
+                                x-ref="paymentMethodSelect"
+                                data-form-defer-advance
+                                x-on:focus="$el.showPicker?.()"
+                            >
                                 <flux:select.option value="">— Select method —</flux:select.option>
                                 @foreach($this->paymentMethods as $method)
-                                    <flux:select.option :value="$method->id">{{ $method->name }}</flux:select.option>
+                                    <flux:select.option value="lookup:{{ $method->id }}">{{ $method->name }}</flux:select.option>
                                 @endforeach
+                                <flux:select.option value="credit_note">{{ PaymentSourceType::CreditNote->label() }}</flux:select.option>
+                                <flux:select.option value="over_payment">{{ PaymentSourceType::OverPayment->label() }}</flux:select.option>
                             </flux:select>
-                            @error('payment_method_id') <flux:error>{{ $message }}</flux:error> @enderror
+                            @error('paymentMethodSelection') <flux:error>{{ $message }}</flux:error> @enderror
                         </div>
 
                         {{-- Amount --}}
-                        <flux:input
-                            wire:model.blur="amount"
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            placeholder="0.00"
-                            prefix="£"
-                            :label="__('Amount')"
-                            required
-                        />
+                        @if($source_type === 'cash')
+                            <flux:input
+                                wire:model.blur="amount"
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                placeholder="0.00"
+                                prefix="£"
+                                :label="__('Amount')"
+                                required
+                            />
+                        @else
+                            <div>
+                                <flux:label>{{ __('Amount') }}</flux:label>
+                                <flux:input
+                                    :value="number_format((float) $this->amount, 2)"
+                                    prefix="£"
+                                    readonly
+                                    class="mt-1.5"
+                                />
+                            </div>
+                        @endif
 
                         {{-- Date --}}
                         <flux:input
@@ -431,6 +588,17 @@ new #[Title('Payment')] class extends Component {
                             :label="__('Payment Date')"
                             required
                         />
+
+                        {{-- Payment Reference (cash only) --}}
+                        @if($source_type === 'cash')
+                            <div>
+                                <flux:input
+                                    wire:model="payment_reference"
+                                    :label="__('Payment Reference')"
+                                    :placeholder="__('Cheque no. / transaction ref…')"
+                                />
+                            </div>
+                        @endif
 
                         {{-- Notes --}}
                         <div>
@@ -463,6 +631,77 @@ new #[Title('Payment')] class extends Component {
                             @error('receipt') <flux:error>{{ $message }}</flux:error> @enderror
                         </div>
 
+                        {{-- Credit Notes picker --}}
+                        @if($source_type === 'credit_note')
+                            <div class="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-700/30 dark:bg-amber-500/5">
+                                <h3 class="mb-3 text-sm font-semibold text-amber-800 dark:text-amber-400">Available Credit Notes — Fund This Payment</h3>
+                                @if(count($this->availableCreditNotes) > 0)
+                                    <div class="flex flex-col gap-2">
+                                        @foreach($this->availableCreditNotes as $note)
+                                            <label class="flex cursor-pointer items-center gap-3 text-sm">
+                                                <flux:checkbox wire:model.live="selectedCreditNoteIds" :value="$note['id']" />
+                                                <span class="font-mono font-semibold text-zinc-800 dark:text-zinc-200">{{ $note['doc_number'] }}</span>
+                                                <span class="text-zinc-500 dark:text-zinc-400">{{ $note['doc_date'] }} {{ $note['time'] }}</span>
+                                                <span class="ml-auto font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                                                    £{{ number_format($note['remaining'], 2) }}
+                                                </span>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                    <div class="mt-3 flex items-center justify-between border-t border-amber-200/70 pt-3 text-sm dark:border-amber-700/30">
+                                        <span class="font-medium text-amber-800 dark:text-amber-400">Selected Total</span>
+                                        <span class="font-mono font-semibold text-emerald-600 dark:text-emerald-400">£{{ number_format($this->selectedCreditNoteTotal, 2) }}</span>
+                                    </div>
+                                @else
+                                    <p class="text-sm text-zinc-500 dark:text-zinc-400">No unconsumed credit notes for this customer.</p>
+                                @endif
+                            </div>
+                        @endif
+
+                        {{-- Over Payments picker --}}
+                        @if($source_type === 'over_payment')
+                            <div class="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-700/30 dark:bg-amber-500/5">
+                                <h3 class="mb-3 text-sm font-semibold text-amber-800 dark:text-amber-400">Available Over Payments — Fund This Payment</h3>
+                                @if(count($this->availableOverPaymentSources) > 0)
+                                    <div class="flex flex-col gap-2">
+                                        @foreach($this->availableOverPaymentSources as $src)
+                                            <div class="flex items-center gap-3 text-sm">
+                                                <flux:checkbox wire:model.live="selectedOverPaymentIds" :value="$src['id']" />
+                                                <div class="flex flex-1 flex-wrap items-center gap-3">
+                                                    <span class="font-mono font-semibold text-zinc-800 dark:text-zinc-200">{{ $src['reference'] }}</span>
+                                                    @if($src['payment_reference'])
+                                                        <span class="text-zinc-500 dark:text-zinc-400">{{ $src['payment_reference'] }}</span>
+                                                    @endif
+                                                    @if(count($src['credit_note_refs']) > 0)
+                                                        <span class="text-zinc-500 dark:text-zinc-400" x-data="{ expanded: false }">
+                                                            {{ $src['method_label'] }}
+                                                            (<span>{{ $src['credit_note_refs'][0] }}</span>@if(count($src['credit_note_refs']) > 1)<span x-show="!expanded" x-cloak>, <button type="button" class="underline hover:text-zinc-700 dark:hover:text-zinc-200" @click="expanded = true">+{{ count($src['credit_note_refs']) - 1 }} more</button></span><span x-show="expanded" x-cloak>, {{ implode(', ', array_slice($src['credit_note_refs'], 1)) }} <button type="button" class="underline hover:text-zinc-700 dark:hover:text-zinc-200" @click="expanded = false">show less</button></span>@endif)
+                                                        </span>
+                                                    @else
+                                                        <span class="text-zinc-500 dark:text-zinc-400">{{ $src['method_label'] }}</span>
+                                                    @endif
+                                                    <span class="text-zinc-500 dark:text-zinc-400">{{ $src['payment_date'] }} {{ $src['time'] }}</span>
+                                                    <span class="ml-auto font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                                                        £{{ number_format($src['remaining'], 2) }}
+                                                    </span>
+                                                </div>
+                                                <label class="flex shrink-0 items-center gap-1.5 border-l border-amber-200/70 pl-3 text-xs text-zinc-500 dark:border-amber-700/30 dark:text-zinc-400">
+                                                    <flux:checkbox wire:model.live="overPaymentExhaustIds" :value="$src['id']" />
+                                                    Mark exhausted
+                                                </label>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    <div class="mt-3 flex items-center justify-between border-t border-amber-200/70 pt-3 text-sm dark:border-amber-700/30">
+                                        <span class="font-medium text-amber-800 dark:text-amber-400">Selected Total</span>
+                                        <span class="font-mono font-semibold text-emerald-600 dark:text-emerald-400">£{{ number_format($this->selectedOverPaymentTotal, 2) }}</span>
+                                    </div>
+                                @else
+                                    <p class="text-sm text-zinc-500 dark:text-zinc-400">No available over-payment sources for this customer.</p>
+                                @endif
+                            </div>
+                        @endif
+
                     </div>
 
                 </div>
@@ -474,7 +713,7 @@ new #[Title('Payment')] class extends Component {
                 wire:ignore
                 x-data="paymentAllocator({ rows: @js($this->invoiceRows) })"
                 @save-payment-form.window="$wire.save(rows)"
-                @payment-rows-updated.window="rows = $event.detail.rows.map(r => ({ ...r, amount: r.existing_allocation, creditAmount: 0 }))"
+                @payment-rows-updated.window="rows = $event.detail.rows.map(r => ({ ...r, amount: r.existing_allocation }))"
             >
                 <div x-show="$wire.customer_id" x-cloak>
 
@@ -485,11 +724,6 @@ new #[Title('Payment')] class extends Component {
                                 <div class="flex w-full items-center justify-between gap-4">
                                     <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Allocations</h2>
                                     <div class="flex items-center gap-3">
-                                        <span
-                                            x-show="serverCreditBalance > 0 || initialCreditUsed > 0"
-                                            x-text="'Available Credits: £' + availableCreditsAfter.toFixed(2)"
-                                            class="text-sm font-semibold text-emerald-600 dark:text-emerald-400"
-                                        ></span>
                                         <flux:button variant="ghost" size="sm" @click="autoAllocate()">
                                             Auto Allocate
                                         </flux:button>
@@ -504,8 +738,8 @@ new #[Title('Payment')] class extends Component {
                                                 <th class="pb-3 pr-4 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">Invoice #</th>
                                                 <th class="pb-3 pr-4 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">Date</th>
                                                 <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Invoice Total</th>
-                                                <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">This Payment</th>
                                                 <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Max Available</th>
+                                                <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">This Payment</th>
                                                 <th class="pb-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Outstanding After</th>
                                             </tr>
                                         </thead>
@@ -515,6 +749,7 @@ new #[Title('Payment')] class extends Component {
                                                     <td class="py-3 pr-4 font-mono text-sm text-zinc-900 dark:text-white" x-text="row.doc_number"></td>
                                                     <td class="py-3 pr-4 text-zinc-600 dark:text-zinc-400" x-text="row.doc_date"></td>
                                                     <td class="py-3 pr-4 text-right font-mono text-zinc-900 dark:text-white" x-text="'£' + row.total_value.toFixed(2)"></td>
+                                                    <td class="py-3 pr-4 text-right font-mono text-zinc-600 dark:text-zinc-400" x-text="'£' + row.max_allocatable.toFixed(2)"></td>
                                                     <td class="py-3 pr-4 text-right">
                                                         <input
                                                             type="number"
@@ -522,11 +757,11 @@ new #[Title('Payment')] class extends Component {
                                                             min="0"
                                                             :max="row.max_allocatable"
                                                             x-model="row.amount"
-                                                            @input="row.amount = Math.min(parseFloat($event.target.value)||0, row.max_allocatable)"
+                                                            @blur="row.amount = Math.min(parseFloat(row.amount)||0, row.max_allocatable)"
+                                                            @focus="focusRow(row)"
                                                             class="w-28 rounded-lg border border-zinc-300 px-2 py-1 text-right font-mono text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
                                                         />
                                                     </td>
-                                                    <td class="py-3 pr-4 text-right font-mono text-zinc-600 dark:text-zinc-400" x-text="'£' + row.max_allocatable.toFixed(2)"></td>
                                                     <td class="py-3 text-right font-mono" :class="(row.max_allocatable - (parseFloat(row.amount)||0)) <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-900 dark:text-white'" x-text="'£' + Math.max(0, row.max_allocatable - (parseFloat(row.amount)||0)).toFixed(2)"></td>
                                                 </tr>
                                             </template>
@@ -545,17 +780,9 @@ new #[Title('Payment')] class extends Component {
                                                     <div class="font-mono font-semibold text-zinc-900 dark:text-white" x-text="'£' + totalAllocated.toFixed(2)"></div>
                                                     <div class="text-xs text-zinc-400 dark:text-zinc-500">Allocated</div>
                                                 </td>
-                                                <td class="pt-3 pr-4 text-right">
-                                                    <div class="font-mono font-semibold text-emerald-600 dark:text-emerald-400" x-text="'£' + creditsUsed.toFixed(2)"></div>
-                                                    <div class="text-xs text-zinc-400 dark:text-zinc-500">Credits Used</div>
-                                                </td>
-                                                <td class="pt-3 pr-4 text-right">
-                                                    <div class="font-mono font-semibold text-zinc-900 dark:text-white" x-text="'£' + cashUsed.toFixed(2)"></div>
-                                                    <div class="text-xs text-zinc-400 dark:text-zinc-500">Cash Used</div>
-                                                </td>
-                                                <td class="pt-3 text-right">
+                                                <td class="pt-3 text-right" colspan="3">
                                                     <div class="font-mono font-semibold" :class="budgetRemaining < 0 ? 'text-red-600 dark:text-red-400' : budgetRemaining > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'" x-text="'£' + budgetRemaining.toFixed(2)"></div>
-                                                    <div class="text-xs text-zinc-400 dark:text-zinc-500">Remaining Cash</div>
+                                                    <div class="text-xs text-zinc-400 dark:text-zinc-500">Remaining</div>
                                                 </td>
                                             </tr>
                                         </tfoot>

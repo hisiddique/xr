@@ -3,6 +3,7 @@
 use App\Models\CreditAllocation;
 use App\Models\Document;
 use App\Models\Payment;
+use App\PaymentSourceType;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -93,6 +94,34 @@ new #[Title('Payment')] class extends Component
         return max(0, (float) $this->payment->amount - $this->totalAllocated);
     }
 
+    /**
+     * Reference numbers of whatever funded this payment — the credit notes
+     * it consumed, or the prior payments it drew over-payment balance from.
+     *
+     * @return string[]
+     */
+    #[Computed]
+    public function fundingReferences(): array
+    {
+        return match ($this->payment->source_type) {
+            PaymentSourceType::CreditNote => $this->payment->creditAllocations()
+                ->with('creditNote')
+                ->get()
+                ->pluck('creditNote.doc_number')
+                ->filter()
+                ->values()
+                ->toArray(),
+            PaymentSourceType::OverPayment => $this->payment->drawsReceived()
+                ->with('sourcePayment')
+                ->get()
+                ->pluck('sourcePayment.reference')
+                ->filter()
+                ->values()
+                ->toArray(),
+            default => [],
+        };
+    }
+
     public function deletePayment(): void
     {
         CreditAllocation::where('payment_id', $this->payment->id)->delete();
@@ -123,11 +152,9 @@ new #[Title('Payment')] class extends Component
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="min-w-0 flex flex-wrap items-center gap-3">
                     <h1 class="font-mono text-2xl font-semibold tracking-tight text-zinc-900 dark:text-white">{{ $payment->reference }}</h1>
-                    @if($payment->paymentMethod)
-                        <span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400">
-                            {{ $payment->paymentMethod->name }}
-                        </span>
-                    @endif
+                    <span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400">
+                        {{ $payment->paymentMethod?->name ?? $payment->source_type->label() }}
+                    </span>
                     <span class="text-sm text-zinc-500 dark:text-zinc-400">{{ $payment->payment_date->format('d F Y') }}</span>
                     @if($payment->creator)
                         <span class="text-sm text-zinc-500 dark:text-zinc-400">· {{ __('Created by :name', ['name' => $payment->creator->name]) }}</span>
@@ -191,7 +218,6 @@ new #[Title('Payment')] class extends Component
                                     <th class="pb-3 pr-4 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">Invoice #</th>
                                     <th class="pb-3 pr-4 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">Date</th>
                                     <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Total</th>
-                                    <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Credit</th>
                                     <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Payment</th>
                                     <th class="pb-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Outstanding</th>
                                 </tr>
@@ -202,15 +228,6 @@ new #[Title('Payment')] class extends Component
                                         <td class="py-3 pr-4 font-mono text-sm text-zinc-900 dark:text-white">{{ $row['doc_number'] }}</td>
                                         <td class="py-3 pr-4 text-zinc-600 dark:text-zinc-400">{{ $row['doc_date'] }}</td>
                                         <td class="py-3 pr-4 text-right font-mono text-zinc-900 dark:text-white">£{{ number_format($row['total_value'], 2) }}</td>
-                                        <td class="py-3 pr-4 text-right font-mono {{ $row['credit_amount'] > 0 ? 'font-medium text-violet-600 dark:text-violet-400' : 'text-zinc-400 dark:text-zinc-600' }}">
-                                            @if(count($row['credit_notes']) > 0)
-                                                @foreach($row['credit_notes'] as $creditNote)
-                                                    <div>£{{ number_format($creditNote['amount'], 2) }} ({{ $creditNote['reference'] }})</div>
-                                                @endforeach
-                                            @else
-                                                —
-                                            @endif
-                                        </td>
                                         <td class="py-3 pr-4 text-right font-mono font-medium {{ $row['existing_allocation'] > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400 dark:text-zinc-600' }}">
                                             {{ $row['existing_allocation'] > 0 ? '£' . number_format($row['existing_allocation'], 2) : '—' }}
                                         </td>
@@ -222,7 +239,7 @@ new #[Title('Payment')] class extends Component
                             </tbody>
                             <tfoot class="border-t-2 border-zinc-200 dark:border-zinc-700">
                                 <tr>
-                                    <td colspan="4" class="pt-3 text-xs text-zinc-400 dark:text-zinc-500">Total allocated</td>
+                                    <td colspan="3" class="pt-3 text-xs text-zinc-400 dark:text-zinc-500">Total allocated</td>
                                     <td class="pt-3 text-right font-mono font-semibold" colspan="2">
                                         @if($this->totalCredits > 0 && $this->totalAllocated > 0)
                                             <span class="text-zinc-900 dark:text-white">£{{ number_format($this->totalAllocatedAll, 2) }}</span>
@@ -265,10 +282,17 @@ new #[Title('Payment')] class extends Component
                         </dd>
                     </div>
 
-                    @if($payment->paymentMethod)
+                    <div>
+                        <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Payment Method</dt>
+                        <dd class="mt-1 text-sm text-zinc-900 dark:text-white">{{ $payment->paymentMethod?->name ?? $payment->source_type->label() }}</dd>
+                    </div>
+
+                    @if(count($this->fundingReferences) > 0)
                         <div>
-                            <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Payment Method</dt>
-                            <dd class="mt-1 text-sm text-zinc-900 dark:text-white">{{ $payment->paymentMethod->name }}</dd>
+                            <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                                {{ $payment->source_type === PaymentSourceType::CreditNote ? 'Credit Notes Used' : 'Over Payments Used' }}
+                            </dt>
+                            <dd class="mt-1 font-mono text-sm text-zinc-900 dark:text-white">{{ implode(', ', $this->fundingReferences) }}</dd>
                         </div>
                     @endif
 

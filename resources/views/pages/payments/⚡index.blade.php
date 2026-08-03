@@ -90,7 +90,7 @@ new #[Title('Payments')] class extends Component
             ->when($this->amountMin, fn ($q) => $q->where('amount', '>=', $this->amountMin))
             ->when($this->amountMax, fn ($q) => $q->where('amount', '<=', $this->amountMax))
             ->tap(fn ($q) => $this->applySort($q))
-            ->when($this->sortColumn === '', fn ($q) => $q->latest('payment_date'))
+            ->when($this->sortColumn === '', fn ($q) => $q->latest('payment_date')->orderBy('reference'))
             ->paginate($this->perPage);
     }
 }; ?>
@@ -183,7 +183,7 @@ new #[Title('Payments')] class extends Component
                                         </span>
                                     </div>
                                 </td>
-                                <td class="px-4 py-2 text-zinc-600 dark:text-zinc-300">{{ $payment->paymentMethod?->name ?? '—' }}</td>
+                                <td class="px-4 py-2 text-zinc-600 dark:text-zinc-300">{{ $payment->paymentMethod?->name ?? $payment->source_type->label() }}</td>
                                 <td class="px-4 py-2 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($payment->amount, 2) }}</td>
                                 <td class="px-4 py-2 text-right font-mono tabular-nums text-zinc-600 dark:text-zinc-300">£{{ number_format($payment->allocations_sum_allocated_amount ?? 0, 2) }}</td>
                                 <td class="px-4 py-2 text-right font-mono tabular-nums font-medium {{ max(0, $payment->amount - ($payment->allocations_sum_allocated_amount ?? 0)) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400' }}">

@@ -1742,11 +1742,16 @@ document.addEventListener('alpine:init', () => {
     // Enter advances focus to the next focusable input; Ctrl+Enter submits.
     // Apply via `x-data="formNav" x-on:keydown="handleKey($event)"` on a <form>.
     window.Alpine.data('formNav', () => ({
-        _selector: 'input:not([type=hidden]):not([disabled]):not([type=submit]):not([type=button]), select:not([disabled]), textarea:not([disabled]), [data-form-stop]:not([disabled]), [data-flux-switch]:not([disabled])',
+        _selector: 'input:not([type=hidden]):not([disabled]):not([readonly]):not([type=submit]):not([type=button]), select:not([disabled]), textarea:not([disabled]):not([readonly]), [data-form-stop]:not([disabled]), [data-flux-switch]:not([disabled])',
 
         init() {
             this.$el.addEventListener('change', (e) => {
                 if (e.target.tagName !== 'SELECT') return;
+                // Selects whose change server-side toggles other fields' readonly/disabled
+                // state (data-form-defer-advance) must wait for that morph to land before
+                // recomputing "next" — advancing on the pre-morph DOM can focus a field
+                // that's about to become readonly.
+                if (e.target.hasAttribute('data-form-defer-advance')) return;
                 this._advanceFocus(e.target);
             });
         },
@@ -1786,6 +1791,7 @@ document.addEventListener('alpine:init', () => {
             if (tag === 'BUTTON' && !e.target.hasAttribute('data-flux-switch') && !e.target.hasAttribute('data-form-nav')) return;
 
             e.preventDefault();
+            if (tag === 'SELECT' && e.target.hasAttribute('data-form-defer-advance')) return;
             this._advanceFocus(e.target);
         },
     }));
@@ -1799,50 +1805,43 @@ document.addEventListener('alpine:init', () => {
 
     // ─── Payment Allocator Component ────────────────────────────────
     window.Alpine.data('paymentAllocator', ({ rows }) => ({
-        rows: rows.map(r => ({ ...r, amount: r.existing_allocation, creditAmount: 0 })),
-        get creditBalance() { return parseFloat(this.$wire.creditBalance) || 0; },
-        get serverCreditBalance() { return parseFloat(this.$wire.creditBalance) || 0; },
-        get initialCreditUsed() { return parseFloat(this.$wire.initialCreditUsed) || 0; },
+        rows: rows.map(r => ({ ...r, amount: r.existing_allocation })),
         get paymentAmount() { return parseFloat(this.$wire.amount) || 0; },
         get totalAllocated() {
             return this.rows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
         },
-        get totalCreditUsed() {
-            return this.rows.reduce((sum, r) => sum + (parseFloat(r.creditAmount) || 0), 0);
-        },
-        get creditsUsed() {
-            return this.rows.reduce((sum, r) => sum + (parseFloat(r.creditAmount) || 0), 0);
-        },
-        get cashUsed() {
-            return this.totalAllocated - this.creditsUsed;
-        },
-        get availableCreditsAfter() {
-            return this.serverCreditBalance + this.initialCreditUsed - this.creditsUsed;
-        },
         get budgetRemaining() {
-            return this.paymentAmount - this.cashUsed;
+            return this.paymentAmount - this.totalAllocated;
         },
         get unallocatedBalance() {
             return Math.max(0, this.paymentAmount - this.totalAllocated);
         },
         autoAllocate() {
             let payment = this.paymentAmount;
-            let credit = this.creditBalance;
-            if (payment <= 0 && credit <= 0) {
+            if (payment <= 0) {
                 this.rows.forEach(r => { r.amount = 0; });
                 return;
             }
             this.rows.forEach(r => {
                 const outstanding = parseFloat(r.max_allocatable) || 0;
                 if (outstanding <= 0) { r.amount = 0; return; }
-                const creditCover = Math.min(outstanding, credit);
-                credit -= creditCover;
-                const afterCredit = outstanding - creditCover;
-                const paymentCover = Math.min(afterCredit, payment);
-                payment -= paymentCover;
-                r.creditAmount = Math.round(creditCover * 100) / 100;
-                r.amount = Math.round((creditCover + paymentCover) * 100) / 100;
+                const cover = Math.min(outstanding, payment);
+                payment -= cover;
+                r.amount = Math.round(cover * 100) / 100;
             });
+        },
+        // Suggests a default amount when an empty row gains focus — a one-shot
+        // nudge, not a live auto-allocate: it never overwrites a value the
+        // user already typed.
+        focusRow(row) {
+            if (parseFloat(row.amount)) return;
+            const budgetExcludingRow = this.paymentAmount - this.rows.reduce(
+                (sum, r) => sum + (r === row ? 0 : (parseFloat(r.amount) || 0)), 0
+            );
+            const suggested = Math.min(Math.max(budgetExcludingRow, 0), parseFloat(row.max_allocatable) || 0);
+            if (suggested > 0) {
+                row.amount = Math.round(suggested * 100) / 100;
+            }
         },
     }));
 
