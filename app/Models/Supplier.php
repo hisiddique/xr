@@ -57,6 +57,8 @@ class Supplier extends Model
         'town_city',
         'post_code',
         'created_by',
+        'created_at',
+        'updated_at',
     ];
 
     protected function casts(): array

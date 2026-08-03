@@ -30,6 +30,8 @@ beforeEach(function () {
         'vatdiff' => 0,
         'crlim' => 1000,
         'term' => 3,
+        'createddate' => 'Nov 11 2019 09:30:00:AM',
+        'modifieddate' => 'Mar 3 2021 14:15:00',
     ]);
 
     $this->mapper = new CustomerMapper;
@@ -74,6 +76,25 @@ test('apply attributes the migrated customer to the admin running the migration'
     $this->mapper->apply($this->legacyRow, DuplicateStrategy::UpdateExisting);
 
     expect(Customer::first()->created_by)->toBe($admin->id);
+});
+
+test('apply maps legacy createddate/modifieddate to created_at/updated_at', function () {
+    $this->mapper->apply($this->legacyRow, DuplicateStrategy::UpdateExisting);
+
+    $customer = Customer::first();
+
+    expect($customer->created_at->toDateTimeString())->toBe('2019-11-11 09:30:00')
+        ->and($customer->updated_at->toDateTimeString())->toBe('2021-03-03 14:15:00');
+});
+
+test('apply falls back to now for created_at when legacy createddate is missing', function () {
+    $row = $this->legacyRow;
+    $row['createddate'] = null;
+    $row['modifieddate'] = null;
+
+    $this->mapper->apply($row, DuplicateStrategy::UpdateExisting);
+
+    expect(Customer::first()->created_at)->not->toBeNull();
 });
 
 test('apply resolves credit_term_id via the Cust-CreditTerms AppCodes lookup', function () {

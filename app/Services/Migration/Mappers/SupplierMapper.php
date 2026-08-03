@@ -8,6 +8,7 @@ use App\Models\Supplier;
 use App\Services\Migration\BulkEntityMapper;
 use App\Services\Migration\DuplicateStrategy;
 use App\Services\Migration\MapOutcome;
+use App\Services\Migration\Support\LegacyDate;
 use Illuminate\Support\Facades\DB;
 
 class SupplierMapper implements BulkEntityMapper
@@ -77,6 +78,8 @@ class SupplierMapper implements BulkEntityMapper
             'reference',
             'company_name',
             'created_by',
+            'created_at',
+            'updated_at',
         ];
     }
 
@@ -91,6 +94,9 @@ class SupplierMapper implements BulkEntityMapper
 
         $usrref = trim((string) ($legacyRow['usrref'] ?? ''));
         $reference = $usrref !== '' ? $usrref : (string) $legacyRow['uid'];
+
+        $createdAt = LegacyDate::parse($legacyRow['createddate'] ?? null) ?? now();
+        $updatedAt = LegacyDate::parse($legacyRow['modifieddate'] ?? null) ?? $createdAt;
 
         return [
             'legacy_uid' => $legacyRow['uid'],
@@ -110,6 +116,8 @@ class SupplierMapper implements BulkEntityMapper
             'credit_limit_id' => $creditLimitId,
             'reference' => $reference,
             'created_by' => $this->createdBy,
+            'created_at' => $createdAt,
+            'updated_at' => $updatedAt,
         ];
     }
 

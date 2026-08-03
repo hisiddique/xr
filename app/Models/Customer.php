@@ -55,6 +55,8 @@ class Customer extends Model
         'credit_term_id',
         'credit_limit_id',
         'created_by',
+        'created_at',
+        'updated_at',
     ];
 
     protected function casts(): array

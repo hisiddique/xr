@@ -59,6 +59,8 @@ function createLegacyTables(array $tables): void
                 $table->decimal('vatdiff', 8, 2)->nullable();
                 $table->decimal('crlim', 12, 2)->nullable();
                 $table->integer('term')->nullable();
+                $table->string('createddate')->nullable();
+                $table->string('modifieddate')->nullable();
             });
         },
         'Documents' => function (): void {
