@@ -39,9 +39,10 @@ new #[Title('Payment')] class extends Component {
     /**
      * How many oldest-outstanding invoices are currently loaded into the
      * allocation table. Kept small so a customer with tens of thousands of
-     * invoices never ships/renders them all at once; "Load more" raises it.
+     * invoices never ships/renders them all at once; scrolling near the
+     * bottom auto-loads another chunk.
      */
-    public int $loadedLimit = 1000;
+    public int $loadedLimit = 500;
 
     /**
      * Document IDs pinned into the allocation table outside the normal
@@ -102,14 +103,14 @@ new #[Title('Payment')] class extends Component {
         $this->selectedOverPaymentIds = [];
         $this->overPaymentExhaustIds = [];
         $this->extraDocumentIds = [];
-        $this->loadedLimit = 1000;
+        $this->loadedLimit = 500;
         unset($this->availableCreditNotes, $this->availableOverPaymentSources, $this->selectedCreditNoteTotal, $this->selectedOverPaymentTotal, $this->invoiceRows);
         $this->dispatch('payment-rows-updated', rows: $this->invoiceRows, hasMore: $this->hasMoreInvoices);
     }
 
     public function loadMoreInvoices(): void
     {
-        $this->loadedLimit += 1000;
+        $this->loadedLimit += 500;
         unset($this->invoiceRows);
         $this->dispatch('payment-rows-appended', rows: $this->invoiceRows, hasMore: $this->hasMoreInvoices);
     }
@@ -923,12 +924,9 @@ new #[Title('Payment')] class extends Component {
                                             <tr x-show="rows.length === 0">
                                                 <td colspan="6" class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No invoices found for this customer.</td>
                                             </tr>
-                                            <tr x-show="hasMore">
-                                                <td colspan="6" class="py-3 text-center">
-                                                    <flux:button variant="ghost" size="sm" @click="loadMore()" x-bind:disabled="loadingMore">
-                                                        <span x-show="!loadingMore">{{ __('Load more invoices…') }}</span>
-                                                        <span x-show="loadingMore" x-cloak>{{ __('Loading…') }}</span>
-                                                    </flux:button>
+                                            <tr x-show="hasMore" x-ref="loadSentinel">
+                                                <td colspan="6" class="py-3 text-center text-xs text-zinc-400 dark:text-zinc-500">
+                                                    <span x-show="loadingMore">{{ __('Loading more invoices…') }}</span>
                                                 </td>
                                             </tr>
                                         </tbody>

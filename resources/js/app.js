@@ -1812,6 +1812,24 @@ document.addEventListener('alpine:init', () => {
         rows: rows.map(r => ({ ...r, amount: r.existing_allocation })),
         hasMore: !!hasMore,
         loadingMore: false,
+        _observer: null,
+        // Auto-loads the next chunk as the user scrolls near the bottom of
+        // the table, instead of a "Load more" click — never touches rows
+        // already on screen, so in-progress typing/tabbing is undisturbed.
+        init() {
+            this.$nextTick(() => {
+                if (!this.$refs.loadSentinel) return;
+                this._observer = new IntersectionObserver((entries) => {
+                    if (entries[0].isIntersecting && this.hasMore && !this.loadingMore) {
+                        this.loadMore();
+                    }
+                }, { rootMargin: '600px' });
+                this._observer.observe(this.$refs.loadSentinel);
+            });
+        },
+        destroy() {
+            this._observer?.disconnect();
+        },
         get paymentAmount() { return parseFloat(this.$wire.amount) || 0; },
         get totalAllocated() {
             return this.rows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
