@@ -36,6 +36,24 @@ new #[Title('Payment')] class extends Component {
     public array $selectedOverPaymentIds = [];
     public array $overPaymentExhaustIds = [];
 
+    /**
+     * How many oldest-outstanding invoices are currently loaded into the
+     * allocation table. Kept small so a customer with tens of thousands of
+     * invoices never ships/renders them all at once; "Load more" raises it.
+     */
+    public int $loadedLimit = 1000;
+
+    /**
+     * Document IDs pinned into the allocation table outside the normal
+     * oldest-first window — added by invoice search or by auto-allocate
+     * landing on an invoice beyond the currently loaded window.
+     *
+     * @var array<int, int>
+     */
+    public array $extraDocumentIds = [];
+
+    public bool $hasMoreInvoices = false;
+
     public function mount(): void
     {
         if ($this->payment) {
@@ -83,8 +101,93 @@ new #[Title('Payment')] class extends Component {
         $this->selectedCreditNoteIds = [];
         $this->selectedOverPaymentIds = [];
         $this->overPaymentExhaustIds = [];
-        unset($this->availableCreditNotes, $this->availableOverPaymentSources, $this->selectedCreditNoteTotal, $this->selectedOverPaymentTotal);
-        $this->dispatch('payment-rows-updated', rows: $this->invoiceRows);
+        $this->extraDocumentIds = [];
+        $this->loadedLimit = 1000;
+        unset($this->availableCreditNotes, $this->availableOverPaymentSources, $this->selectedCreditNoteTotal, $this->selectedOverPaymentTotal, $this->invoiceRows);
+        $this->dispatch('payment-rows-updated', rows: $this->invoiceRows, hasMore: $this->hasMoreInvoices);
+    }
+
+    public function loadMoreInvoices(): void
+    {
+        $this->loadedLimit += 1000;
+        unset($this->invoiceRows);
+        $this->dispatch('payment-rows-appended', rows: $this->invoiceRows, hasMore: $this->hasMoreInvoices);
+    }
+
+    public function searchInvoice(string $term): void
+    {
+        $term = trim($term);
+
+        if (mb_strlen($term) < 2) {
+            Flux::toast(variant: 'warning', text: 'Type at least 2 characters to search.');
+
+            return;
+        }
+
+        $customerId = $this->payment?->customer_id ?? $this->customer_id;
+        if (! $customerId) {
+            return;
+        }
+
+        $matches = Document::where('customer_id', $customerId)
+            ->where('type', 'INV')
+            ->where('doc_number', 'like', "%{$term}%")
+            ->limit(50)
+            ->pluck('id');
+
+        if ($matches->isEmpty()) {
+            Flux::toast(variant: 'warning', text: 'No matching invoice found.');
+
+            return;
+        }
+
+        $this->extraDocumentIds = collect($this->extraDocumentIds)
+            ->merge($matches)
+            ->unique()
+            ->values()
+            ->all();
+
+        unset($this->invoiceRows);
+
+        $this->dispatch('payment-rows-appended', rows: $this->invoiceRows, hasMore: $this->hasMoreInvoices);
+    }
+
+    public function autoAllocate(): void
+    {
+        $customerId = $this->payment?->customer_id ?? $this->customer_id;
+        if (! $customerId) {
+            return;
+        }
+
+        $amount = (float) $this->amount;
+
+        if ($amount <= 0) {
+            $this->dispatch('payment-auto-allocated', rows: [], allocations: [], hasMore: $this->hasMoreInvoices);
+
+            return;
+        }
+
+        $transient = $this->payment ? clone $this->payment : new Payment(['customer_id' => $customerId]);
+        $transient->amount = $amount;
+
+        $allocations = app(PaymentAllocator::class)->autoAllocate($transient);
+
+        if (! empty($allocations)) {
+            $this->extraDocumentIds = collect($this->extraDocumentIds)
+                ->merge(array_keys($allocations))
+                ->unique()
+                ->values()
+                ->all();
+
+            unset($this->invoiceRows);
+        }
+
+        $this->dispatch(
+            'payment-auto-allocated',
+            rows: $this->invoiceRows,
+            allocations: collect($allocations)->mapWithKeys(fn ($v, $k) => [(string) $k => $v])->all(),
+            hasMore: $this->hasMoreInvoices,
+        );
     }
 
     public function updatedPaymentMethodSelection(): void
@@ -455,34 +558,46 @@ new #[Title('Payment')] class extends Component {
                 ->pluck('credit_total', 'invoice_id')
             : collect();
 
-        // Documents this payment already touches must stay visible even if
-        // fully settled elsewhere — everything else is filtered in SQL by
-        // outstanding balance so we never hydrate/serialize settled invoices.
-        $existingIds = $thisPaymentAllocations->keys()
+        // Documents this payment already touches, plus anything pinned in by
+        // search/auto-allocate, must stay visible regardless of the loaded
+        // window or outstanding balance.
+        $pinnedIds = $thisPaymentAllocations->keys()
             ->merge($thisPaymentCredits->keys())
+            ->merge($this->extraDocumentIds)
             ->unique()
             ->values();
 
-        $query = Document::query()
-            ->select(['id', 'doc_number', 'doc_date', 'total_value'])
-            ->where('customer_id', $customerId)
-            ->where('type', 'INV')
-            ->groupBy('documents.id', 'documents.doc_number', 'documents.doc_date', 'documents.total_value')
+        $baseQuery = function () use ($customerId) {
+            return Document::query()
+                ->select(['id', 'doc_number', 'doc_date', 'total_value'])
+                ->where('customer_id', $customerId)
+                ->where('type', 'INV')
+                ->groupBy('documents.id', 'documents.doc_number', 'documents.doc_date', 'documents.total_value')
+                ->withSum('paymentAllocations', 'allocated_amount')
+                ->withSum('creditAllocationsReceived', 'amount');
+        };
+
+        // Oldest-outstanding invoices, capped so a customer with tens of
+        // thousands of invoices never gets them all hydrated/serialized at
+        // once. "Load more" (loadedLimit) and search/auto-allocate (pinned
+        // IDs, fetched separately below) extend what's visible from there.
+        $windowed = $baseQuery()
+            ->havingRaw('(total_value - COALESCE(payment_allocations_sum_allocated_amount, 0) - COALESCE(credit_allocations_received_sum_amount, 0)) > 0.001')
             ->orderBy('doc_date', 'asc')
-            ->withSum('paymentAllocations', 'allocated_amount')
-            ->withSum('creditAllocationsReceived', 'amount');
+            ->limit($this->loadedLimit)
+            ->get();
 
-        if ($existingIds->isNotEmpty()) {
-            $placeholders = implode(',', array_fill(0, $existingIds->count(), '?'));
-            $query->havingRaw(
-                '(total_value - COALESCE(payment_allocations_sum_allocated_amount, 0) - COALESCE(credit_allocations_received_sum_amount, 0)) > 0.001 OR id IN ('.$placeholders.')',
-                $existingIds->all()
-            );
-        } else {
-            $query->havingRaw('(total_value - COALESCE(payment_allocations_sum_allocated_amount, 0) - COALESCE(credit_allocations_received_sum_amount, 0)) > 0.001');
-        }
+        $this->hasMoreInvoices = $windowed->count() >= $this->loadedLimit;
 
-        return $query->get()->map(function (Document $invoice) use ($thisPaymentAllocations, $thisPaymentCredits) {
+        $missingPinnedIds = $pinnedIds->diff($windowed->pluck('id'));
+
+        $pinnedRows = $missingPinnedIds->isNotEmpty()
+            ? $baseQuery()->whereIn('id', $missingPinnedIds->all())->get()
+            : collect();
+
+        $invoices = $windowed->concat($pinnedRows)->sortBy('doc_date')->values();
+
+        return $invoices->map(function (Document $invoice) use ($thisPaymentAllocations, $thisPaymentCredits) {
             $existingCash = (float) ($thisPaymentAllocations->get($invoice->id)?->allocated_amount ?? 0);
             $existingCredit = (float) ($thisPaymentCredits->get($invoice->id) ?? 0);
             $totalPayments = (float) ($invoice->payment_allocations_sum_allocated_amount ?? 0);
@@ -731,9 +846,11 @@ new #[Title('Payment')] class extends Component {
             {{-- wire:ignore prevents Livewire morphs (amount blur, method change) from wiping Alpine rows state --}}
             <div
                 wire:ignore
-                x-data="paymentAllocator({ rows: @js($this->invoiceRows) })"
+                x-data="paymentAllocator({ rows: @js($this->invoiceRows), hasMore: @js($this->hasMoreInvoices) })"
                 @save-payment-form.window="$wire.save(relevantRows)"
-                @payment-rows-updated.window="rows = $event.detail.rows.map(r => ({ ...r, amount: r.existing_allocation }))"
+                @payment-rows-updated.window="rows = $event.detail.rows.map(r => ({ ...r, amount: r.existing_allocation })); hasMore = $event.detail.hasMore"
+                @payment-rows-appended.window="appendRows($event.detail.rows, $event.detail.hasMore)"
+                @payment-auto-allocated.window="applyAutoAllocation($event.detail.rows, $event.detail.allocations, $event.detail.hasMore)"
             >
                 <div x-show="$wire.customer_id" x-cloak>
 
@@ -741,13 +858,20 @@ new #[Title('Payment')] class extends Component {
                     <div>
                         <x-ui.section-card>
                             <x-slot:header>
-                                <div class="flex w-full items-center justify-between gap-4">
+                                <div class="flex w-full flex-wrap items-center justify-between gap-3">
                                     <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Allocations</h2>
-                                    <div class="flex items-center gap-3">
+                                    <div class="flex items-center gap-2">
+                                        <flux:input
+                                            type="text"
+                                            size="sm"
+                                            placeholder="{{ __('Find invoice #, press Enter…') }}"
+                                            class="w-56"
+                                            x-on:keydown.enter.prevent="$wire.searchInvoice($event.target.value); $event.target.value = ''"
+                                        />
                                         <flux:button variant="ghost" size="sm" x-show="isModified" x-cloak @click="resetAllocations()">
                                             Reset
                                         </flux:button>
-                                        <flux:button variant="ghost" size="sm" @click="autoAllocate()">
+                                        <flux:button variant="ghost" size="sm" @click="$wire.autoAllocate()">
                                             Auto Allocate
                                         </flux:button>
                                     </div>
@@ -790,6 +914,14 @@ new #[Title('Payment')] class extends Component {
                                             </template>
                                             <tr x-show="rows.length === 0">
                                                 <td colspan="6" class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No invoices found for this customer.</td>
+                                            </tr>
+                                            <tr x-show="hasMore">
+                                                <td colspan="6" class="py-3 text-center">
+                                                    <flux:button variant="ghost" size="sm" @click="loadMore()" x-bind:disabled="loadingMore">
+                                                        <span x-show="!loadingMore">{{ __('Load more invoices…') }}</span>
+                                                        <span x-show="loadingMore" x-cloak>{{ __('Loading…') }}</span>
+                                                    </flux:button>
+                                                </td>
                                             </tr>
                                         </tbody>
                                         <tfoot class="border-t-2 border-zinc-200 dark:border-zinc-700">

@@ -16,6 +16,11 @@ class PaymentAllocator
     /**
      * Auto-allocate payment across unpaid/partially-paid invoices oldest-first (FIFO).
      *
+     * When re-running for an already-persisted payment, this payment's own
+     * prior cash/credit contributions are excluded from "already allocated"
+     * so its own slot on each invoice is treated as free to redistribute,
+     * not double-counted as already consumed.
+     *
      * @return array<int, float>
      */
     public function autoAllocate(Payment $payment): array
@@ -23,7 +28,16 @@ class PaymentAllocator
         $invoices = Document::where('customer_id', $payment->customer_id)
             ->where('type', DocumentType::Invoice)
             ->orderBy('doc_date', 'asc')
-            ->withSum('paymentAllocations', 'allocated_amount')
+            ->withSum(['paymentAllocations' => function ($query) use ($payment) {
+                if ($payment->exists) {
+                    $query->where('payment_id', '!=', $payment->id);
+                }
+            }], 'allocated_amount')
+            ->withSum(['creditAllocationsReceived' => function ($query) use ($payment) {
+                if ($payment->exists) {
+                    $query->where(fn ($q) => $q->whereNull('payment_id')->orWhere('payment_id', '!=', $payment->id));
+                }
+            }], 'amount')
             ->get();
 
         $remaining = (float) $payment->amount;
@@ -34,13 +48,15 @@ class PaymentAllocator
                 break;
             }
 
-            $outstanding = (float) $invoice->total_value - (float) ($invoice->payment_allocations_sum_allocated_amount ?? 0);
+            $outstanding = (float) $invoice->total_value
+                - (float) ($invoice->payment_allocations_sum_allocated_amount ?? 0)
+                - (float) ($invoice->credit_allocations_received_sum_amount ?? 0);
 
-            if ($outstanding <= 0) {
+            if ($outstanding <= 0.001) {
                 continue;
             }
 
-            $allocated = min($outstanding, $remaining);
+            $allocated = round(min($outstanding, $remaining), 2);
             $allocations[$invoice->id] = $allocated;
             $remaining -= $allocated;
         }

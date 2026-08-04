@@ -1804,8 +1804,14 @@ document.addEventListener('alpine:init', () => {
     }));
 
     // ─── Payment Allocator Component ────────────────────────────────
-    window.Alpine.data('paymentAllocator', ({ rows }) => ({
+    // Invoice rows are lazy-loaded from the server (oldest-outstanding first,
+    // capped at `loadedLimit` server-side) rather than all fetched/rendered
+    // at once — a customer with tens of thousands of invoices would otherwise
+    // hang the tab building reactive proxies + DOM nodes for every row.
+    window.Alpine.data('paymentAllocator', ({ rows, hasMore }) => ({
         rows: rows.map(r => ({ ...r, amount: r.existing_allocation })),
+        hasMore: !!hasMore,
+        loadingMore: false,
         get paymentAmount() { return parseFloat(this.$wire.amount) || 0; },
         get totalAllocated() {
             return this.rows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
@@ -1825,22 +1831,41 @@ document.addEventListener('alpine:init', () => {
         get relevantRows() {
             return this.rows.filter(r => (parseFloat(r.amount) || 0) > 0 || (parseFloat(r.existing_allocation) || 0) > 0);
         },
-        autoAllocate() {
-            let payment = this.paymentAmount;
-            if (payment <= 0) {
-                this.rows.forEach(r => { r.amount = 0; });
-                return;
-            }
-            this.rows.forEach(r => {
-                const outstanding = parseFloat(r.max_allocatable) || 0;
-                if (outstanding <= 0) { r.amount = 0; return; }
-                const cover = Math.min(outstanding, payment);
-                payment -= cover;
-                r.amount = Math.round(cover * 100) / 100;
-            });
-        },
         resetAllocations() {
             this.rows.forEach(r => { r.amount = 0; });
+        },
+        // Merges newly-loaded rows (from "load more" or an invoice search) into
+        // the existing table without touching rows already present, so amounts
+        // the user already typed are never disturbed.
+        appendRows(newRows, hasMore) {
+            const existingIds = new Set(this.rows.map(r => r.id));
+            newRows.forEach(nr => {
+                if (!existingIds.has(nr.id)) {
+                    this.rows.push({ ...nr, amount: nr.existing_allocation });
+                }
+            });
+            this.hasMore = !!hasMore;
+        },
+        // Auto Allocate runs server-side (it needs the full outstanding set,
+        // not just what's loaded) and returns the resulting amounts; any
+        // allocated invoice outside the currently loaded window is merged in,
+        // then every row's amount is set from the result (zero if untouched).
+        applyAutoAllocation(newRows, allocations, hasMore) {
+            const existingIds = new Set(this.rows.map(r => r.id));
+            newRows.forEach(nr => {
+                if (!existingIds.has(nr.id)) {
+                    this.rows.push({ ...nr, amount: nr.existing_allocation });
+                }
+            });
+            this.rows.forEach(r => {
+                r.amount = allocations[r.id] !== undefined ? allocations[r.id] : 0;
+            });
+            this.hasMore = !!hasMore;
+        },
+        loadMore() {
+            if (this.loadingMore) return;
+            this.loadingMore = true;
+            this.$wire.loadMoreInvoices().finally(() => { this.loadingMore = false; });
         },
         // Suggests a default amount when an empty row gains focus — a one-shot
         // nudge, not a live auto-allocate: it never overwrites a value the
