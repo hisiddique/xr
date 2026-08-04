@@ -68,8 +68,8 @@
                             type="button"
                             @class([
                                 'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-                                'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*', 'overheads.*', 'supplier-invoices.*', 'supplier-debit-notes.*', 'supplier-payouts.*'),
-                                'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*', 'overheads.*', 'supplier-invoices.*', 'supplier-debit-notes.*', 'supplier-payouts.*'),
+                                'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*', 'overheads.*', 'supplier-invoices.*', 'supplier-debit-notes.*', 'supplier-payouts.*', 'document-search.*'),
+                                'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('invoices.*', 'credit-notes.*', 'payments.*', 'overheads.*', 'supplier-invoices.*', 'supplier-debit-notes.*', 'supplier-payouts.*', 'document-search.*'),
                             ])
                         >
                             Documents
@@ -85,6 +85,7 @@
                             <flux:menu.item :href="route('invoices.index')" icon="document-text" wire:navigate>Invoices</flux:menu.item>
                             <flux:menu.item :href="route('credit-notes.index')" icon="receipt-refund" wire:navigate>Credit Notes</flux:menu.item>
                             <flux:menu.item :href="route('payments.index')" icon="credit-card" wire:navigate>Payments</flux:menu.item>
+                            <flux:menu.item :href="route('document-search.index')" icon="magnifying-glass" wire:navigate>Document Search</flux:menu.item>
 
                             <div class="mt-1.5 flex items-center gap-1.5 border-t border-zinc-200/70 px-2 pb-1.5 pt-2.5 text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:border-white/10 dark:text-emerald-400">
                                 <flux:icon.building-office variant="micro" />
@@ -439,6 +440,20 @@
                             >
                                 <flux:icon.banknotes class="size-5 shrink-0" />
                                 Payments
+                            </a>
+                        </li>
+                        <li>
+                            <a
+                                href="{{ route('document-search.index') }}"
+                                wire:navigate
+                                @class([
+                                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('document-search.*'),
+                                    'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('document-search.*'),
+                                ])
+                            >
+                                <flux:icon.magnifying-glass class="size-5 shrink-0" />
+                                Document Search
                             </a>
                         </li>
                         <li>

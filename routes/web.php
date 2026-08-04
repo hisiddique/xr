@@ -43,6 +43,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('invoices/{document}/edit', 'pages::invoices.edit')->name('invoices.edit');
     Route::livewire('invoices/{document}', 'pages::invoices.show')->name('invoices.show');
 
+    // Document Search
+    Route::livewire('document-search', 'pages::document-search.index')->name('document-search.index');
+
     // Credit Notes
     Route::livewire('credit-notes', 'pages::credit-notes.index')->name('credit-notes.index');
     Route::livewire('credit-notes/create', 'pages::credit-notes.create')->name('credit-notes.create');
