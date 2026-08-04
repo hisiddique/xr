@@ -49,6 +49,7 @@ new #[Title('Payment')] class extends Component
 
             $creditAmount = array_sum(array_column($creditNotes, 'amount'));
             $outstanding = max(0, (float) $invoice->total_value - $totalPaidAllTime - $totalCreditedAllTime);
+            $maxAllocatable = round((float) $invoice->total_value - $totalPaidAllTime - $totalCreditedAllTime + $paymentAmount + $creditAmount, 2);
 
             return [
                 'id' => $invoice->id,
@@ -58,6 +59,7 @@ new #[Title('Payment')] class extends Component
                 'existing_allocation' => $paymentAmount,
                 'credit_notes' => $creditNotes,
                 'credit_amount' => $creditAmount,
+                'max_allocatable' => $maxAllocatable,
                 'outstanding' => $outstanding,
                 'is_settled' => $outstanding <= 0.0,
             ];
@@ -218,6 +220,7 @@ new #[Title('Payment')] class extends Component
                                     <th class="pb-3 pr-4 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">Invoice #</th>
                                     <th class="pb-3 pr-4 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">Date</th>
                                     <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Total</th>
+                                    <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Max Available</th>
                                     <th class="pb-3 pr-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Payment</th>
                                     <th class="pb-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">Outstanding</th>
                                 </tr>
@@ -228,6 +231,7 @@ new #[Title('Payment')] class extends Component
                                         <td class="py-3 pr-4 font-mono text-sm text-zinc-900 dark:text-white">{{ $row['doc_number'] }}</td>
                                         <td class="py-3 pr-4 text-zinc-600 dark:text-zinc-400">{{ $row['doc_date'] }}</td>
                                         <td class="py-3 pr-4 text-right font-mono text-zinc-900 dark:text-white">£{{ number_format($row['total_value'], 2) }}</td>
+                                        <td class="py-3 pr-4 text-right font-mono text-zinc-600 dark:text-zinc-400">£{{ number_format($row['max_allocatable'], 2) }}</td>
                                         <td class="py-3 pr-4 text-right font-mono font-medium {{ $row['existing_allocation'] > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400 dark:text-zinc-600' }}">
                                             {{ $row['existing_allocation'] > 0 ? '£' . number_format($row['existing_allocation'], 2) : '—' }}
                                         </td>
@@ -239,7 +243,7 @@ new #[Title('Payment')] class extends Component
                             </tbody>
                             <tfoot class="border-t-2 border-zinc-200 dark:border-zinc-700">
                                 <tr>
-                                    <td colspan="3" class="pt-3 text-xs text-zinc-400 dark:text-zinc-500">Total allocated</td>
+                                    <td colspan="4" class="pt-3 text-xs text-zinc-400 dark:text-zinc-500">Total allocated</td>
                                     <td class="pt-3 text-right font-mono font-semibold" colspan="2">
                                         @if($this->totalCredits > 0 && $this->totalAllocated > 0)
                                             <span class="text-zinc-900 dark:text-white">£{{ number_format($this->totalAllocatedAll, 2) }}</span>
