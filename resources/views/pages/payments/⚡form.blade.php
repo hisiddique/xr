@@ -152,14 +152,20 @@ new #[Title('Payment')] class extends Component {
         $this->dispatch('payment-rows-appended', rows: $this->invoiceRows, hasMore: $this->hasMoreInvoices);
     }
 
-    public function autoAllocate(): void
+    /**
+     * The amount field uses wire:model.blur, so $this->amount can briefly lag
+     * behind what the user just typed if they click straight into Auto
+     * Allocate. Accept the client's live value explicitly so allocation is
+     * never computed against a stale, not-yet-synced amount.
+     */
+    public function autoAllocate(?string $amount = null): void
     {
         $customerId = $this->payment?->customer_id ?? $this->customer_id;
         if (! $customerId) {
             return;
         }
 
-        $amount = (float) $this->amount;
+        $amount = (float) ($amount ?? $this->amount);
 
         if ($amount <= 0) {
             $this->dispatch('payment-auto-allocated', rows: [], allocations: [], hasMore: $this->hasMoreInvoices);
@@ -861,6 +867,7 @@ new #[Title('Payment')] class extends Component {
                                 <div class="flex w-full flex-wrap items-center justify-between gap-3">
                                     <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Allocations</h2>
                                     <div class="flex items-center gap-2">
+                                        {{-- Invoice search temporarily hidden
                                         <flux:input
                                             type="text"
                                             size="sm"
@@ -868,10 +875,11 @@ new #[Title('Payment')] class extends Component {
                                             class="w-56"
                                             x-on:keydown.enter.prevent="$wire.searchInvoice($event.target.value); $event.target.value = ''"
                                         />
+                                        --}}
                                         <flux:button variant="ghost" size="sm" x-show="isModified" x-cloak @click="resetAllocations()">
                                             Reset
                                         </flux:button>
-                                        <flux:button variant="ghost" size="sm" @click="$wire.autoAllocate()">
+                                        <flux:button variant="ghost" size="sm" @click="$wire.autoAllocate(paymentAmount)">
                                             Auto Allocate
                                         </flux:button>
                                     </div>

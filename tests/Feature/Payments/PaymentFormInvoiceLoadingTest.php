@@ -92,6 +92,25 @@ test('autoAllocate distributes oldest-first across outstanding invoices beyond t
         ->and($ids)->toHaveKey($new->id);
 });
 
+test('autoAllocate uses the explicitly passed amount instead of a stale server-side amount', function () {
+    // The amount field uses wire:model.blur, so $this->amount can lag behind
+    // what the user just typed when they click straight into Auto Allocate
+    // without blurring first. The client passes its live value explicitly —
+    // that must win over whatever the server still has stored.
+    $customer = Customer::factory()->create();
+    $invoice = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 100]);
+
+    $component = Livewire::test('pages::payments.form')
+        ->set('customer_id', $customer->id)
+        ->set('amount', '10'); // stale value still on the server
+
+    $component->call('autoAllocate', '100'); // fresh value passed explicitly
+
+    $component->assertDispatched('payment-auto-allocated', function ($name, $params) use ($invoice) {
+        return (float) $params['allocations'][(string) $invoice->id] === 100.0;
+    });
+});
+
 test('PaymentAllocator autoAllocate treats a payment\'s own prior allocation as free to redistribute', function () {
     $customer = Customer::factory()->create();
     $cashMethod = LookupPaymentMethod::factory()->create();
