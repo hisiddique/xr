@@ -443,13 +443,6 @@ new #[Title('Payment')] class extends Component {
             return [];
         }
 
-        $invoices = Document::where('customer_id', $customerId)
-            ->where('type', 'INV')
-            ->orderBy('doc_date', 'asc')
-            ->withSum('paymentAllocations', 'allocated_amount')
-            ->withSum('creditAllocationsReceived', 'amount')
-            ->get();
-
         $thisPaymentAllocations = $this->payment
             ? $this->payment->allocations->keyBy('document_id')
             : collect();
@@ -462,7 +455,34 @@ new #[Title('Payment')] class extends Component {
                 ->pluck('credit_total', 'invoice_id')
             : collect();
 
-        return $invoices->map(function (Document $invoice) use ($thisPaymentAllocations, $thisPaymentCredits) {
+        // Documents this payment already touches must stay visible even if
+        // fully settled elsewhere — everything else is filtered in SQL by
+        // outstanding balance so we never hydrate/serialize settled invoices.
+        $existingIds = $thisPaymentAllocations->keys()
+            ->merge($thisPaymentCredits->keys())
+            ->unique()
+            ->values();
+
+        $query = Document::query()
+            ->select(['id', 'doc_number', 'doc_date', 'total_value'])
+            ->where('customer_id', $customerId)
+            ->where('type', 'INV')
+            ->groupBy('documents.id', 'documents.doc_number', 'documents.doc_date', 'documents.total_value')
+            ->orderBy('doc_date', 'asc')
+            ->withSum('paymentAllocations', 'allocated_amount')
+            ->withSum('creditAllocationsReceived', 'amount');
+
+        if ($existingIds->isNotEmpty()) {
+            $placeholders = implode(',', array_fill(0, $existingIds->count(), '?'));
+            $query->havingRaw(
+                '(total_value - COALESCE(payment_allocations_sum_allocated_amount, 0) - COALESCE(credit_allocations_received_sum_amount, 0)) > 0.001 OR id IN ('.$placeholders.')',
+                $existingIds->all()
+            );
+        } else {
+            $query->havingRaw('(total_value - COALESCE(payment_allocations_sum_allocated_amount, 0) - COALESCE(credit_allocations_received_sum_amount, 0)) > 0.001');
+        }
+
+        return $query->get()->map(function (Document $invoice) use ($thisPaymentAllocations, $thisPaymentCredits) {
             $existingCash = (float) ($thisPaymentAllocations->get($invoice->id)?->allocated_amount ?? 0);
             $existingCredit = (float) ($thisPaymentCredits->get($invoice->id) ?? 0);
             $totalPayments = (float) ($invoice->payment_allocations_sum_allocated_amount ?? 0);
@@ -477,9 +497,7 @@ new #[Title('Payment')] class extends Component {
                 'existing_allocation' => $existingCash + $existingCredit,
                 'max_allocatable' => $maxAllocatable,
             ];
-        })->filter(fn ($row) => $row['max_allocatable'] > 0.001 || $row['existing_allocation'] > 0.001)
-          ->values()
-          ->toArray();
+        })->values()->toArray();
     }
 
 }; ?>
@@ -685,10 +703,12 @@ new #[Title('Payment')] class extends Component {
                                                         £{{ number_format($src['remaining'], 2) }}
                                                     </span>
                                                 </div>
+                                                {{-- Mark exhausted temporarily hidden
                                                 <label class="flex shrink-0 items-center gap-1.5 border-l border-amber-200/70 pl-3 text-xs text-zinc-500 dark:border-amber-700/30 dark:text-zinc-400">
                                                     <flux:checkbox wire:model.live="overPaymentExhaustIds" :value="$src['id']" />
                                                     Mark exhausted
                                                 </label>
+                                                --}}
                                             </div>
                                         @endforeach
                                     </div>
@@ -712,7 +732,7 @@ new #[Title('Payment')] class extends Component {
             <div
                 wire:ignore
                 x-data="paymentAllocator({ rows: @js($this->invoiceRows) })"
-                @save-payment-form.window="$wire.save(rows)"
+                @save-payment-form.window="$wire.save(relevantRows)"
                 @payment-rows-updated.window="rows = $event.detail.rows.map(r => ({ ...r, amount: r.existing_allocation }))"
             >
                 <div x-show="$wire.customer_id" x-cloak>
@@ -724,6 +744,9 @@ new #[Title('Payment')] class extends Component {
                                 <div class="flex w-full items-center justify-between gap-4">
                                     <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Allocations</h2>
                                     <div class="flex items-center gap-3">
+                                        <flux:button variant="ghost" size="sm" x-show="isModified" x-cloak @click="resetAllocations()">
+                                            Reset
+                                        </flux:button>
                                         <flux:button variant="ghost" size="sm" @click="autoAllocate()">
                                             Auto Allocate
                                         </flux:button>

@@ -1816,6 +1816,15 @@ document.addEventListener('alpine:init', () => {
         get unallocatedBalance() {
             return Math.max(0, this.paymentAmount - this.totalAllocated);
         },
+        get isModified() {
+            return this.rows.some(r => (parseFloat(r.amount) || 0) !== (parseFloat(r.existing_allocation) || 0));
+        },
+        // Only rows with a nonzero amount or a prior allocation matter to the
+        // save — a customer with thousands of invoice rows would otherwise
+        // ship the whole table over the wire on every save.
+        get relevantRows() {
+            return this.rows.filter(r => (parseFloat(r.amount) || 0) > 0 || (parseFloat(r.existing_allocation) || 0) > 0);
+        },
         autoAllocate() {
             let payment = this.paymentAmount;
             if (payment <= 0) {
@@ -1829,6 +1838,9 @@ document.addEventListener('alpine:init', () => {
                 payment -= cover;
                 r.amount = Math.round(cover * 100) / 100;
             });
+        },
+        resetAllocations() {
+            this.rows.forEach(r => { r.amount = 0; });
         },
         // Suggests a default amount when an empty row gains focus — a one-shot
         // nudge, not a live auto-allocate: it never overwrites a value the
