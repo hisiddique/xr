@@ -137,7 +137,7 @@ new #[Title('Payment')] class extends Component
 
     {{-- Back link --}}
     <div>
-        <x-ui.back-button :fallback="route('payments.index')" icon="arrow-left" size="sm">Back</x-ui.back-button>
+        <flux:button variant="ghost" icon="arrow-left" size="sm" :href="route('payments.create')" wire:navigate>Back</flux:button>
     </div>
 
     {{-- Hero header card --}}
