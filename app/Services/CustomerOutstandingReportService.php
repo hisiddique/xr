@@ -21,7 +21,7 @@ class CustomerOutstandingReportService
     /** @var array<int, string> */
     protected const EXPORT_HEADINGS = ['Customer', 'Reference', 'Date', 'Invoice', 'Total', 'Outstanding'];
 
-    protected const OUTSTANDING_EXPR = 'total_value - COALESCE(allocated_total, 0) - COALESCE(credited_total, 0)';
+    protected const OUTSTANDING_EXPR = 'documents.total_value - COALESCE(allocated_total, 0) - COALESCE(credited_total, 0)';
 
     /**
      * @param  array<string, mixed>  $filters
@@ -31,14 +31,14 @@ class CustomerOutstandingReportService
         return $query
             ->withSum('paymentAllocations as allocated_total', 'allocated_amount')
             ->withSum('creditAllocationsReceived as credited_total', 'amount')
-            ->groupBy('documents.id')
+            ->groupBy('documents.id', 'documents.total_value')
             ->when($filters['dateFrom'] ?? '', fn ($q, $date) => $q->whereDate('doc_date', '>=', $date))
             ->when($filters['dateTo'] ?? '', fn ($q, $date) => $q->whereDate('doc_date', '<=', $date))
             ->when(is_numeric($filters['amountMin'] ?? null), fn ($q) => $q->where('total_value', '>=', (float) $filters['amountMin']))
             ->when(is_numeric($filters['amountMax'] ?? null), fn ($q) => $q->where('total_value', '<=', (float) $filters['amountMax']))
             ->havingRaw(self::OUTSTANDING_EXPR.' > 0.001')
-            ->when(is_numeric($filters['osMin'] ?? null), fn ($q) => $q->havingRaw(self::OUTSTANDING_EXPR.' >= CAST(? AS REAL)', [(float) $filters['osMin']]))
-            ->when(is_numeric($filters['osMax'] ?? null), fn ($q) => $q->havingRaw(self::OUTSTANDING_EXPR.' <= CAST(? AS REAL)', [(float) $filters['osMax']]));
+            ->when(is_numeric($filters['osMin'] ?? null), fn ($q) => $q->havingRaw(self::OUTSTANDING_EXPR.' >= CAST(? AS DECIMAL(15,2))', [(float) $filters['osMin']]))
+            ->when(is_numeric($filters['osMax'] ?? null), fn ($q) => $q->havingRaw(self::OUTSTANDING_EXPR.' <= CAST(? AS DECIMAL(15,2))', [(float) $filters['osMax']]));
     }
 
     protected function escapeLike(string $value): string
