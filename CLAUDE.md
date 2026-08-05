@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 - Dev: `composer run dev` (serves Laravel + queue + Vite concurrently) or `npm run dev` + `php artisan serve`
-- Build assets: `npm run build` — on shared hosting, use `RAYON_NUM_THREADS=1 npm run build` to avoid Rolldown thread pool panic
+- Build assets: `npm run build` (the script sets `RAYON_NUM_THREADS=1` itself to avoid the Rolldown thread pool panic on shared hosting)
 - Tests: `php artisan test --compact`; single: `php artisan test --compact --filter=testName`
 - Format: `vendor/bin/pint --dirty --format agent` (run before finishing PHP edits)
 - DB reset with sample data: `php artisan migrate:fresh --seed`

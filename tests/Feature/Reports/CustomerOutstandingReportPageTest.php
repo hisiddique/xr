@@ -1,0 +1,74 @@
+<?php
+
+use App\Mail\CustomerOutstandingReportMail;
+use App\Models\Customer;
+use App\Models\Document;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
+use Livewire\Livewire;
+
+uses(RefreshDatabase::class);
+
+test('report page is accessible and lists outstanding invoices grouped by customer', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+    $customer = Customer::factory()->create(['company_name' => 'Outstanding Co']);
+    Document::factory()->invoice()->create([
+        'customer_id' => $customer->id,
+        'total_value' => 75,
+        'doc_date' => now(),
+    ]);
+
+    $this->actingAs($user)->get(route('reports.customer-outstanding-payments'))->assertOk();
+
+    Livewire::actingAs($user)
+        ->test('pages::reports.customer-outstanding-payments')
+        ->assertSeeText('Outstanding Co')
+        ->assertSeeText('75.00');
+});
+
+test('report page search filters by customer name', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+    $matching = Customer::factory()->create(['company_name' => 'Zeta Traders']);
+    $other = Customer::factory()->create(['company_name' => 'Omega Supplies']);
+    Document::factory()->invoice()->create(['customer_id' => $matching->id, 'total_value' => 30, 'doc_date' => now()]);
+    Document::factory()->invoice()->create(['customer_id' => $other->id, 'total_value' => 40, 'doc_date' => now()]);
+
+    Livewire::actingAs($user)
+        ->test('pages::reports.customer-outstanding-payments')
+        ->set('search', 'Zeta')
+        ->assertSeeText('Zeta Traders')
+        ->assertDontSeeText('Omega Supplies');
+});
+
+test('sending the report requires at least one recipient and at least one format', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+    $customer = Customer::factory()->create();
+    Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 20, 'doc_date' => now()]);
+
+    Livewire::actingAs($user)
+        ->test('pages::reports.customer-outstanding-payments')
+        ->set('reportEmails', [])
+        ->set('reportFormats', [])
+        ->call('sendReportEmail')
+        ->assertHasErrors(['reportEmails', 'reportFormats']);
+});
+
+test('sending the report emails the current filtered results with the selected attachments', function () {
+    Mail::fake();
+
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+    $customer = Customer::factory()->create();
+    Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 20, 'doc_date' => now()]);
+
+    Livewire::actingAs($user)
+        ->test('pages::reports.customer-outstanding-payments')
+        ->set('reportEmails', ['ops@example.com'])
+        ->set('reportFormats', ['pdf', 'csv'])
+        ->call('sendReportEmail')
+        ->assertHasNoErrors();
+
+    Mail::assertSent(CustomerOutstandingReportMail::class, function (CustomerOutstandingReportMail $mail) {
+        return $mail->hasTo('ops@example.com') && count($mail->attachments()) === 2;
+    });
+});

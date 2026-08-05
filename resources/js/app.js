@@ -47,7 +47,7 @@ window.printAndRecord = function (pdfUrl, recordUrl) {
 };
 
 // Tag-style email input for the email modal's "Additional Recipients" field.
-window.emailTagInput = function (wireRef, initialTags = []) {
+window.emailTagInput = function (wireRef, initialTags = [], propertyName = 'emails') {
     return {
         tags: [...initialTags],
         input: '',
@@ -99,7 +99,7 @@ window.emailTagInput = function (wireRef, initialTags = []) {
         },
 
         sync() {
-            wireRef.$set('emails', this.tags);
+            wireRef.$set(propertyName, this.tags);
         },
     };
 };

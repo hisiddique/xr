@@ -57,6 +57,7 @@ new #[Title('Dashboard')] class extends Component {
                 ['label' => 'Customer Credit Notes',    'icon' => 'receipt-refund', 'href' => route('credit-notes.index')],
                 ['label' => 'Customer Payment',         'icon' => 'banknotes',      'href' => route('payments.index')],
                 ['label' => 'Document Search',          'icon' => 'magnifying-glass', 'href' => route('document-search.index')],
+                ['label' => 'Customer Outstanding',     'icon' => 'banknotes',      'href' => route('reports.customer-outstanding-payments'), 'badge' => 'Report'],
             ],
         ],
         [

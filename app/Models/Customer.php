@@ -54,6 +54,8 @@ class Customer extends Model
         'vat_registered',
         'credit_term_id',
         'credit_limit_id',
+        'customer_category_id',
+        'revenue_type_id',
         'created_by',
         'created_at',
         'updated_at',
@@ -80,6 +82,16 @@ class Customer extends Model
     public function creditLimit(): BelongsTo
     {
         return $this->belongsTo(LookupCreditLimit::class, 'credit_limit_id');
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(LookupCustomerCategory::class, 'customer_category_id');
+    }
+
+    public function revenueType(): BelongsTo
+    {
+        return $this->belongsTo(LookupRevenueType::class, 'revenue_type_id');
     }
 
     public function creator(): BelongsTo

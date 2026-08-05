@@ -130,6 +130,12 @@
                                 </x-slot:icon>
                                 Overhead Report
                             </flux:menu.item>
+                            <flux:menu.item :href="route('reports.customer-outstanding-payments')" wire:navigate>
+                                <x-slot:icon>
+                                    <flux:icon icon="banknotes" variant="mini" class="me-2 text-indigo-600 dark:text-indigo-400" />
+                                </x-slot:icon>
+                                Customer Outstanding
+                            </flux:menu.item>
                         </flux:menu>
                     </flux:dropdown>
 
@@ -156,6 +162,8 @@
                                 <flux:menu.item :href="route('reference-data.units')" icon="scale" wire:navigate>Units</flux:menu.item>
                                 <flux:menu.item :href="route('reference-data.payment-methods')" icon="wallet" wire:navigate>Payment Methods</flux:menu.item>
                                 <flux:menu.item :href="route('reference-data.expense-categories')" icon="rectangle-stack" wire:navigate>Expense Categories</flux:menu.item>
+                                <flux:menu.item :href="route('reference-data.customer-categories')" icon="tag" wire:navigate>Customer Categories</flux:menu.item>
+                                <flux:menu.item :href="route('reference-data.revenue-types')" icon="banknotes" wire:navigate>Revenue Types</flux:menu.item>
                                 <flux:menu.item :href="route('settings.legacy-migration')" icon="circle-stack" wire:navigate>Legacy Migration</flux:menu.item>
                             </flux:menu>
                         </flux:dropdown>
@@ -388,6 +396,20 @@
                         </li>
                         <li>
                             <a
+                                href="{{ route('reports.customer-outstanding-payments') }}"
+                                wire:navigate
+                                @class([
+                                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('reports.customer-outstanding-payments'),
+                                    'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('reports.customer-outstanding-payments'),
+                                ])
+                            >
+                                <flux:icon.banknotes class="size-5 shrink-0" />
+                                Customer Outstanding
+                            </a>
+                        </li>
+                        <li>
+                            <a
                                 href="{{ route('overheads.index') }}"
                                 wire:navigate
                                 @class([
@@ -585,6 +607,34 @@
                                 >
                                     <flux:icon.tag class="size-5 shrink-0" />
                                     Expense Categories
+                                </a>
+                            </li>
+                            <li>
+                                <a
+                                    href="{{ route('reference-data.customer-categories') }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('reference-data.customer-categories'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('reference-data.customer-categories'),
+                                    ])
+                                >
+                                    <flux:icon.tag class="size-5 shrink-0" />
+                                    Customer Categories
+                                </a>
+                            </li>
+                            <li>
+                                <a
+                                    href="{{ route('reference-data.revenue-types') }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('reference-data.revenue-types'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('reference-data.revenue-types'),
+                                    ])
+                                >
+                                    <flux:icon.banknotes class="size-5 shrink-0" />
+                                    Revenue Types
                                 </a>
                             </li>
                             <li>

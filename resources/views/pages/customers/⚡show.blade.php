@@ -2,6 +2,7 @@
 
 use App\Models\Customer;
 use App\Models\Document;
+use Carbon\Carbon;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
@@ -21,6 +22,51 @@ new #[Title('Customer Details')] class extends Component {
     public function availableCredit(): float
     {
         return Document::availableCreditForCustomer($this->customer->id);
+    }
+
+    #[Computed]
+    public function previousCustomer(): ?Customer
+    {
+        return Customer::where('id', '<', $this->customer->id)->orderByDesc('id')->first();
+    }
+
+    #[Computed]
+    public function nextCustomer(): ?Customer
+    {
+        return Customer::where('id', '>', $this->customer->id)->orderBy('id')->first();
+    }
+
+    #[Computed]
+    public function stats(): array
+    {
+        $invoices = $this->customer->invoices();
+
+        $balance = (clone $invoices)
+            ->withSum('paymentAllocations as allocated_total', 'allocated_amount')
+            ->withSum('creditAllocationsReceived as credited_total', 'amount')
+            ->get()
+            ->sum(fn (Document $invoice) => $invoice->total_value - ($invoice->allocated_total ?? 0) - ($invoice->credited_total ?? 0));
+
+        $onAccount = $this->customer->payments()
+            ->withSum('allocations as allocations_sum_allocated_amount', 'allocated_amount')
+            ->withSum('drawsMade as draws_made_sum_amount', 'amount')
+            ->get()
+            ->sum(fn ($payment) => max(0, $payment->amount - ($payment->allocations_sum_allocated_amount ?? 0) - ($payment->draws_made_sum_amount ?? 0)));
+
+        $now = now();
+
+        $parseDate = fn (?string $date): ?Carbon => $date ? Carbon::parse($date) : null;
+
+        return [
+            'balance' => $balance,
+            'on_account' => $onAccount,
+            'sales_ytd' => (clone $invoices)->whereYear('doc_date', $now->year)->sum('total_value'),
+            'sales_period' => (clone $invoices)->whereYear('doc_date', $now->year)->whereMonth('doc_date', $now->month)->sum('total_value'),
+            'first_invoice' => $parseDate((clone $invoices)->min('doc_date')),
+            'last_invoice' => $parseDate((clone $invoices)->max('doc_date')),
+            'last_payment' => $parseDate($this->customer->payments()->max('payment_date')),
+            'last_amended' => $this->customer->updated_at,
+        ];
     }
 
     #[Computed]
@@ -83,6 +129,20 @@ new #[Title('Customer Details')] class extends Component {
                 <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">e</kbd>
             </flux:button>
             <livewire:pages::customers.delete-modal :customer="$customer" :key="'delete-'.$customer->id" />
+
+            <div class="flex items-center overflow-hidden rounded-lg border border-zinc-200/70 dark:border-white/10">
+                @if($this->previousCustomer)
+                    <flux:button variant="ghost" icon="chevron-left" size="sm" class="!rounded-none" :href="route('customers.show', $this->previousCustomer)" wire:navigate title="{{ __('Previous customer: :name', ['name' => $this->previousCustomer->company_name]) }}" />
+                @else
+                    <flux:button variant="ghost" icon="chevron-left" size="sm" class="!rounded-none" disabled />
+                @endif
+                <div class="h-5 w-px bg-zinc-200 dark:bg-white/10"></div>
+                @if($this->nextCustomer)
+                    <flux:button variant="ghost" icon="chevron-right" size="sm" class="!rounded-none" :href="route('customers.show', $this->nextCustomer)" wire:navigate title="{{ __('Next customer: :name', ['name' => $this->nextCustomer->company_name]) }}" />
+                @else
+                    <flux:button variant="ghost" icon="chevron-right" size="sm" class="!rounded-none" disabled />
+                @endif
+            </div>
         </div>
     </div>
 
@@ -110,80 +170,165 @@ new #[Title('Customer Details')] class extends Component {
         </div>
     </div>
 
-    {{-- Two-column details --}}
-    <div class="grid gap-4 md:grid-cols-2">
+    {{-- Details + financial sidebar (legacy col-8 / col-4 split) --}}
+    <div class="grid gap-4 lg:grid-cols-3">
 
-        {{-- Contact Details --}}
-        <x-ui.section-card title="Contact Details">
-            <dl class="space-y-4">
-                <div class="flex justify-between gap-4">
-                    <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Name</dt>
-                    <dd class="text-sm text-zinc-900 dark:text-white text-right">
-                        {{ trim(($customer->title?->name ? $customer->title->name.' ' : '').$customer->first_name.' '.$customer->last_name) ?: '—' }}
-                    </dd>
-                </div>
-                <div class="flex justify-between gap-4">
-                    <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Email</dt>
-                    <dd class="text-sm text-zinc-900 dark:text-white text-right">{{ $customer->email_1 ?? '—' }}</dd>
-                </div>
-                <div class="flex justify-between gap-4">
-                    <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Address</dt>
-                    <dd class="text-sm text-zinc-900 dark:text-white text-right">
-                        {{ collect([$customer->address_1, $customer->address_2, $customer->town, $customer->post_code])->filter()->implode(', ') ?: '—' }}
-                    </dd>
-                </div>
-            </dl>
-        </x-ui.section-card>
+        {{-- Left: details (lg:col-span-2) --}}
+        <div class="lg:col-span-2">
+            <x-ui.section-card>
+                <x-slot:header>
+                    <h2 class="text-lg font-bold text-zinc-900 dark:text-white">Customer Details</h2>
+                </x-slot:header>
+                <dl class="space-y-4">
+                    <div class="flex justify-between gap-4">
+                        <dt class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Name</dt>
+                        <dd class="text-sm text-zinc-900 dark:text-white text-right">
+                            {{ trim(($customer->title?->name ? $customer->title->name.' ' : '').$customer->first_name.' '.$customer->last_name) ?: '—' }}
+                        </dd>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                        <dt class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Email</dt>
+                        <dd class="text-sm text-zinc-900 dark:text-white text-right">{{ $customer->email_1 ?? '—' }}</dd>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                        <dt class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Address</dt>
+                        <dd class="text-sm text-zinc-900 dark:text-white text-right">
+                            {{ collect([$customer->address_1, $customer->address_2, $customer->town, $customer->post_code])->filter()->implode(', ') ?: '—' }}
+                        </dd>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                        <dt class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Category</dt>
+                        <dd class="text-sm text-zinc-900 dark:text-white">{{ $customer->category?->name ?? '—' }}</dd>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                        <dt class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Revenue</dt>
+                        <dd class="text-sm text-zinc-900 dark:text-white">{{ $customer->revenueType?->name ?? '—' }}</dd>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                        <dt class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Trade Discount</dt>
+                        <dd>
+                            @if($customer->trade_discount > 0)
+                                <span class="inline-flex rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-400">
+                                    {{ $customer->trade_discount }}%
+                                </span>
+                            @else
+                                <span class="text-sm text-zinc-400">None</span>
+                            @endif
+                        </dd>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                        <dt class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Credit Terms</dt>
+                        <dd class="text-sm text-zinc-900 dark:text-white">{{ $customer->creditTerm?->name ?? '—' }}</dd>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                        <dt class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Credit Limit</dt>
+                        <dd class="text-sm text-zinc-900 dark:text-white">
+                            {{ $customer->creditLimit ? '£'.number_format($customer->creditLimit->amount, 2) : '—' }}
+                        </dd>
+                    </div>
+                </dl>
+            </x-ui.section-card>
+        </div>
 
-        {{-- Credit & Trading --}}
-        <x-ui.section-card title="Credit & Trading">
-            <dl class="space-y-4">
-                <div class="flex justify-between gap-4">
-                    <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Trade Discount</dt>
-                    <dd>
-                        @if($customer->trade_discount > 0)
-                            <span class="inline-flex rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-400">
-                                {{ $customer->trade_discount }}%
-                            </span>
-                        @else
-                            <span class="text-sm text-zinc-400">None</span>
-                        @endif
-                    </dd>
-                </div>
-                <div class="flex justify-between gap-4">
-                    <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Credit Terms</dt>
-                    <dd class="text-sm text-zinc-900 dark:text-white">{{ $customer->creditTerm?->name ?? '—' }}</dd>
-                </div>
-                <div class="flex justify-between gap-4">
-                    <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Credit Limit</dt>
-                    <dd class="text-sm text-zinc-900 dark:text-white">
-                        {{ $customer->creditLimit ? '£'.number_format($customer->creditLimit->amount, 2) : '—' }}
-                    </dd>
-                </div>
-            </dl>
-        </x-ui.section-card>
-    </div>
+        {{-- Right: financial sidebar (lg:col-span-1) --}}
+        <div class="flex flex-col gap-4 lg:col-span-1">
 
-    {{-- Available Credit summary card --}}
-    <div class="rounded-2xl border border-emerald-200/70 bg-gradient-to-r from-emerald-50 to-teal-50 p-5 shadow-sm dark:border-emerald-500/20 dark:from-emerald-500/10 dark:to-teal-500/10">
-        <div class="flex items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
-                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-500/20">
-                    <flux:icon.banknotes class="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <div>
-                    <p class="text-xs font-medium uppercase tracking-wider text-emerald-600/70 dark:text-emerald-400/70">Available Credit</p>
-                    <p class="text-2xl font-bold tracking-tight {{ $this->availableCredit > 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-zinc-400 dark:text-zinc-500' }}">
-                        £{{ number_format($this->availableCredit, 2) }}
-                    </p>
-                </div>
-            </div>
-            @if($this->availableCredit > 0)
-                <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400">
-                    <flux:icon.check-circle class="h-3.5 w-3.5" />
-                    Credit available
-                </span>
-            @endif
+            <x-ui.section-card>
+                <x-slot:header>
+                    <h2 class="text-lg font-bold text-zinc-900 dark:text-white">Account Summary</h2>
+                </x-slot:header>
+                <dl class="space-y-4">
+                    <div class="flex justify-between gap-4">
+                        <dt class="flex items-center gap-1 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                            Balance
+                            <flux:tooltip content="Total owed across all invoices, after payments and credit notes already applied.">
+                                <flux:icon.information-circle class="size-3.5 text-zinc-400 dark:text-zinc-500" />
+                            </flux:tooltip>
+                        </dt>
+                        <dd class="text-sm font-semibold text-rose-600 dark:text-rose-400">£{{ number_format($this->stats['balance'], 2) }}</dd>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                        <dt class="flex items-center gap-1 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                            On Account
+                            <flux:tooltip content="Money the customer has paid that hasn't been applied to an invoice yet.">
+                                <flux:icon.information-circle class="size-3.5 text-zinc-400 dark:text-zinc-500" />
+                            </flux:tooltip>
+                        </dt>
+                        <dd class="text-sm font-semibold {{ $this->stats['on_account'] > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-900 dark:text-white' }}">£{{ number_format($this->stats['on_account'], 2) }}</dd>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                        <dt class="flex items-center gap-1 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                            Available Credit
+                            <flux:tooltip content="Credit notes issued to this customer that haven't been used against an invoice yet.">
+                                <flux:icon.information-circle class="size-3.5 text-zinc-400 dark:text-zinc-500" />
+                            </flux:tooltip>
+                        </dt>
+                        <dd class="text-sm font-semibold {{ $this->availableCredit > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-900 dark:text-white' }}">£{{ number_format($this->availableCredit, 2) }}</dd>
+                    </div>
+                </dl>
+
+                <h3 class="mt-5 mb-2 border-b border-zinc-100 pb-1.5 text-sm font-bold uppercase tracking-wide text-indigo-600 dark:border-white/10 dark:text-indigo-400">Sales</h3>
+                <dl class="space-y-4">
+                    <div class="flex justify-between gap-4">
+                        <dt class="flex items-center gap-1 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                            Year to Date
+                            <flux:tooltip content="Total value of invoices raised for this customer so far in the current calendar year.">
+                                <flux:icon.information-circle class="size-3.5 text-zinc-400 dark:text-zinc-500" />
+                            </flux:tooltip>
+                        </dt>
+                        <dd class="text-sm text-zinc-900 dark:text-white">£{{ number_format($this->stats['sales_ytd'], 2) }}</dd>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                        <dt class="flex items-center gap-1 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                            Period
+                            <flux:tooltip content="Total value of invoices raised for this customer so far in the current calendar month.">
+                                <flux:icon.information-circle class="size-3.5 text-zinc-400 dark:text-zinc-500" />
+                            </flux:tooltip>
+                        </dt>
+                        <dd class="text-sm text-zinc-900 dark:text-white">£{{ number_format($this->stats['sales_period'], 2) }}</dd>
+                    </div>
+                </dl>
+
+                <h3 class="mt-5 mb-2 border-b border-zinc-100 pb-1.5 text-sm font-bold uppercase tracking-wide text-indigo-600 dark:border-white/10 dark:text-indigo-400">Movement</h3>
+                <dl class="space-y-4">
+                    <div class="flex justify-between gap-4">
+                        <dt class="flex items-center gap-1 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                            First Invoice
+                            <flux:tooltip content="Date of the earliest invoice ever raised for this customer.">
+                                <flux:icon.information-circle class="size-3.5 text-zinc-400 dark:text-zinc-500" />
+                            </flux:tooltip>
+                        </dt>
+                        <dd class="text-sm text-zinc-900 dark:text-white">{{ $this->stats['first_invoice']?->format('d M Y') ?? '—' }}</dd>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                        <dt class="flex items-center gap-1 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                            Last Invoice
+                            <flux:tooltip content="Date of the most recent invoice raised for this customer.">
+                                <flux:icon.information-circle class="size-3.5 text-zinc-400 dark:text-zinc-500" />
+                            </flux:tooltip>
+                        </dt>
+                        <dd class="text-sm text-zinc-900 dark:text-white">{{ $this->stats['last_invoice']?->format('d M Y') ?? '—' }}</dd>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                        <dt class="flex items-center gap-1 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                            Last Payment
+                            <flux:tooltip content="Date of the most recent payment received from this customer.">
+                                <flux:icon.information-circle class="size-3.5 text-zinc-400 dark:text-zinc-500" />
+                            </flux:tooltip>
+                        </dt>
+                        <dd class="text-sm text-zinc-900 dark:text-white">{{ $this->stats['last_payment']?->format('d M Y') ?? '—' }}</dd>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                        <dt class="flex items-center gap-1 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                            Last Amended
+                            <flux:tooltip content="Date this customer's record was last updated.">
+                                <flux:icon.information-circle class="size-3.5 text-zinc-400 dark:text-zinc-500" />
+                            </flux:tooltip>
+                        </dt>
+                        <dd class="text-sm text-zinc-900 dark:text-white">{{ $this->stats['last_amended']?->format('d M Y') ?? '—' }}</dd>
+                    </div>
+                </dl>
+            </x-ui.section-card>
         </div>
     </div>
 

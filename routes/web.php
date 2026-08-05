@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ConvertDeliveryNoteController;
+use App\Http\Controllers\CustomerOutstandingExportController;
 use App\Http\Controllers\DocumentPdfController;
 use App\Http\Controllers\SupplierInvoiceAttachmentController;
 use Illuminate\Support\Facades\Route;
@@ -73,6 +74,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Reports
     Route::livewire('reports/overheads', 'pages::reports.overheads')->name('reports.overheads');
     Route::livewire('reports/supplier-purchasing', 'pages::reports.supplier-purchasing')->name('reports.supplier-purchasing');
+    Route::livewire('reports/customer-outstanding-payments', 'pages::reports.customer-outstanding-payments')->name('reports.customer-outstanding-payments');
+    Route::get('reports/customer-outstanding-payments/export/{format}', [CustomerOutstandingExportController::class, 'export'])
+        ->where('format', 'csv|xlsx|pdf')
+        ->name('reports.customer-outstanding-payments.export');
 
     // Supplier Payouts
     Route::livewire('supplier-payouts', 'pages::supplier-payouts.index')->name('supplier-payouts.index');
@@ -101,6 +106,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::livewire('reference-data/units', 'pages::reference-data.units')->name('reference-data.units');
         Route::livewire('reference-data/payment-methods', 'pages::reference-data.payment-methods')->name('reference-data.payment-methods');
         Route::livewire('reference-data/expense-categories', 'pages::reference-data.expense-categories')->name('reference-data.expense-categories');
+        Route::livewire('reference-data/customer-categories', 'pages::reference-data.customer-categories')->name('reference-data.customer-categories');
+        Route::livewire('reference-data/revenue-types', 'pages::reference-data.revenue-types')->name('reference-data.revenue-types');
     });
 });
 

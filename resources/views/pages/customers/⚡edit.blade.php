@@ -3,6 +3,8 @@
 use App\Models\Customer;
 use App\Models\LookupCreditLimit;
 use App\Models\LookupCreditTerm;
+use App\Models\LookupCustomerCategory;
+use App\Models\LookupRevenueType;
 use App\Models\LookupTitle;
 use Flux\Flux;
 use Livewire\Attributes\Computed;
@@ -52,6 +54,12 @@ new #[Title('Edit Customer')] class extends Component {
     #[Validate('nullable|integer|exists:lookup_credit_limits,id')]
     public ?int $credit_limit_id = null;
 
+    #[Validate('nullable|integer|exists:lookup_customer_categories,id')]
+    public ?int $customer_category_id = null;
+
+    #[Validate('nullable|integer|exists:lookup_revenue_types,id')]
+    public ?int $revenue_type_id = null;
+
     #[Validate('boolean')]
     public bool $vat_registered = false;
 
@@ -70,6 +78,8 @@ new #[Title('Edit Customer')] class extends Component {
         $this->trade_discount = (string) $this->customer->trade_discount;
         $this->credit_term_id = $this->customer->credit_term_id;
         $this->credit_limit_id = $this->customer->credit_limit_id;
+        $this->customer_category_id = $this->customer->customer_category_id;
+        $this->revenue_type_id = $this->customer->revenue_type_id;
         $this->vat_registered = (bool) $this->customer->vat_registered;
     }
 
@@ -89,6 +99,8 @@ new #[Title('Edit Customer')] class extends Component {
             'trade_discount' => 'numeric|min:0|max:100',
             'credit_term_id' => 'nullable|integer|exists:lookup_credit_terms,id',
             'credit_limit_id' => 'nullable|integer|exists:lookup_credit_limits,id',
+            'customer_category_id' => 'nullable|integer|exists:lookup_customer_categories,id',
+            'revenue_type_id' => 'nullable|integer|exists:lookup_revenue_types,id',
             'vat_registered' => 'boolean',
         ]);
 
@@ -114,6 +126,18 @@ new #[Title('Edit Customer')] class extends Component {
     public function creditLimits()
     {
         return LookupCreditLimit::orderBy('amount')->get();
+    }
+
+    #[Computed]
+    public function customerCategories()
+    {
+        return LookupCustomerCategory::orderBy('name')->get();
+    }
+
+    #[Computed]
+    public function revenueTypes()
+    {
+        return LookupRevenueType::orderBy('name')->get();
     }
 }; ?>
 
@@ -167,6 +191,25 @@ new #[Title('Edit Customer')] class extends Component {
                 <flux:input wire:model="address_2" :label="__('Address Line 2')" />
                 <flux:input wire:model="town" :label="__('Town / City')" />
                 <flux:input wire:model="post_code" :label="__('Post Code')" />
+            </div>
+        </div>
+
+        {{-- Section: Classification --}}
+        <div class="border-t border-zinc-200/70 px-4 py-4 dark:border-white/10">
+            <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Classification</h2>
+            <div class="grid gap-4 md:grid-cols-2">
+                <flux:select wire:model="customer_category_id" :label="__('Category')">
+                    <flux:select.option value="">{{ __('— None —') }}</flux:select.option>
+                    @foreach($this->customerCategories as $category)
+                        <flux:select.option :value="$category->id">{{ $category->name }}</flux:select.option>
+                    @endforeach
+                </flux:select>
+                <flux:select wire:model="revenue_type_id" :label="__('Revenue')">
+                    <flux:select.option value="">{{ __('— None —') }}</flux:select.option>
+                    @foreach($this->revenueTypes as $type)
+                        <flux:select.option :value="$type->id">{{ $type->name }}</flux:select.option>
+                    @endforeach
+                </flux:select>
             </div>
         </div>
 

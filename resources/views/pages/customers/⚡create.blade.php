@@ -3,6 +3,8 @@
 use App\Models\Customer;
 use App\Models\LookupCreditLimit;
 use App\Models\LookupCreditTerm;
+use App\Models\LookupCustomerCategory;
+use App\Models\LookupRevenueType;
 use App\Models\LookupTitle;
 use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
@@ -48,6 +50,12 @@ new #[Title('New Customer')] class extends Component {
     #[Validate('nullable|integer|exists:lookup_credit_limits,id')]
     public ?int $credit_limit_id = null;
 
+    #[Validate('nullable|integer|exists:lookup_customer_categories,id')]
+    public ?int $customer_category_id = null;
+
+    #[Validate('nullable|integer|exists:lookup_revenue_types,id')]
+    public ?int $revenue_type_id = null;
+
     #[Validate('nullable|string|max:50|unique:customers,reference')]
     public string $reference = '';
 
@@ -83,6 +91,18 @@ new #[Title('New Customer')] class extends Component {
     public function creditLimits()
     {
         return LookupCreditLimit::orderBy('amount')->get();
+    }
+
+    #[Computed]
+    public function customerCategories()
+    {
+        return LookupCustomerCategory::orderBy('name')->get();
+    }
+
+    #[Computed]
+    public function revenueTypes()
+    {
+        return LookupRevenueType::orderBy('name')->get();
     }
 }; ?>
 
@@ -134,6 +154,25 @@ new #[Title('New Customer')] class extends Component {
                 <flux:input wire:model="address_2" :label="__('Address Line 2')" />
                 <flux:input wire:model="town" :label="__('Town / City')" />
                 <flux:input wire:model="post_code" :label="__('Post Code')" />
+            </div>
+        </div>
+
+        {{-- Section: Classification --}}
+        <div class="border-t border-zinc-200/70 px-4 py-4 dark:border-white/10">
+            <h2 class="mb-5 text-sm font-semibold text-zinc-900 dark:text-white">Classification</h2>
+            <div class="grid gap-4 md:grid-cols-2">
+                <flux:select wire:model="customer_category_id" :label="__('Category')">
+                    <flux:select.option value="">{{ __('— None —') }}</flux:select.option>
+                    @foreach($this->customerCategories as $category)
+                        <flux:select.option :value="$category->id">{{ $category->name }}</flux:select.option>
+                    @endforeach
+                </flux:select>
+                <flux:select wire:model="revenue_type_id" :label="__('Revenue')">
+                    <flux:select.option value="">{{ __('— None —') }}</flux:select.option>
+                    @foreach($this->revenueTypes as $type)
+                        <flux:select.option :value="$type->id">{{ $type->name }}</flux:select.option>
+                    @endforeach
+                </flux:select>
             </div>
         </div>
 
