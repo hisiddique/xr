@@ -16,12 +16,12 @@ class CustomerOutstandingExportController extends Controller
             'search', 'customerId', 'dateFrom', 'dateTo', 'amountMin', 'amountMax', 'osMin', 'osMax',
         ]);
 
-        $customers = $this->reportService->customersForExport($filters);
+        $data = $this->reportService->buildExportData($filters);
 
         return match ($format) {
-            'csv' => $this->reportService->streamCsv($customers),
-            'xlsx' => $this->reportService->streamXlsx($customers),
-            default => $this->reportService->streamPdf($customers),
+            'csv' => $this->reportService->streamCsv($data),
+            'xlsx' => $this->reportService->streamXlsx($data),
+            default => $this->reportService->streamPdf($data),
         };
     }
 }

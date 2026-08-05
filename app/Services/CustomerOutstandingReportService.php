@@ -7,7 +7,6 @@ use App\Models\Customer;
 use App\Models\Document;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Contracts\Database\Eloquent\Builder;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Mail;
 use League\Csv\Writer as CsvWriter;
 use OpenSpout\Common\Entity\Row;
@@ -20,6 +19,8 @@ class CustomerOutstandingReportService
 {
     /** @var array<int, string> */
     protected const EXPORT_HEADINGS = ['Customer', 'Reference', 'Date', 'Invoice', 'Total', 'Outstanding'];
+
+    protected const EXPORT_CHUNK_SIZE = 200;
 
     protected const OUTSTANDING_EXPR = '(documents.total_value
         - COALESCE((select sum(pa.allocated_amount) from payment_allocations pa where pa.document_id = documents.id and pa.deleted_at is null), 0)
@@ -71,15 +72,6 @@ class CustomerOutstandingReportService
             ->orderBy('company_name');
     }
 
-    /**
-     * @param  array<string, mixed>  $filters
-     * @return Collection<int, Customer>
-     */
-    public function customersForExport(array $filters): Collection
-    {
-        return $this->customersQuery($filters)->get();
-    }
-
     public function outstandingAmount(Document $invoice): float
     {
         return (float) $invoice->total_value - (float) ($invoice->allocated_total ?? 0) - (float) ($invoice->credited_total ?? 0);
@@ -91,80 +83,156 @@ class CustomerOutstandingReportService
     }
 
     /**
-     * Build export rows grouped per customer: each customer's invoice rows
-     * followed by a subtotal row, mirroring the on-screen table layout.
+     * Build export data in bounded chunks instead of eager-loading every matching
+     * customer/invoice into one giant collection at once. Each chunk's Eloquent
+     * models are converted to plain arrays and discarded before the next chunk
+     * loads, keeping peak memory bounded regardless of total dataset size.
      *
-     * @param  Collection<int, Customer>  $customers
+     * @param  array<string, mixed>  $filters
+     * @return array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>
+     */
+    public function buildExportData(array $filters): array
+    {
+        $data = [];
+
+        $this->customersQuery($filters)
+            ->reorder()
+            ->select('customers.id', 'customers.company_name', 'customers.reference')
+            ->chunkById(self::EXPORT_CHUNK_SIZE, function ($customersChunk) use (&$data, $filters) {
+                $invoicesByCustomer = Document::invoices()
+                    ->whereIn('customer_id', $customersChunk->pluck('id'))
+                    ->tap(fn ($q) => $this->applyOutstandingFilters($q, $filters))
+                    ->orderBy('doc_date')
+                    ->get()
+                    ->groupBy('customer_id');
+
+                foreach ($customersChunk as $customer) {
+                    $invoices = $invoicesByCustomer->get($customer->id, collect())
+                        ->map(fn (Document $invoice) => [
+                            'doc_date' => $invoice->doc_date?->format('d M Y'),
+                            'doc_number' => $invoice->doc_number,
+                            'total_value' => (float) $invoice->total_value,
+                            'outstanding' => $this->outstandingAmount($invoice),
+                        ])->all();
+
+                    if (empty($invoices)) {
+                        continue;
+                    }
+
+                    $data[] = [
+                        'company_name' => $customer->company_name,
+                        'reference' => (string) $customer->reference,
+                        'invoices' => $invoices,
+                    ];
+                }
+            });
+
+        usort($data, fn ($a, $b) => $a['company_name'] <=> $b['company_name']);
+
+        return $data;
+    }
+
+    /**
+     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
+     */
+    public function exportTotalOutstanding(array $data): float
+    {
+        return array_sum(array_map(
+            fn (array $customer) => array_sum(array_column($customer['invoices'], 'outstanding')),
+            $data,
+        ));
+    }
+
+    /**
+     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
      * @return array<int, array{0: array<int, string>, 1: bool}>
      */
-    protected function exportRows(Collection $customers): array
+    protected function exportRows(array $data): array
     {
         $rows = [];
 
-        foreach ($customers as $customer) {
-            foreach ($customer->invoices as $invoice) {
+        foreach ($data as $customer) {
+            $customerTotal = 0.0;
+            $customerOutstanding = 0.0;
+
+            foreach ($customer['invoices'] as $invoice) {
                 $rows[] = [[
-                    $customer->company_name.' ('.$customer->reference.')',
-                    $invoice->doc_date?->format('d M Y') ?? '',
-                    $invoice->doc_number,
-                    number_format((float) $invoice->total_value, 2, '.', ''),
-                    number_format($this->outstandingAmount($invoice), 2, '.', ''),
+                    $customer['company_name'].' ('.$customer['reference'].')',
+                    $invoice['doc_date'] ?? '',
+                    $invoice['doc_number'],
+                    number_format($invoice['total_value'], 2, '.', ''),
+                    number_format($invoice['outstanding'], 2, '.', ''),
                 ], false];
+
+                $customerTotal += $invoice['total_value'];
+                $customerOutstanding += $invoice['outstanding'];
             }
 
             $rows[] = [[
                 '', '', '',
-                number_format((float) $customer->invoices->sum('total_value'), 2, '.', ''),
-                number_format($this->customerOutstandingTotal($customer), 2, '.', ''),
+                number_format($customerTotal, 2, '.', ''),
+                number_format($customerOutstanding, 2, '.', ''),
             ], true];
         }
 
         return $rows;
     }
 
-    public function streamCsv(Collection $customers): StreamedResponse
+    /**
+     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
+     */
+    public function streamCsv(array $data): StreamedResponse
     {
-        return response()->streamDownload(function () use ($customers) {
+        return response()->streamDownload(function () use ($data) {
             $writer = CsvWriter::createFromStream(fopen('php://output', 'w'));
             $writer->insertOne(self::EXPORT_HEADINGS);
 
-            foreach ($this->exportRows($customers) as [$row]) {
+            foreach ($this->exportRows($data) as [$row]) {
                 $writer->insertOne($row);
             }
         }, 'customer-outstanding-payments.csv', ['Content-Type' => 'text/csv']);
     }
 
-    protected function csvBinary(Collection $customers): string
+    /**
+     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
+     */
+    protected function csvBinary(array $data): string
     {
         $writer = CsvWriter::createFromString();
         $writer->insertOne(self::EXPORT_HEADINGS);
 
-        foreach ($this->exportRows($customers) as [$row]) {
+        foreach ($this->exportRows($data) as [$row]) {
             $writer->insertOne($row);
         }
 
         return $writer->toString();
     }
 
-    protected function writeXlsx(XlsxWriter $writer, Collection $customers): void
+    /**
+     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
+     */
+    protected function writeXlsx(XlsxWriter $writer, array $data): void
     {
         $boldStyle = (new Style)->withFontBold(true);
 
         $writer->addRow(Row::fromValuesWithStyle(self::EXPORT_HEADINGS, $boldStyle));
 
-        foreach ($this->exportRows($customers) as [$row, $isSubtotal]) {
+        foreach ($this->exportRows($data) as [$row, $isSubtotal]) {
             $writer->addRow($isSubtotal ? Row::fromValuesWithStyle($row, $boldStyle) : Row::fromValues($row));
         }
     }
 
-    public function streamXlsx(Collection $customers): StreamedResponse
+    /**
+     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
+     */
+    public function streamXlsx(array $data): StreamedResponse
     {
-        return response()->streamDownload(function () use ($customers) {
+        return response()->streamDownload(function () use ($data) {
             $writer = new XlsxWriter;
             $writer->openToFile('php://output');
 
             try {
-                $this->writeXlsx($writer, $customers);
+                $this->writeXlsx($writer, $data);
             } finally {
                 $writer->close();
             }
@@ -173,7 +241,10 @@ class CustomerOutstandingReportService
         ]);
     }
 
-    protected function xlsxBinary(Collection $customers): string
+    /**
+     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
+     */
+    protected function xlsxBinary(array $data): string
     {
         $tmpPath = tempnam(sys_get_temp_dir(), 'xlsx');
 
@@ -181,27 +252,33 @@ class CustomerOutstandingReportService
         $writer->openToFile($tmpPath);
 
         try {
-            $this->writeXlsx($writer, $customers);
+            $this->writeXlsx($writer, $data);
         } finally {
             $writer->close();
         }
 
-        $data = file_get_contents($tmpPath);
+        $contents = file_get_contents($tmpPath);
         unlink($tmpPath);
 
-        return $data;
+        return $contents;
     }
 
-    protected function pdfBinary(Collection $customers): string
+    /**
+     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
+     */
+    protected function pdfBinary(array $data): string
     {
-        return Pdf::loadView('pdfs.customer-outstanding', ['customers' => $customers, 'reportService' => $this])
+        return Pdf::loadView('pdfs.customer-outstanding', ['customers' => $data])
             ->setOption('isPhpEnabled', true)
             ->output();
     }
 
-    public function streamPdf(Collection $customers): Response
+    /**
+     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
+     */
+    public function streamPdf(array $data): Response
     {
-        return Pdf::loadView('pdfs.customer-outstanding', ['customers' => $customers, 'reportService' => $this])
+        return Pdf::loadView('pdfs.customer-outstanding', ['customers' => $data])
             ->setOption('isPhpEnabled', true)
             ->download('customer-outstanding-payments.pdf');
     }
@@ -213,15 +290,15 @@ class CustomerOutstandingReportService
      */
     public function sendReport(array $filters, array $emails, array $formats, ?string $notes = null): void
     {
-        $customers = $this->customersForExport($filters);
+        $data = $this->buildExportData($filters);
 
-        $totalOutstanding = $customers->sum(fn (Customer $customer) => $this->customerOutstandingTotal($customer));
+        $totalOutstanding = $this->exportTotalOutstanding($data);
 
         $attachments = [];
 
         if (in_array('pdf', $formats, true)) {
             $attachments[] = [
-                'data' => $this->pdfBinary($customers),
+                'data' => $this->pdfBinary($data),
                 'filename' => 'customer-outstanding-payments.pdf',
                 'mime' => 'application/pdf',
             ];
@@ -229,7 +306,7 @@ class CustomerOutstandingReportService
 
         if (in_array('csv', $formats, true)) {
             $attachments[] = [
-                'data' => $this->csvBinary($customers),
+                'data' => $this->csvBinary($data),
                 'filename' => 'customer-outstanding-payments.csv',
                 'mime' => 'text/csv',
             ];
@@ -237,14 +314,14 @@ class CustomerOutstandingReportService
 
         if (in_array('xlsx', $formats, true)) {
             $attachments[] = [
-                'data' => $this->xlsxBinary($customers),
+                'data' => $this->xlsxBinary($data),
                 'filename' => 'customer-outstanding-payments.xlsx',
                 'mime' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             ];
         }
 
         Mail::to($emails)->send(new CustomerOutstandingReportMail(
-            $customers->count(),
+            count($data),
             $totalOutstanding,
             $notes,
             $attachments,

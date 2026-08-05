@@ -38,21 +38,21 @@
         </thead>
         <tbody>
             @foreach($customers as $customer)
-                @foreach($customer->invoices as $invoice)
+                @foreach($customer['invoices'] as $invoice)
                     <tr>
-                        <td class="customer-name @if(! $loop->first) is-continuation @endif">{{ $customer->company_name }} ({{ $customer->reference }})</td>
-                        <td>{{ $invoice->doc_date?->format('d M Y') }}</td>
-                        <td>{{ $invoice->doc_number }}</td>
-                        <td class="amount">£{{ number_format($invoice->total_value, 2) }}</td>
-                        <td class="amount">£{{ number_format($reportService->outstandingAmount($invoice), 2) }}</td>
+                        <td class="customer-name @if(! $loop->first) is-continuation @endif">{{ $customer['company_name'] }} ({{ $customer['reference'] }})</td>
+                        <td>{{ $invoice['doc_date'] }}</td>
+                        <td>{{ $invoice['doc_number'] }}</td>
+                        <td class="amount">£{{ number_format($invoice['total_value'], 2) }}</td>
+                        <td class="amount">£{{ number_format($invoice['outstanding'], 2) }}</td>
                     </tr>
                 @endforeach
                 <tr class="subtotal-row">
                     <td class="customer-name"></td>
                     <td></td>
                     <td></td>
-                    <td class="amount">£{{ number_format($customer->invoices->sum('total_value'), 2) }}</td>
-                    <td class="amount">£{{ number_format($reportService->customerOutstandingTotal($customer), 2) }}</td>
+                    <td class="amount">£{{ number_format(array_sum(array_column($customer['invoices'], 'total_value')), 2) }}</td>
+                    <td class="amount">£{{ number_format(array_sum(array_column($customer['invoices'], 'outstanding')), 2) }}</td>
                 </tr>
             @endforeach
         </tbody>

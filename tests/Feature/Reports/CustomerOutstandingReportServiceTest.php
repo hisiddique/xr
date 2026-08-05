@@ -48,12 +48,12 @@ test('report service returns only customers with unsettled outstanding invoices'
     ]);
 
     $service = app(CustomerOutstandingReportService::class);
-    $results = $service->customersForExport([]);
+    $results = $service->buildExportData([]);
 
     expect($results)->toHaveCount(1);
-    expect($results->first()->id)->toBe($customer->id);
-    expect($results->first()->invoices)->toHaveCount(1);
-    expect($results->first()->invoices->first()->id)->toBe($unpaidInvoice->id);
+    expect($results[0]['company_name'])->toBe($customer->company_name);
+    expect($results[0]['invoices'])->toHaveCount(1);
+    expect($results[0]['invoices'][0]['doc_number'])->toBe($unpaidInvoice->doc_number);
 });
 
 test('report service applies outstanding range filter', function () {
@@ -62,8 +62,8 @@ test('report service applies outstanding range filter', function () {
 
     $service = app(CustomerOutstandingReportService::class);
 
-    expect($service->customersForExport(['osMin' => 50]))->toHaveCount(0);
-    expect($service->customersForExport(['osMin' => 5]))->toHaveCount(1);
+    expect($service->buildExportData(['osMin' => 50]))->toHaveCount(0);
+    expect($service->buildExportData(['osMin' => 5]))->toHaveCount(1);
 });
 
 test('report service treats invoices fully settled by a credit note as not outstanding', function () {
@@ -89,7 +89,7 @@ test('report service treats invoices fully settled by a credit note as not outst
 
     $service = app(CustomerOutstandingReportService::class);
 
-    expect($service->customersForExport([]))->toHaveCount(0);
+    expect($service->buildExportData([]))->toHaveCount(0);
 });
 
 test('report service search matches customer name and invoice number', function () {
@@ -98,7 +98,7 @@ test('report service search matches customer name and invoice number', function 
 
     $service = app(CustomerOutstandingReportService::class);
 
-    expect($service->customersForExport(['search' => 'Acme']))->toHaveCount(1);
-    expect($service->customersForExport(['search' => $invoice->doc_number]))->toHaveCount(1);
-    expect($service->customersForExport(['search' => 'no-match-xyz']))->toHaveCount(0);
+    expect($service->buildExportData(['search' => 'Acme']))->toHaveCount(1);
+    expect($service->buildExportData(['search' => $invoice->doc_number]))->toHaveCount(1);
+    expect($service->buildExportData(['search' => 'no-match-xyz']))->toHaveCount(0);
 });
