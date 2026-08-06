@@ -92,6 +92,49 @@ test('report service treats invoices fully settled by a credit note as not outst
     expect($service->buildExportData([]))->toHaveCount(0);
 });
 
+test('report service showPaid filter reveals manually settled invoices without affecting payment-settled ones', function () {
+    $paymentMethod = LookupPaymentMethod::factory()->create();
+    $customer = Customer::factory()->create();
+
+    $unsettledInvoice = Document::factory()->invoice()->create([
+        'customer_id' => $customer->id,
+        'total_value' => 100,
+        'doc_date' => now(),
+    ]);
+
+    $manuallySettledInvoice = Document::factory()->invoice()->create([
+        'customer_id' => $customer->id,
+        'total_value' => 75,
+        'doc_date' => now(),
+        'is_settled' => true,
+    ]);
+
+    $paymentSettledInvoice = Document::factory()->invoice()->create([
+        'customer_id' => $customer->id,
+        'total_value' => 50,
+        'doc_date' => now(),
+    ]);
+    $payment = Payment::factory()->create(['customer_id' => $customer->id, 'payment_method_id' => $paymentMethod->id, 'amount' => 50]);
+    PaymentAllocation::create([
+        'payment_id' => $payment->id,
+        'document_id' => $paymentSettledInvoice->id,
+        'allocated_amount' => 50,
+    ]);
+
+    $service = app(CustomerOutstandingReportService::class);
+
+    $defaultResults = $service->buildExportData([]);
+    expect($defaultResults)->toHaveCount(1);
+    expect($defaultResults[0]['invoices'])->toHaveCount(1);
+    expect($defaultResults[0]['invoices'][0]['doc_number'])->toBe($unsettledInvoice->doc_number);
+
+    $showPaidResults = $service->buildExportData(['showPaid' => true]);
+    expect($showPaidResults)->toHaveCount(1);
+    $docNumbers = array_column($showPaidResults[0]['invoices'], 'doc_number');
+    expect($docNumbers)->toContain($unsettledInvoice->doc_number, $manuallySettledInvoice->doc_number);
+    expect($docNumbers)->not->toContain($paymentSettledInvoice->doc_number);
+});
+
 test('report service search matches customer name and invoice number', function () {
     $customer = Customer::factory()->create(['company_name' => 'Acme Traders']);
     $invoice = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 10, 'doc_date' => now()]);

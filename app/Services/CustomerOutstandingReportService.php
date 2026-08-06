@@ -31,6 +31,8 @@ class CustomerOutstandingReportService
      */
     protected function applyOutstandingFilters(Builder $query, array $filters): Builder
     {
+        $showPaid = (bool) ($filters['showPaid'] ?? false);
+
         return $query
             ->withSum('paymentAllocations as allocated_total', 'allocated_amount')
             ->withSum('creditAllocationsReceived as credited_total', 'amount')
@@ -38,7 +40,15 @@ class CustomerOutstandingReportService
             ->when($filters['dateTo'] ?? '', fn ($q, $date) => $q->whereDate('doc_date', '<=', $date))
             ->when(is_numeric($filters['amountMin'] ?? null), fn ($q) => $q->where('total_value', '>=', (float) $filters['amountMin']))
             ->when(is_numeric($filters['amountMax'] ?? null), fn ($q) => $q->where('total_value', '<=', (float) $filters['amountMax']))
-            ->whereRaw(self::OUTSTANDING_EXPR.' > 0.001')
+            ->where(function ($q) use ($showPaid) {
+                $q->where(function ($q2) {
+                    $q2->whereRaw(self::OUTSTANDING_EXPR.' > 0.001')->where('is_settled', false);
+                });
+
+                if ($showPaid) {
+                    $q->orWhere('is_settled', true);
+                }
+            })
             ->when(is_numeric($filters['osMin'] ?? null), fn ($q) => $q->whereRaw(self::OUTSTANDING_EXPR.' >= CAST(? AS DECIMAL(15,2))', [(float) $filters['osMin']]))
             ->when(is_numeric($filters['osMax'] ?? null), fn ($q) => $q->whereRaw(self::OUTSTANDING_EXPR.' <= CAST(? AS DECIMAL(15,2))', [(float) $filters['osMax']]));
     }

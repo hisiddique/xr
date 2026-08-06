@@ -15,6 +15,7 @@ class CustomerOutstandingExportController extends Controller
         $filters = $request->only([
             'search', 'customerId', 'dateFrom', 'dateTo', 'amountMin', 'amountMax', 'osMin', 'osMax',
         ]);
+        $filters['showPaid'] = $request->boolean('showPaid');
 
         $data = $this->reportService->buildExportData($filters);
 

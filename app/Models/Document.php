@@ -33,6 +33,7 @@ class Document extends Model
         'show_pricing',
         'print_count',
         'status',
+        'is_settled',
         'created_by',
         'assigned_to',
         'converted_from_id',
@@ -54,6 +55,7 @@ class Document extends Model
             'print_count' => 'integer',
             'type' => DocumentType::class,
             'status' => DocumentStatus::class,
+            'is_settled' => 'boolean',
         ];
     }
 

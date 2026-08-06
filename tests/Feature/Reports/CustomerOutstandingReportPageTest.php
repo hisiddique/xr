@@ -41,6 +41,32 @@ test('report page search filters by customer name', function () {
         ->assertDontSeeText('Omega Supplies');
 });
 
+test('toggling settled hides the invoice by default and reveals it with showPaid', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+    $customer = Customer::factory()->create(['company_name' => 'Settle Co']);
+    $invoice = Document::factory()->invoice()->create([
+        'customer_id' => $customer->id,
+        'total_value' => 60,
+        'doc_date' => now(),
+    ]);
+
+    $component = Livewire::actingAs($user)
+        ->test('pages::reports.customer-outstanding-payments')
+        ->assertSeeText('Settle Co')
+        ->call('toggleSettled', $invoice->id)
+        ->assertDontSeeText('Settle Co');
+
+    expect($invoice->refresh()->is_settled)->toBeTrue();
+
+    $component->set('showPaid', true)
+        ->assertSeeText('Settle Co');
+
+    $component->call('toggleSettled', $invoice->id)
+        ->assertSeeText('Settle Co');
+
+    expect($invoice->refresh()->is_settled)->toBeFalse();
+});
+
 test('sending the report requires at least one recipient and at least one format', function () {
     $user = User::factory()->staff()->create(['email_verified_at' => now()]);
     $customer = Customer::factory()->create();

@@ -40,6 +40,9 @@ new #[Title('Customer Outstanding Payments')] class extends Component
     #[Url(as: 'osmax', except: '')]
     public string $osMax = '';
 
+    #[Url(as: 'paid', except: false)]
+    public bool $showPaid = false;
+
     public int $perPage = 100;
 
     /** @var array<int, string> */
@@ -90,9 +93,20 @@ new #[Title('Customer Outstanding Payments')] class extends Component
         $this->resetPage();
     }
 
+    public function updatedShowPaid(): void
+    {
+        $this->resetPage();
+    }
+
     public function updatedPerPage(): void
     {
         $this->resetPage();
+    }
+
+    public function toggleSettled(int $invoiceId): void
+    {
+        $invoice = Document::invoices()->findOrFail($invoiceId);
+        $invoice->update(['is_settled' => ! $invoice->is_settled]);
     }
 
     public function clearFilters(): void
@@ -121,6 +135,7 @@ new #[Title('Customer Outstanding Payments')] class extends Component
             'amountMax' => $this->amountMax,
             'osMin' => $this->osMin,
             'osMax' => $this->osMax,
+            'showPaid' => $this->showPaid,
         ];
     }
 
@@ -207,6 +222,8 @@ new #[Title('Customer Outstanding Payments')] class extends Component
             />
 
             <div class="ml-auto flex items-center gap-2">
+                <flux:switch wire:model.live="showPaid" label="Show paid invoices" align="left" />
+
                 <x-ui.per-page-select />
 
                 <flux:button icon="envelope" x-on:click="$flux.modal('send-report').show()">{{ __('Send Report') }}</flux:button>
@@ -277,6 +294,7 @@ new #[Title('Customer Outstanding Payments')] class extends Component
                             <th class="px-2 py-1 text-left text-xs font-bold uppercase tracking-wider text-zinc-900">Invoice</th>
                             <th class="px-2 py-1 text-right text-xs font-bold uppercase tracking-wider text-zinc-900">Total</th>
                             <th class="px-2 py-1 text-right text-xs font-bold uppercase tracking-wider text-zinc-900">O/S</th>
+                            <th class="px-2 py-1 text-center text-xs font-bold uppercase tracking-wider text-zinc-900">Settled</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -290,7 +308,7 @@ new #[Title('Customer Outstanding Payments')] class extends Component
                                 @php
                                     $outstanding = $this->outstanding($invoice);
                                 @endphp
-                                <tr class="{{ $bandClass }} border-b border-zinc-100 transition-colors hover:bg-indigo-50/40 dark:border-white/[0.04] dark:hover:bg-indigo-500/5">
+                                <tr wire:key="invoice-{{ $invoice->id }}" class="{{ $bandClass }} border-b border-zinc-100 transition-colors hover:bg-indigo-50/40 dark:border-white/[0.04] dark:hover:bg-indigo-500/5">
                                     @if($loop->first)
                                         <td rowspan="{{ $customer->invoices->count() + 1 }}" class="border-r border-zinc-200 px-2 py-1 align-top font-semibold text-zinc-900 dark:border-white/10 dark:text-white">
                                             <a href="{{ route('customers.show', $customer) }}" wire:navigate class="hover:underline">
@@ -307,13 +325,20 @@ new #[Title('Customer Outstanding Payments')] class extends Component
                                     </td>
                                     <td class="px-2 py-1 text-right font-mono tabular-nums text-zinc-900 dark:text-white">£{{ number_format($invoice->total_value, 2) }}</td>
                                     <td class="px-2 py-1 text-right font-mono tabular-nums font-medium text-amber-600 dark:text-amber-400">£{{ number_format($outstanding, 2) }}</td>
+                                    <td class="px-2 py-1 text-center">
+                                        <flux:switch
+                                            wire:click="toggleSettled({{ $invoice->id }})"
+                                            :checked="$invoice->is_settled"
+                                        />
+                                    </td>
                                 </tr>
                             @endforeach
-                            <tr class="{{ $bandClass }} border-b-2 border-zinc-200 dark:border-white/10">
+                            <tr wire:key="customer-{{ $customer->id }}-total" class="{{ $bandClass }} border-b-2 border-zinc-200 dark:border-white/10">
                                 <td class="px-2 py-1"></td>
                                 <td class="px-2 py-1"></td>
                                 <td class="px-2 py-1 text-right font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400">£{{ number_format($customerTotal, 2) }}</td>
                                 <td class="px-2 py-1 text-right font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400">£{{ number_format($customerOutstanding, 2) }}</td>
+                                <td class="px-2 py-1"></td>
                             </tr>
                         @endforeach
                     </tbody>
