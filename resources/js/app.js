@@ -1423,9 +1423,9 @@ document.addEventListener('alpine:init', () => {
 
     // ─── Supplier Invoice Line Form Component ───────────────────
     window.Alpine.data('supplierInvoiceLineForm', (initialRows = [], vatRate = 20) => ({
-        rows: initialRows.length ? initialRows : [{ product_code: '', quantity: 1, unit_amount: '', vat_applicable: false }],
+        rows: initialRows.length ? initialRows : [{ product_code: '', invoice_no: '', quantity: 1, unit_amount: '', vat_applicable: false }],
         vatRate,
-        _rowDefault: { product_code: '', quantity: 1, unit_amount: '', vat_applicable: false },
+        _rowDefault: { product_code: '', invoice_no: '', quantity: 1, unit_amount: '', vat_applicable: false },
         _rowCells: 'input, select',
 
         init() {

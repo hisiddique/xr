@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\SupplierCategory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -41,6 +42,7 @@ class Supplier extends Model
     protected $fillable = [
         'legacy_uid',
         'company_name',
+        'category',
         'reference',
         'title_id',
         'first_name',
@@ -61,12 +63,17 @@ class Supplier extends Model
         'updated_at',
     ];
 
+    protected $attributes = [
+        'category' => 'trading',
+    ];
+
     protected function casts(): array
     {
         return [
             'trade_discount' => 'decimal:2',
             'vat_applied' => 'boolean',
             'vat_registered' => 'boolean',
+            'category' => SupplierCategory::class,
         ];
     }
 

@@ -6,6 +6,7 @@ use Database\Factories\OverheadFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Overhead extends Model
@@ -42,5 +43,10 @@ class Overhead extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(ExpenseCategory::class, 'category_id');
+    }
+
+    public function supplierInvoice(): HasOne
+    {
+        return $this->hasOne(SupplierInvoice::class);
     }
 }

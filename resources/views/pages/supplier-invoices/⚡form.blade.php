@@ -1,9 +1,15 @@
 <?php
 
+use App\Models\ExpenseCategory;
+use App\Models\LookupPaymentMethod;
+use App\Models\Overhead;
 use App\Models\Setting;
+use App\Models\Supplier;
 use App\Models\SupplierInvoice;
+use App\SupplierCategory;
 use Flux\Flux;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -18,6 +24,10 @@ new #[Title('Supplier Invoice')] class extends Component {
     public string $supplierName = '';
     public string $invoice_date = '';
     public string $notes = '';
+    public bool $addOverheadExpense = false;
+    public ?int $overhead_category_id = null;
+    public string $overhead_payment_method = '';
+    public bool $overhead_has_vat = false;
     public float $vatRate = 20.0;
     public array $items = [];
     public array $existingAttachments = [];
@@ -30,14 +40,28 @@ new #[Title('Supplier Invoice')] class extends Component {
         $this->vatRate = (float) Setting::get('vat_rate', 20);
 
         if ($this->supplierInvoice) {
-            $this->supplierInvoice->load(['supplier', 'items']);
+            $this->supplierInvoice->load(['supplier', 'items', 'overhead']);
             $this->supplier_id = $this->supplierInvoice->supplier_id;
             $this->supplierName = $this->supplierInvoice->supplier->typeahead_label;
             $this->invoice_date = $this->supplierInvoice->invoice_date->format('Y-m-d');
             $this->notes = $this->supplierInvoice->notes ?? '';
             $this->existingAttachments = $this->supplierInvoice->attachments ?? [];
+
+            // NOTE: if the supplier's category has since changed away from OverheadExpenses,
+            // this hydrated state remains but the checkbox/card are hidden by the Blade's
+            // supplierCategory guard. save() still preserves the existing linked Overhead
+            // untouched in that case.
+            if ($this->supplierInvoice->overhead) {
+                $overhead = $this->supplierInvoice->overhead;
+                $this->addOverheadExpense = true;
+                $this->overhead_category_id = $overhead->category_id;
+                $this->overhead_payment_method = $overhead->payment_method;
+                $this->overhead_has_vat = (bool) $overhead->has_vat;
+            }
+
             $this->items = $this->supplierInvoice->items->map(fn ($item) => [
                 'product_code' => $item->product_code ?? '',
+                'invoice_no' => $item->invoice_no ?? '',
                 'quantity' => (float) $item->quantity,
                 'unit_amount' => (float) $item->unit_amount,
                 'vat_applicable' => (bool) $item->vat_applicable,
@@ -45,7 +69,7 @@ new #[Title('Supplier Invoice')] class extends Component {
             $this->selectedDebitNoteIds = $this->supplierInvoice->debitNotes()->pluck('supplier_debit_notes.id')->toArray();
         } else {
             $this->invoice_date = now()->format('Y-m-d');
-            $this->items = [['product_code' => '', 'quantity' => 1, 'unit_amount' => '', 'vat_applicable' => false]];
+            $this->items = [['product_code' => '', 'invoice_no' => '', 'quantity' => 1, 'unit_amount' => '', 'vat_applicable' => false]];
         }
     }
 
@@ -118,12 +142,37 @@ new #[Title('Supplier Invoice')] class extends Component {
         });
     }
 
+    #[Computed]
+    public function supplierCategory(): ?SupplierCategory
+    {
+        if (! $this->supplier_id) {
+            return null;
+        }
+
+        return Supplier::withTrashed()->find($this->supplier_id)?->category;
+    }
+
+    #[Computed]
+    public function overheadCategories()
+    {
+        return ExpenseCategory::orderBy('name')->get();
+    }
+
+    #[Computed]
+    public function paymentMethods()
+    {
+        return LookupPaymentMethod::orderBy('name')->get();
+    }
+
     public function save(): void
     {
         $this->validate([
             'supplier_id' => 'required|integer|exists:suppliers,id',
             'invoice_date' => 'required|date',
             'notes' => 'nullable|string|max:5000',
+            'overhead_category_id' => [Rule::requiredIf(fn () => $this->addOverheadExpense), 'nullable', 'integer', 'exists:expense_categories,id'],
+            'overhead_payment_method' => [Rule::requiredIf(fn () => $this->addOverheadExpense), 'nullable', 'string', 'max:50'],
+            'overhead_has_vat' => 'boolean',
             'newAttachments.*' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:10240',
         ]);
 
@@ -141,22 +190,52 @@ new #[Title('Supplier Invoice')] class extends Component {
             $invoice = $this->supplierInvoice;
         }
 
-        $this->items = array_values(array_filter($this->items, fn ($row) => trim((string) ($row['product_code'] ?? '')) !== ''
-            || (float) ($row['unit_amount'] ?? 0) > 0
-        ));
+        $this->items = array_values(array_filter($this->items, fn ($row) => (float) ($row['unit_amount'] ?? 0) > 0));
 
         $invoice->items()->delete();
         foreach ($this->items as $i => $row) {
             $qty = (float) ($row['quantity'] ?? 0);
             $unit = (float) ($row['unit_amount'] ?? 0);
             $invoice->items()->create([
-                'product_code' => $row['product_code'] ?: null,
+                'product_code' => null,
+                'invoice_no' => ($row['invoice_no'] ?? null) ?: null,
                 'quantity' => $qty,
                 'unit_amount' => $unit,
                 'vat_applicable' => (bool) ($row['vat_applicable'] ?? false),
                 'line_total' => round($qty * $unit, 2),
                 'sort_order' => $i,
             ]);
+        }
+
+        $invoice->unsetRelation('items');
+
+        if ($this->addOverheadExpense) {
+            $grossTotal = $invoice->grossTotal;
+
+            if ($grossTotal > 0) {
+                $overheadData = [
+                    'category_id' => $this->overhead_category_id,
+                    'expense_date' => $this->invoice_date,
+                    'amount' => $grossTotal,
+                    'has_vat' => $this->overhead_has_vat,
+                    'payment_method' => $this->overhead_payment_method,
+                ];
+
+                if ($invoice->overhead_id) {
+                    $invoice->overhead->update($overheadData);
+                } else {
+                    $overhead = Overhead::create($overheadData);
+                    $invoice->update(['overhead_id' => $overhead->id]);
+                }
+            } elseif ($invoice->overhead_id) {
+                $overheadToDelete = $invoice->overhead;
+                $invoice->update(['overhead_id' => null]);
+                $overheadToDelete->delete();
+            }
+        } elseif ($invoice->overhead_id) {
+            $overheadToDelete = $invoice->overhead;
+            $invoice->update(['overhead_id' => null]);
+            $overheadToDelete->delete();
         }
 
         foreach ($this->markedForDeletion as $idx) {
@@ -345,6 +424,54 @@ new #[Title('Supplier Invoice')] class extends Component {
 
                     <flux:input wire:model="invoice_date" type="date" :label="__('Invoice Date')" required />
 
+                    @if($this->supplierCategory)
+                        <flux:input
+                            :value="$this->supplierCategory->label()"
+                            :label="__('Supplier Category')"
+                            disabled
+                            readonly
+                        />
+                    @endif
+
+                    @if($this->supplierCategory === \App\SupplierCategory::OverheadExpenses)
+                        <div class="md:col-span-2 flex items-center gap-3">
+                            <flux:checkbox wire:model.live="addOverheadExpense" id="add_overhead_expense" />
+                            <flux:label for="add_overhead_expense">{{ __('Add Overhead Expense') }}</flux:label>
+                        </div>
+                    @endif
+
+                    @if($this->supplierCategory === \App\SupplierCategory::OverheadExpenses && $addOverheadExpense)
+                        <div class="md:col-span-2 rounded-lg border border-sky-200 bg-sky-50 p-4 dark:border-sky-700/30 dark:bg-sky-500/5">
+                            <h3 class="mb-3 text-sm font-semibold text-sky-800 dark:text-sky-400">Overhead Expense Details</h3>
+                            <div class="grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <flux:label>{{ __('Overhead Expense Category') }} <span class="text-red-500">*</span></flux:label>
+                                    <flux:select wire:model="overhead_category_id" class="mt-1.5">
+                                        <flux:select.option value="">— Select category —</flux:select.option>
+                                        @foreach($this->overheadCategories as $category)
+                                            <flux:select.option :value="$category->id">{{ $category->name }}</flux:select.option>
+                                        @endforeach
+                                    </flux:select>
+                                    @error('overhead_category_id') <flux:error>{{ $message }}</flux:error> @enderror
+                                </div>
+                                <div>
+                                    <flux:label>{{ __('Payment Method') }} <span class="text-red-500">*</span></flux:label>
+                                    <flux:select wire:model="overhead_payment_method" class="mt-1.5">
+                                        <flux:select.option value="">— Select method —</flux:select.option>
+                                        @foreach($this->paymentMethods as $method)
+                                            <flux:select.option value="{{ $method->name }}">{{ $method->name }}</flux:select.option>
+                                        @endforeach
+                                    </flux:select>
+                                    @error('overhead_payment_method') <flux:error>{{ $message }}</flux:error> @enderror
+                                </div>
+                            </div>
+                            <div class="mt-4 flex items-center gap-3">
+                                <flux:checkbox wire:model="overhead_has_vat" id="overhead_has_vat" />
+                                <flux:label for="overhead_has_vat">{{ __('Include VAT') }}</flux:label>
+                            </div>
+                        </div>
+                    @endif
+
                     <div class="md:col-span-2">
                         <flux:textarea
                             wire:model="notes"
@@ -409,8 +536,7 @@ new #[Title('Supplier Invoice')] class extends Component {
                         <table class="w-full text-sm">
                             <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                                 <tr>
-                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Product Code / Ledger Narrative</th>
-                                    <th class="w-24 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Qty</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Supplier Invoice Number</th>
                                     <th class="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Unit Net (£)</th>
                                     <th class="w-24 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT</th>
                                     <th class="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Line Gross (£)</th>
@@ -423,20 +549,10 @@ new #[Title('Supplier Invoice')] class extends Component {
                                         <td class="px-4 py-2.5">
                                             <input
                                                 type="text"
-                                                x-model="row.product_code"
+                                                x-model="row.invoice_no"
                                                 data-row-details
-                                                placeholder="Product code or description…"
+                                                placeholder="Invoice #"
                                                 class="w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
-                                            />
-                                        </td>
-                                        <td class="px-4 py-2.5">
-                                            <input
-                                                type="number"
-                                                x-model.number="row.quantity"
-                                                data-row-qty
-                                                step="1"
-                                                min="0"
-                                                class="w-20 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-right text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                             />
                                         </td>
                                         <td class="px-4 py-2.5 text-right">

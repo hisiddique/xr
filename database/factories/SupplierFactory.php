@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\User;
+use App\SupplierCategory;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class SupplierFactory extends Factory
@@ -11,6 +12,7 @@ class SupplierFactory extends Factory
     {
         return [
             'company_name' => $this->faker->company(),
+            'category' => SupplierCategory::Trading->value,
             'reference' => strtoupper($this->faker->bothify('SUP-####')),
             'first_name' => $this->faker->firstName(),
             'last_name' => $this->faker->lastName(),

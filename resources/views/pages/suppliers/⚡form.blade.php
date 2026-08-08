@@ -4,6 +4,7 @@ use App\Models\LookupCreditLimit;
 use App\Models\LookupCreditTerm;
 use App\Models\LookupTitle;
 use App\Models\Supplier;
+use App\SupplierCategory;
 use Flux\Flux;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -13,6 +14,7 @@ new #[Title('Supplier')] class extends Component {
     public ?Supplier $supplier = null;
 
     public string $company_name = '';
+    public string $category = 'trading';
     public string $reference = '';
     public ?int $title_id = null;
     public string $first_name = '';
@@ -33,6 +35,7 @@ new #[Title('Supplier')] class extends Component {
     {
         if ($this->supplier) {
             $this->company_name = $this->supplier->company_name;
+            $this->category = $this->supplier->category->value;
             $this->reference = $this->supplier->reference ?? '';
             $this->title_id = $this->supplier->title_id;
             $this->first_name = $this->supplier->first_name ?? '';
@@ -59,6 +62,7 @@ new #[Title('Supplier')] class extends Component {
 
         $validated = $this->validate([
             'company_name' => 'required|string|max:255',
+            'category' => 'required|in:overhead_expenses,trading',
             'reference' => $referenceRule,
             'title_id' => 'nullable|integer|exists:lookup_titles,id',
             'first_name' => 'nullable|string|max:100',
@@ -152,6 +156,13 @@ new #[Title('Supplier')] class extends Component {
                         <flux:radio :value="1" :label="__('Yes')" />
                         <flux:radio :value="0" :label="__('No')" />
                     </flux:radio.group>
+                </div>
+                <div class="mt-4 grid gap-4 md:grid-cols-2">
+                    <flux:select wire:model="category" :label="__('Category')">
+                        @foreach(\App\SupplierCategory::cases() as $case)
+                            <flux:select.option :value="$case->value">{{ $case->label() }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
                 </div>
             </div>
 

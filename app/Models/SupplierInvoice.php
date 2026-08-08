@@ -18,6 +18,7 @@ class SupplierInvoice extends Model
     protected $fillable = [
         'legacy_uid',
         'supplier_invoice_no',
+        'overhead_id',
         'supplier_id',
         'invoice_date',
         'due_date',
@@ -69,6 +70,11 @@ class SupplierInvoice extends Model
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class)->withTrashed();
+    }
+
+    public function overhead(): BelongsTo
+    {
+        return $this->belongsTo(Overhead::class);
     }
 
     public function creator(): BelongsTo
