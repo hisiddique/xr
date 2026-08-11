@@ -46,7 +46,7 @@ class SupplierInvoice extends Model
         return DB::transaction(function (): string {
             $prefix = strtoupper((string) Setting::get('supinv_prefix', 'SUPINV'));
             $padding = (int) Setting::get('number_padding', 4);
-            $highest = static::query()
+            $highest = static::withTrashed()
                 ->where('supplier_invoice_no', 'LIKE', $prefix.'-%')
                 ->lockForUpdate()
                 ->pluck('supplier_invoice_no')

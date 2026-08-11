@@ -45,6 +45,15 @@ test('number generation is gap-safe after delete', function () {
     expect($third->supplier_invoice_no)->toBe('SUPINV-0003');
 });
 
+test('does not reuse the number of a soft-deleted highest invoice', function () {
+    $invoice = SupplierInvoice::factory()->create(['created_by' => $this->user->id]);
+    $invoice->delete();
+
+    $next = SupplierInvoice::factory()->create(['created_by' => $this->user->id]);
+
+    expect($next->supplier_invoice_no)->toBe('SUPINV-0002');
+});
+
 // ── Totals calculation ─────────────────────────────────────────
 test('grossTotal adds vat on top of net line totals', function () {
     $invoice = SupplierInvoice::factory()
