@@ -854,6 +854,7 @@ new #[Title('Payment')] class extends Component {
             <div
                 wire:ignore
                 x-data="paymentAllocator({ rows: @js($this->invoiceRows), hasMore: @js($this->hasMoreInvoices) })"
+                x-on:keydown="handleKey($event)"
                 @save-payment-form.window="$wire.save(relevantRows)"
                 @payment-rows-updated.window="rows = $event.detail.rows.map(r => ({ ...r, amount: r.existing_allocation })); hasMore = $event.detail.hasMore"
                 @payment-rows-appended.window="appendRows($event.detail.rows, $event.detail.hasMore)"
@@ -913,6 +914,7 @@ new #[Title('Payment')] class extends Component {
                                                             min="0"
                                                             :max="row.max_allocatable"
                                                             x-model="row.amount"
+                                                            data-payment-alloc-input
                                                             @blur="row.amount = Math.min(parseFloat(row.amount)||0, row.max_allocatable)"
                                                             @focus="focusRow(row)"
                                                             class="w-28 rounded-lg border border-zinc-300 px-2 py-1 text-right font-mono text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"

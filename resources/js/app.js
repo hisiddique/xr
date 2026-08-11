@@ -1898,6 +1898,22 @@ document.addEventListener('alpine:init', () => {
                 row.amount = Math.round(suggested * 100) / 100;
             }
         },
+        _allocInputs() {
+            return Array.from(this.$el.querySelectorAll('[data-payment-alloc-input]'))
+                .filter(f => f.offsetParent !== null);
+        },
+        handleKey(e) {
+            if (!e.target.hasAttribute('data-payment-alloc-input')) return;
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            e.preventDefault();
+            const inputs = this._allocInputs();
+            const idx = inputs.indexOf(e.target);
+            const next = inputs[idx + (e.key === 'ArrowDown' ? 1 : -1)];
+            if (next) {
+                next.focus();
+                if (typeof next.select === 'function') next.select();
+            }
+        },
     }));
 
     window.Alpine.data('supplierDebitNoteItems', (initialItems) => ({
