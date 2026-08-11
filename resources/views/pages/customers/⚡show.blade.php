@@ -3,7 +3,11 @@
 use App\Models\Customer;
 use App\Models\Document;
 use App\Services\CreditTermDueDateCalculator;
+use App\Traits\WithPerPage;
 use Carbon\Carbon;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
@@ -13,11 +17,17 @@ use Livewire\WithPagination;
 
 new #[Title('Customer Details')] class extends Component {
     use WithPagination;
+    use WithPerPage;
 
     public Customer $customer;
 
     #[Url(as: 'tab')]
     public string $activeTab = 'transaction-history';
+
+    #[Url(as: 'ledger_search')]
+    public string $ledgerSearch = '';
+
+    public int $perPage = 25;
 
     #[Computed]
     public function availableCredit(): float
@@ -98,7 +108,44 @@ new #[Title('Customer Details')] class extends Component {
     }
 
     #[Computed]
-    public function transactionLedger(): array
+    public function transactionLedger(): LengthAwarePaginator
+    {
+        $rows = $this->buildTransactionLedgerRows();
+
+        if ($this->ledgerSearch !== '') {
+            $term = mb_strtolower($this->ledgerSearch);
+            $rows = array_values(array_filter($rows, function (array $row) use ($term) {
+                $haystack = mb_strtolower(implode(' ', array_filter([
+                    $row['ref_no'],
+                    $row['order_ref'],
+                    $row['method_label'] ?? null,
+                    match ($row['type']) {
+                        'invoice' => 'invoice',
+                        'credit_note' => 'credit note',
+                        'payment' => 'payment',
+                    },
+                ])));
+
+                return str_contains($haystack, $term);
+            }));
+        }
+
+        $page = Paginator::resolveCurrentPage('ledger_page');
+        $items = Collection::make($rows);
+
+        return new LengthAwarePaginator(
+            $items->forPage($page, $this->perPage)->values(),
+            $items->count(),
+            $this->perPage,
+            $page,
+            ['pageName' => 'ledger_page'],
+        );
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    protected function buildTransactionLedgerRows(): array
     {
         $invoices = $this->customer->invoices()
             ->with(['paymentAllocations.payment.paymentMethod', 'creditAllocationsReceived.creditNote'])
@@ -203,7 +250,18 @@ new #[Title('Customer Details')] class extends Component {
         $this->resetPage('dn_page');
         $this->resetPage('cn_page');
         $this->resetPage('pay_page');
+        $this->resetPage('ledger_page');
         unset($this->invoices, $this->deliveryNotes, $this->creditNotes, $this->payments, $this->transactionLedger);
+    }
+
+    public function updatedLedgerSearch(): void
+    {
+        $this->resetPage('ledger_page');
+    }
+
+    public function updatedPerPage(): void
+    {
+        $this->resetPage('ledger_page');
     }
 
     #[On('customer-deleted')]
@@ -479,11 +537,23 @@ new #[Title('Customer Details')] class extends Component {
 
         {{-- Transaction History panel --}}
         @if($activeTab === 'transaction-history')
-            @if(empty($this->transactionLedger))
+            <div class="flex items-center justify-between gap-3 border-b border-zinc-200 p-3 dark:border-white/10">
+                <flux:input
+                    wire:model.live.debounce.300ms="ledgerSearch"
+                    autocomplete="off"
+                    icon="magnifying-glass"
+                    :placeholder="__('Search by ref, order ref or type…')"
+                    clearable
+                    class="max-w-sm"
+                />
+                <x-ui.per-page-select />
+            </div>
+
+            @if($this->transactionLedger->isEmpty())
                 <x-ui.empty-state
                     icon="clock"
                     title="No transactions yet"
-                    description="Invoices, credit notes, and payments for this customer will appear here."
+                    :description="$ledgerSearch !== '' ? 'Try adjusting your search.' : 'Invoices, credit notes, and payments for this customer will appear here.'"
                 />
             @else
                 <div class="overflow-x-auto">
@@ -556,6 +626,10 @@ new #[Title('Customer Details')] class extends Component {
                             @endforeach
                         </tbody>
                     </table>
+                </div>
+
+                <div class="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800">
+                    <flux:pagination :paginator="$this->transactionLedger" />
                 </div>
 
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4 px-4 pb-4">
