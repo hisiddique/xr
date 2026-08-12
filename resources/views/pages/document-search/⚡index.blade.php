@@ -327,7 +327,7 @@ new #[Title('Document Search')] class extends Component
         @else
             <div class="max-h-[50vh] overflow-y-auto overflow-x-auto">
                 <table class="w-full text-sm">
-                    <thead class="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-800/50">
+                    <thead class="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-800">
                         <tr>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Doc #</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
@@ -404,7 +404,7 @@ new #[Title('Document Search')] class extends Component
         @else
             <div class="max-h-[35vh] overflow-y-auto overflow-x-auto">
                 <table class="w-full text-sm">
-                    <thead class="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-800/50">
+                    <thead class="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-800">
                         <tr>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">#</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
