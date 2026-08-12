@@ -22,7 +22,7 @@ class CustomerOutstandingExportController extends Controller
         return match ($format) {
             'csv' => $this->reportService->streamCsv($data),
             'xlsx' => $this->reportService->streamXlsx($data),
-            default => $this->reportService->streamPdf($data),
+            default => $this->reportService->streamPdf($data, $request->boolean('inline')),
         };
     }
 }

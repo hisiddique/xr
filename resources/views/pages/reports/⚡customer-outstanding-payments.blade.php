@@ -146,6 +146,13 @@ new #[Title('Customer Outstanding Payments')] class extends Component
         return route('reports.customer-outstanding-payments.export', array_merge(['format' => $format], $params));
     }
 
+    public function printUrl(): string
+    {
+        $params = array_filter($this->filters(), fn ($value) => $value !== null && $value !== '');
+
+        return route('reports.customer-outstanding-payments.export', array_merge(['format' => 'pdf', 'inline' => 1], $params));
+    }
+
     #[Computed]
     public function customers()
     {
@@ -227,6 +234,8 @@ new #[Title('Customer Outstanding Payments')] class extends Component
                 <x-ui.per-page-select />
 
                 <flux:button icon="envelope" x-on:click="$flux.modal('send-report').show()">{{ __('Send Report') }}</flux:button>
+
+                <flux:button icon="printer" x-on:click="window.printPdfDocument('{{ $this->printUrl() }}')">{{ __('Print') }}</flux:button>
 
                 <flux:dropdown>
                     <flux:button icon="arrow-down-tray" icon-trailing="chevron-down">{{ __('Export') }}</flux:button>

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ConvertDeliveryNoteController;
 use App\Http\Controllers\CustomerOutstandingExportController;
+use App\Http\Controllers\CustomerStatementController;
 use App\Http\Controllers\DocumentPdfController;
 use App\Http\Controllers\SupplierInvoiceAttachmentController;
 use Illuminate\Support\Facades\Route;
@@ -18,6 +19,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('customers/create', 'pages::customers.create')->name('customers.create');
     Route::livewire('customers/{customer}/edit', 'pages::customers.edit')->name('customers.edit');
     Route::livewire('customers/{customer}', 'pages::customers.show')->name('customers.show');
+    Route::get('customers/{customer}/statement', [CustomerStatementController::class, 'export'])->name('customers.statement.export');
 
     // Suppliers
     Route::livewire('suppliers', 'pages::suppliers.index')->name('suppliers.index');

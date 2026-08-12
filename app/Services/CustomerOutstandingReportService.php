@@ -286,11 +286,14 @@ class CustomerOutstandingReportService
     /**
      * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
      */
-    public function streamPdf(array $data): Response
+    public function streamPdf(array $data, bool $inline = false): Response
     {
-        return Pdf::loadView('pdfs.customer-outstanding', ['customers' => $data])
-            ->setOption('isPhpEnabled', true)
-            ->download('customer-outstanding-payments.pdf');
+        $pdf = Pdf::loadView('pdfs.customer-outstanding', ['customers' => $data])
+            ->setOption('isPhpEnabled', true);
+
+        return $inline
+            ? $pdf->stream('customer-outstanding-payments.pdf')
+            : $pdf->download('customer-outstanding-payments.pdf');
     }
 
     /**
