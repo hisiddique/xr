@@ -65,13 +65,13 @@
         .chrome > tbody > tr.headline > td { border: none !important; }
         .chrome > tbody > tr.headline .split td.left { border-right: none !important; }
 
-        /* Content box rails — fills the area from items down to the footer on every page. */
+        /* Content box rails — fills the area from items down to the aging block on every page. */
         .content-frame {
             position: fixed;
             left: 10mm;
             right: 10mm;
             top: 62mm;
-            bottom: 22mm;
+            bottom: 47mm;
             border-left: 1.25px solid #111827;
             border-right: 1.25px solid #111827;
             border-bottom: 1.25px solid #111827;
@@ -100,13 +100,19 @@
         .item-cell.right { text-align: right; }
         .item-cell.bold { font-weight: bold; }
 
-        /* Aging summary block — flows after the items table, only appears once at the true end
-           of the report (not repeated per page); margin-top keeps it visually separate. */
+        /* Aging summary block — glued to the page bottom (same fixed-position pattern as the
+           totals box in pdfs/document.blade.php), sitting in its own bordered box below the
+           items table rather than flowing inside it. */
+        .bottom-block {
+            position: fixed;
+            left: 10mm;
+            right: 10mm;
+            bottom: 22mm;
+            height: 24mm;
+        }
         .aging-box {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 14px;
-            page-break-inside: avoid;
         }
         .aging-box > tbody > tr > td {
             border: 1px solid #111827;
@@ -148,17 +154,18 @@
     </style>
 </head>
 @php
-    $companyName     = \App\Models\Setting::get('company_name', config('app.name'));
-    $companyTagline  = \App\Models\Setting::get('company_tagline', '');
-    $companyAddress  = \App\Models\Setting::get('company_address', '');
-    $companyEmail    = \App\Models\Setting::get('company_email', '');
-    $companyEmailAcc = \App\Models\Setting::get('company_email_accounts', '');
-    $companyTelSales = \App\Models\Setting::get('company_tel_sales', '');
-    $companyTelAcc   = \App\Models\Setting::get('company_tel_accounts', '');
-    $companyDirector   = \App\Models\Setting::get('company_director', '');
-    $companyRegNo      = \App\Models\Setting::get('company_registration_no', '');
-    $companyVatNo      = \App\Models\Setting::get('company_vat_no', '');
-    $companyRegAddress = \App\Models\Setting::get('company_registered_address', '');
+    $letterhead = app(\App\Services\CompanyLetterheadService::class);
+    $header = $letterhead->header();
+    $footer = $letterhead->footer();
+
+    // Same fixed-height-header technique as pdfs/document.blade.php: the page
+    // number below is drawn via dompdf's page_text() at fixed coordinates, which
+    // can't track dynamic content height, so CompanyLetterheadService reserves a
+    // constant number of address lines and this template only needs to adjust for
+    // the rare case where the address overflows that reservation.
+    $rowLinePx = 14; // ≈ rendered height (px) of one kv/address line
+    $headlineExtraPx = $header['addressOverflowLines'] * $rowLinePx;
+    $headlineExtraMm = $headlineExtraPx * 25.4 / 96;
 
     $custPerson = $customer ? trim(
         ($customer->title?->name ?? '').' '.
@@ -172,47 +179,23 @@
         $customer->post_code,
     ])->filter()->values() : collect();
 
-    $pageNumX = 365;
-    $pageNumY = 128;
+    $pageNumX = 358;
+    $pageNumY = 184 + $headlineExtraPx;
+    $headerTopMm = 80 + $headlineExtraMm;
 @endphp
 
-<body>
+<body style="padding-top: {{ $headerTopMm }}mm; padding-bottom: 47mm">
 
 {{-- Fixed page header: company chrome + customer/statement-meta bands --}}
 <div class="page-header">
     <table class="chrome">
         <tbody>
-            <tr class="headline">
-                <td>
-                    <table class="split"><tr>
-                        <td class="left">
-                            <div class="company-name">{{ $companyName }}</div>
-                            @if($companyTagline)
-                                <div class="company-tagline">{{ $companyTagline }}</div>
-                            @endif
-                        </td>
-                        <td class="right header-right">
-                            @if($companyAddress)
-                                {!! nl2br(e($companyAddress)) !!}
-                            @endif
-                            <table class="kv" style="margin-top: 2px">
-                                @if($companyTelSales)
-                                    <tr><td class="k">Tel Sales</td><td class="c">:</td><td>{{ $companyTelSales }}</td></tr>
-                                @endif
-                                @if($companyTelAcc)
-                                    <tr><td class="k">Accounts</td><td class="c">:</td><td>{{ $companyTelAcc }}</td></tr>
-                                @endif
-                                @if($companyEmail)
-                                    <tr><td class="k">E-Mail</td><td class="c">:</td><td>{{ $companyEmail }}</td></tr>
-                                @endif
-                                @if($companyEmailAcc)
-                                    <tr><td class="k">E-Mail</td><td class="c">:</td><td>{{ $companyEmailAcc }}</td></tr>
-                                @endif
-                            </table>
-                        </td>
-                    </tr></table>
-                </td>
-            </tr>
+            <x-pdf.letterhead-header
+                :name="$header['name']"
+                :tagline="$header['tagline']"
+                :address-lines="$header['addressLines']"
+                :kv-rows="$header['kvRows']"
+            />
             <tr>
                 <td>
                     <table class="split"><tr>
@@ -246,8 +229,8 @@
     </table>
 </div>
 
-{{-- Content box rails — fill the area down to the footer on every page --}}
-<div class="content-frame"></div>
+{{-- Content box rails — fill the area down to the aging block on every page --}}
+<div class="content-frame" style="top: {{ $headerTopMm }}mm"></div>
 
 {{-- Standalone items table; thead repeats on every page --}}
 <table class="items">
@@ -262,47 +245,58 @@
     </thead>
     <tbody>
         @foreach($invoices as $invoice)
+            @php($rowType = $invoice['row_type'] ?? 'invoice')
             <tr>
                 <td class="item-cell">{{ $invoice['doc_date'] ? \Carbon\Carbon::parse($invoice['doc_date'])->format('d.m.y') : '' }}</td>
-                <td class="item-cell">{{ trim($invoice['doc_number'].' '.($invoice['order_no'] ?? '')) }}</td>
-                <td class="item-cell right">£{{ number_format($invoice['total_value'], 2) }}</td>
+                <td class="item-cell">
+                    @if($rowType === 'credit_note')
+                        Credit Note {{ trim($invoice['doc_number'].' '.($invoice['order_no'] ? '(against '.$invoice['order_no'].')' : '')) }}
+                    @elseif($rowType === 'payment')
+                        Payment {{ trim($invoice['doc_number'].' '.($invoice['order_no'] ?? '')) }}
+                    @else
+                        {{ trim($invoice['doc_number'].' '.($invoice['order_no'] ?? '')) }}
+                    @endif
+                </td>
+                <td class="item-cell right">{{ $invoice['total_value'] > 0 ? '£'.number_format($invoice['total_value'], 2) : '' }}</td>
                 <td class="item-cell right">{{ $invoice['credited'] > 0 ? '£'.number_format($invoice['credited'], 2) : '' }}</td>
-                <td class="item-cell right bold">£{{ number_format($invoice['outstanding'], 2) }}</td>
+                <td class="item-cell right bold">{{ $rowType === 'invoice' ? '£'.number_format($invoice['outstanding'], 2) : '' }}</td>
             </tr>
         @endforeach
     </tbody>
 </table>
 
-{{-- Aging summary block — normal document flow, so it only ever appears once,
-     right after the last invoice row on the true last page. --}}
-<table class="aging-box">
-    <tbody>
-        <tr>
-            <td class="aging-header">
-                <table>
-                    <tr>
-                        <td>Overdue Amount:</td>
-                        <td class="right">Totals: £{{ number_format($aging['total'], 2) }}</td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-        <tr>
-            <td>
-                <table class="aging-cols">
-                    <tr>
-                        @foreach($aging['labels'] as $label => $amount)
-                            <td>
-                                <div class="aging-label">{{ $label }}</div>
-                                <div class="aging-amount">£{{ number_format($amount, 2) }}</div>
-                            </td>
-                        @endforeach
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </tbody>
-</table>
+{{-- Aging summary — glued to the page bottom in its own box, like the totals
+     box in pdfs/document.blade.php, rather than flowing inside the items table. --}}
+<div class="bottom-block">
+    <table class="aging-box">
+        <tbody>
+            <tr>
+                <td class="aging-header">
+                    <table>
+                        <tr>
+                            <td>Overdue Amount:</td>
+                            <td class="right">Totals: £{{ number_format($aging['total'], 2) }}</td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <table class="aging-cols">
+                        <tr>
+                            @foreach($aging['labels'] as $label => $amount)
+                                <td>
+                                    <div class="aging-label">{{ $label }}</div>
+                                    <div class="aging-amount">£{{ number_format($amount, 2) }}</div>
+                                </td>
+                            @endforeach
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
 
 {{-- Per-page Sheet No. drawn via inline PHP script into the empty value cell
      of the Sheet row in the header meta band — matches the document.blade.php
@@ -310,26 +304,17 @@
 <script type="text/php">
 if (isset($pdf)) {
     $font = $fontMetrics->getFont("DejaVu Sans", "normal");
-    $pdf->page_text({{ $pageNumX }}, {{ $pageNumY }}, "{PAGE_NUM} of {PAGE_COUNT}", $font, 7.875);
+    $pdf->page_text({{ $pageNumX }}, {{ $pageNumY }}, "{PAGE_NUM}", $font, 7.875);
 }
 </script>
 
 {{-- Fixed page footer (paints on every page) --}}
-<div class="page-footer">
-    @if($companyDirector)
-        <div class="director">Director: {{ $companyDirector }}</div>
-    @endif
-    @if($companyRegNo || $companyVatNo)
-        <div>
-            @if($companyRegNo)Registered in England: {{ $companyRegNo }}@endif
-            @if($companyRegNo && $companyVatNo), @endif
-            @if($companyVatNo)VAT No. {{ $companyVatNo }}@endif
-        </div>
-    @endif
-    @if($companyRegAddress)
-        <div>{{ $companyRegAddress }}</div>
-    @endif
-</div>
+<x-pdf.letterhead-footer
+    :director="$footer['director']"
+    :reg-no="$footer['regNo']"
+    :vat-no="$footer['vatNo']"
+    :reg-address="$footer['regAddress']"
+/>
 
 </body>
 </html>

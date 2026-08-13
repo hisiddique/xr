@@ -174,21 +174,16 @@
     $showPricing = $isPriced || (bool) $document->show_pricing;
     $cols = $isCN ? ($showPricing ? 6 : 3) : ($showPricing ? 5 : 3);
 
-    $companyName         = \App\Models\Setting::get('company_name', config('app.name'));
-    $companyTagline      = \App\Models\Setting::get('company_tagline', '');
-    $companyAddress      = \App\Models\Setting::get('company_address', '');
-    $companyEmail        = \App\Models\Setting::get('company_email', '');
-    $companyEmailAcc     = \App\Models\Setting::get('company_email_accounts', '');
-    $companyTelSales     = \App\Models\Setting::get('company_tel_sales', '');
-    $companyTelAcc       = \App\Models\Setting::get('company_tel_accounts', '');
-    $companyDirector     = $isDN
-        ? \App\Models\Setting::get('company_director_dn', \App\Models\Setting::get('company_director', ''))
-        : \App\Models\Setting::get('company_director', '');
-    $companyRegNo        = \App\Models\Setting::get('company_registration_no', '');
-    $companyVatNo        = \App\Models\Setting::get('company_vat_no', '');
+    $letterhead = app(\App\Services\CompanyLetterheadService::class);
+    $header = $letterhead->header();
+    $footer = $letterhead->footer(
+        $isDN
+            ? \App\Models\Setting::get('company_director_dn', \App\Models\Setting::get('company_director', ''))
+            : \App\Models\Setting::get('company_director', '')
+    );
+    $companyName         = $header['name'];
     $companyIso          = \App\Models\Setting::get('company_iso_cert', '');
     $companyCertNo       = \App\Models\Setting::get('certificate_of_conformity_no', '');
-    $companyRegAddress   = \App\Models\Setting::get('company_registered_address', '');
     $retentionClause     = \App\Models\Setting::get(
         'retention_of_title_clause',
         'By signing and accepting these goods you agree to our "RETENTION OF TITLE" terms and conditions, copy available on request. Loss, damage, discrepancy or non-delivery must be notified within five days of the Advice Note Date.'
@@ -213,8 +208,20 @@
     $bottomBlockBottomMm = $isDN ? 22 : 26;
     $bottomBlockHeightMm = $isDN ? 65 : 38;
 
+    // The "Sheet No." page number is drawn via dompdf's page_text() at fixed
+    // coordinates, which can't track dynamic content height. CompanyLetterheadService
+    // reserves a fixed number of address lines — same as the always-rendered kv rows —
+    // so the header height (and therefore the page-number position) stays constant for
+    // any address up to that length; only the rare overflow case needs an adjustment.
+    $rowLinePx = 14; // ≈ rendered height (px) of one kv/address line — matches the existing order_no row offset below
+    $headlineExtraPx = $header['addressOverflowLines'] * $rowLinePx;
+    $headlineExtraMm = $headlineExtraPx * 25.4 / 96;
+
     $pageNumX = 393;
-    $pageNumY = 197 + ($document->order_no ? 14 : 0);
+    $pageNumY = 197
+        + ($document->order_no ? 14 : 0)
+        + ($isCN && $creditedInvoice ? 14 : 0)
+        + $headlineExtraPx;
 
     $metaCharsPerLine = 56;
     $visualLines = fn (?string $text) => $text ? max(1, (int) ceil(mb_strlen($text) / $metaCharsPerLine)) : 0;
@@ -222,7 +229,7 @@
         + $visualLines($custPerson)
         + $custAddressLines->sum($visualLines);
     $rightMetaLines = 6 + ($document->order_no ? 1 : 0) + ($isCN && $creditedInvoice ? 1 : 0);
-    $headerTopMm = 77 + max(0, max($leftMetaLines, $rightMetaLines) - 6) * 4.0;
+    $headerTopMm = 77 + max(0, max($leftMetaLines, $rightMetaLines) - 6) * 4.0 + $headlineExtraMm;
 @endphp
 
 <body style="padding: {{ $headerTopMm }}mm 10mm {{ $bottomPaddingMm }}mm 10mm">
@@ -231,37 +238,12 @@
 <div class="page-header">
     <table class="chrome">
         <tbody>
-            <tr class="headline">
-                <td>
-                    <table class="split"><tr>
-                        <td class="left">
-                            <div class="company-name">{{ $companyName }}</div>
-                            @if($companyTagline)
-                                <div class="company-tagline">{{ $companyTagline }}</div>
-                            @endif
-                        </td>
-                        <td class="right header-right">
-                            @if($companyAddress)
-                                {!! nl2br(e($companyAddress)) !!}
-                            @endif
-                            <table class="kv" style="margin-top: 2px">
-                                @if($companyTelSales)
-                                    <tr><td class="k">Tel Sales</td><td class="c">:</td><td>{{ $companyTelSales }}</td></tr>
-                                @endif
-                                @if($companyTelAcc)
-                                    <tr><td class="k">Accounts</td><td class="c">:</td><td>{{ $companyTelAcc }}</td></tr>
-                                @endif
-                                @if($companyEmail)
-                                    <tr><td class="k">E-Mail</td><td class="c">:</td><td>{{ $companyEmail }}</td></tr>
-                                @endif
-                                @if($companyEmailAcc)
-                                    <tr><td class="k">E-Mail</td><td class="c">:</td><td>{{ $companyEmailAcc }}</td></tr>
-                                @endif
-                            </table>
-                        </td>
-                    </tr></table>
-                </td>
-            </tr>
+            <x-pdf.letterhead-header
+                :name="$header['name']"
+                :tagline="$header['tagline']"
+                :address-lines="$header['addressLines']"
+                :kv-rows="$header['kvRows']"
+            />
             <tr>
                 <td>
                     <table class="split"><tr>
@@ -569,21 +551,12 @@ if (isset($pdf)) {
 </script>
 
 {{-- Fixed page footer (paints on every page) --}}
-<div class="page-footer">
-    @if($companyDirector)
-        <div class="director">Director: {{ $companyDirector }}</div>
-    @endif
-    @if($companyRegNo || $companyVatNo)
-        <div>
-            @if($companyRegNo)Registered in England: {{ $companyRegNo }}@endif
-            @if($companyRegNo && $companyVatNo), @endif
-            @if($companyVatNo)VAT No. {{ $companyVatNo }}@endif
-        </div>
-    @endif
-    @if($companyRegAddress)
-        <div>{{ $companyRegAddress }}</div>
-    @endif
-</div>
+<x-pdf.letterhead-footer
+    :director="$footer['director']"
+    :reg-no="$footer['regNo']"
+    :vat-no="$footer['vatNo']"
+    :reg-address="$footer['regAddress']"
+/>
 
 </body>
 </html>

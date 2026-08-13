@@ -2,6 +2,7 @@
 
 use App\Models\Customer;
 use App\Models\Document;
+use App\Models\Payment;
 use App\Services\CustomerStatementService;
 
 test('buildInvoiceRows filters invoices by date range', function () {
@@ -83,4 +84,42 @@ test('agingBuckets sums outstanding amounts into the correct month bucket', func
 
     expect($aging['labels'][$lastMonthLabel])->toBe(75.0)
         ->and($aging['total'])->toBe(75.0);
+});
+
+test('buildStatementRows includes credit notes and payments without double-counting the aging total', function () {
+    $customer = Customer::factory()->create();
+    $service = app(CustomerStatementService::class);
+
+    $invoice = Document::factory()->invoice()->create([
+        'customer_id' => $customer->id,
+        'doc_date' => now()->subMonthNoOverflow(),
+        'total_value' => 300,
+    ]);
+
+    Document::factory()->creditNote()->create([
+        'customer_id' => $customer->id,
+        'doc_date' => now()->subMonthNoOverflow(),
+        'total_value' => 50,
+        'credited_invoice_id' => $invoice->id,
+    ]);
+
+    Payment::factory()->create([
+        'customer_id' => $customer->id,
+        'payment_date' => now()->subMonthNoOverflow(),
+        'amount' => 100,
+    ]);
+
+    $invoiceOnlyRows = $service->buildStatementRows($customer, ['includeInvoices' => true]);
+    $invoiceOnlyAging = $service->agingBuckets($invoiceOnlyRows);
+
+    $allTypesRows = $service->buildStatementRows($customer, [
+        'includeInvoices' => true,
+        'includeCreditNotes' => true,
+        'includePayments' => true,
+    ]);
+    $allTypesAging = $service->agingBuckets($allTypesRows);
+
+    expect($allTypesRows)->toHaveCount(3)
+        ->and($invoiceOnlyRows)->toHaveCount(1)
+        ->and($allTypesAging['total'])->toBe($invoiceOnlyAging['total']);
 });

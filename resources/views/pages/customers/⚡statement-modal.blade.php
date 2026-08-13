@@ -12,9 +12,13 @@ new class extends Component {
     public string $preset = 'this_month';
     public string $dateFrom = '';
     public string $dateTo = '';
-    public bool $outstandingOnly = false;
+    public bool $outstandingOnly = true;
     public string $minBalance = '';
     public string $action = 'print';
+
+    public bool $includeInvoices = true;
+    public bool $includeCreditNotes = false;
+    public bool $includePayments = false;
 
     /** @var array<int, string> */
     public array $statementEmails = [];
@@ -59,11 +63,20 @@ new class extends Component {
             'dateTo' => $this->dateTo,
             'outstandingOnly' => $this->outstandingOnly,
             'minBalance' => $this->minBalance,
+            'includeInvoices' => $this->includeInvoices,
+            'includeCreditNotes' => $this->includeCreditNotes,
+            'includePayments' => $this->includePayments,
         ];
     }
 
     public function generate(): void
     {
+        if (! $this->includeInvoices && ! $this->includeCreditNotes && ! $this->includePayments) {
+            $this->addError('includeInvoices', __('Select at least one document type to include.'));
+
+            return;
+        }
+
         if ($this->action === 'email') {
             $this->validate([
                 'statementEmails' => 'required|array|min:1',
@@ -145,6 +158,16 @@ new class extends Component {
                 <div class="flex items-center justify-between rounded-lg border border-zinc-200 px-3 py-2 dark:border-white/10">
                     <flux:label>{{ __('Outstanding invoices only') }}</flux:label>
                     <flux:switch wire:model.live="outstandingOnly" />
+                </div>
+
+                <div>
+                    <flux:label>{{ __('Include') }}</flux:label>
+                    <div class="mt-1.5 flex items-center gap-4">
+                        <flux:checkbox wire:model.live="includeInvoices" label="{{ __('Invoices') }}" />
+                        <flux:checkbox wire:model.live="includeCreditNotes" label="{{ __('Credit Notes') }}" />
+                        <flux:checkbox wire:model.live="includePayments" label="{{ __('Payments') }}" />
+                    </div>
+                    <flux:error name="includeInvoices" />
                 </div>
 
                 <flux:input

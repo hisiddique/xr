@@ -15,6 +15,9 @@ class CustomerStatementController extends Controller
     {
         $filters = $request->only(['dateFrom', 'dateTo', 'minBalance']);
         $filters['outstandingOnly'] = $request->boolean('outstandingOnly');
+        $filters['includeInvoices'] = $request->boolean('includeInvoices', true);
+        $filters['includeCreditNotes'] = $request->boolean('includeCreditNotes');
+        $filters['includePayments'] = $request->boolean('includePayments');
 
         return $this->statementService->streamPdf($customer, $filters, $request->boolean('inline'));
     }
