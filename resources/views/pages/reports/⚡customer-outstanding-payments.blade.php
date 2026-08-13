@@ -229,7 +229,7 @@ new #[Title('Customer Outstanding Payments')] class extends Component
             />
 
             <div class="ml-auto flex items-center gap-2">
-                <flux:switch wire:model.live="showPaid" label="Show paid invoices" align="left" />
+                <flux:switch wire:model.live="showPaid" label="Show Write-offs" align="left" />
 
                 <x-ui.per-page-select />
 
@@ -303,7 +303,7 @@ new #[Title('Customer Outstanding Payments')] class extends Component
                             <th class="px-2 py-1 text-left text-xs font-bold uppercase tracking-wider text-zinc-900">Invoice</th>
                             <th class="px-2 py-1 text-right text-xs font-bold uppercase tracking-wider text-zinc-900">Total</th>
                             <th class="px-2 py-1 text-right text-xs font-bold uppercase tracking-wider text-zinc-900">O/S</th>
-                            <th class="px-2 py-1 text-center text-xs font-bold uppercase tracking-wider text-zinc-900">Settled</th>
+                            <th class="px-2 py-1 text-center text-xs font-bold uppercase tracking-wider text-zinc-900">Write-off</th>
                         </tr>
                     </thead>
                     <tbody>

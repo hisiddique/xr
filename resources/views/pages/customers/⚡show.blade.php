@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithSorting;
 use App\Models\Customer;
 use App\Models\Document;
 use App\Services\CreditTermDueDateCalculator;
@@ -18,6 +19,9 @@ use Livewire\WithPagination;
 new #[Title('Customer Details')] class extends Component {
     use WithPagination;
     use WithPerPage;
+    use WithSorting;
+
+    protected array $sortable = ['date', 'ref_no', 'type', 'amount'];
 
     public Customer $customer;
 
@@ -130,6 +134,22 @@ new #[Title('Customer Details')] class extends Component {
             }));
         }
 
+        if ($this->sortColumn !== '' && in_array($this->sortColumn, $this->sortableColumns(), true)) {
+            $direction = $this->sortDirection === 'desc' ? -1 : 1;
+
+            usort($rows, function (array $a, array $b) use ($direction) {
+                $result = match ($this->sortColumn) {
+                    'date' => $a['date'] <=> $b['date'],
+                    'ref_no' => strnatcasecmp($a['ref_no'], $b['ref_no']),
+                    'type' => strcmp($a['type'], $b['type']),
+                    'amount' => $a['amount'] <=> $b['amount'],
+                    default => 0,
+                };
+
+                return $result * $direction;
+            });
+        }
+
         $page = Paginator::resolveCurrentPage('ledger_page');
         $items = Collection::make($rows);
 
@@ -173,7 +193,7 @@ new #[Title('Customer Details')] class extends Component {
 
             $details = null;
 
-            if (in_array($status, ['paid', 'partial'], true)) {
+            if ($allocatedTotal + $creditedTotal > 0.005) {
                 $allocations = [];
 
                 foreach ($invoice->paymentAllocations as $paymentAllocation) {
@@ -239,7 +259,7 @@ new #[Title('Customer Details')] class extends Component {
             ];
         }
 
-        usort($rows, fn (array $a, array $b) => $a['date'] <=> $b['date']);
+        usort($rows, fn (array $a, array $b) => $b['date'] <=> $a['date']);
 
         return $rows;
     }
@@ -256,6 +276,25 @@ new #[Title('Customer Details')] class extends Component {
 
     public function updatedLedgerSearch(): void
     {
+        $this->resetPage('ledger_page');
+    }
+
+    public function sortBy(string $column): void
+    {
+        if (! in_array($column, $this->sortableColumns(), true)) {
+            return;
+        }
+
+        if ($this->sortColumn !== $column) {
+            $this->sortColumn = $column;
+            $this->sortDirection = 'asc';
+        } elseif ($this->sortDirection === 'asc') {
+            $this->sortDirection = 'desc';
+        } else {
+            $this->sortColumn = '';
+            $this->sortDirection = 'asc';
+        }
+
         $this->resetPage('ledger_page');
     }
 
@@ -561,11 +600,11 @@ new #[Title('Customer Details')] class extends Component {
                     <table class="w-full text-sm">
                         <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                             <tr>
-                                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Date</th>
-                                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Type</th>
-                                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Invoice / Ref No.</th>
+                                <x-ui.sortable-header column="date" :state="$this->sortStateFor('date')">Date</x-ui.sortable-header>
+                                <x-ui.sortable-header column="type" :state="$this->sortStateFor('type')">Type</x-ui.sortable-header>
+                                <x-ui.sortable-header column="ref_no" :state="$this->sortStateFor('ref_no')">Invoice / Ref No.</x-ui.sortable-header>
                                 <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Order Reference</th>
-                                <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Amount (incl. VAT)</th>
+                                <x-ui.sortable-header column="amount" align="right" :state="$this->sortStateFor('amount')">Amount (incl. VAT)</x-ui.sortable-header>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
@@ -607,7 +646,7 @@ new #[Title('Customer Details')] class extends Component {
                                             <details class="border-l-4 border-indigo-400 dark:border-indigo-500 bg-zinc-50 dark:bg-zinc-800/50 rounded-r-md p-3 text-xs">
                                                 <summary class="cursor-pointer font-medium text-zinc-600 dark:text-zinc-300">🔍 View Allocation Details</summary>
                                                 <div class="mt-2 space-y-1">
-                                                    @if($row['status'] === 'partial')
+                                                    @if($row['details']['outstanding'] > 0.005)
                                                         <p class="text-zinc-500 dark:text-zinc-400">
                                                             Total: £{{ number_format($row['details']['total'], 2) }}
                                                             &middot; Paid: £{{ number_format($row['details']['paid'], 2) }}

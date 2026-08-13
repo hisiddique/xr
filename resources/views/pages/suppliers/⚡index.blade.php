@@ -39,7 +39,7 @@ new #[Title('Suppliers')] class extends Component {
             );
 
         return $this->sortColumn === ''
-            ? $this->applySort($query)->oldest()->paginate($this->perPage)
+            ? $this->applySort($query)->latest('id')->paginate($this->perPage)
             : $this->applySort($query)->paginate($this->perPage);
     }
 }; ?>

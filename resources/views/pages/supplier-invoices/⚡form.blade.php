@@ -27,7 +27,7 @@ new #[Title('Supplier Invoice')] class extends Component {
     public bool $addOverheadExpense = false;
     public ?int $overhead_category_id = null;
     public string $overhead_payment_method = '';
-    public bool $overhead_has_vat = false;
+    public bool $overhead_has_vat = true;
     public float $vatRate = 20.0;
     public array $items = [];
     public array $existingAttachments = [];

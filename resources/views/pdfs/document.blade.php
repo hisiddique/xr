@@ -336,6 +336,8 @@
                 <tr>
                     <td colspan="{{ $cols }}" class="note-cell">{{ $item->details }}</td>
                 </tr>
+            @elseif(trim((string) $item->details) === '' && (float) $item->quantity === 0.0 && (float) $item->price === 0.0 && (float) $item->discount_percent === 0.0)
+                @continue
             @else
                 <tr>
                     <td class="item-cell right">{{ (float) $item->quantity !== 0.0 ? rtrim(rtrim(number_format($item->quantity, 2, '.', ''), '0'), '.') : '' }}</td>

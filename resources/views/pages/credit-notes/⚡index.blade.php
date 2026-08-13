@@ -245,7 +245,7 @@ new #[Title('Credit Notes')] class extends Component
             ->when($this->amountMax !== '' && is_numeric($this->amountMax), fn ($q) => $q->where('total_value', '<=', (float) $this->amountMax))
             ->when($this->assignedTo !== '' && is_numeric($this->assignedTo), fn ($q) => $q->where('assigned_to', (int) $this->assignedTo))
             ->tap(fn ($q) => $this->applySort($q))
-            ->when($this->sortColumn === '', fn ($q) => $q->oldest())
+            ->when($this->sortColumn === '', fn ($q) => $q->latest('doc_date')->latest('id'))
             ->paginate($this->perPage);
     }
 
