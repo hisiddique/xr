@@ -15,7 +15,8 @@ class PaymentNumberGenerator
             $padding = (int) Setting::get('number_padding', 4);
 
             /** @var Payment|null $last */
-            $last = Payment::lockForUpdate()
+            $last = Payment::withTrashed()
+                ->lockForUpdate()
                 ->orderByDesc('id')
                 ->first();
 
