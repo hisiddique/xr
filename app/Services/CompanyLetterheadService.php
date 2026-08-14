@@ -9,6 +9,16 @@ class CompanyLetterheadService
     public const ADDRESS_RESERVED_LINES = 3;
 
     /**
+     * Conservative estimate of characters that fit on one line of the header's address
+     * column before the browser/dompdf word-wraps it. A single long line with no explicit
+     * break (e.g. an address typed as one run-on line) still visually wraps to multiple
+     * lines — counting only "\n" characters misses that entirely, so a long single line
+     * would be reserved as 1 line while actually rendering as 2+, breaking the fixed-height
+     * assumption the page-number alignment depends on (see header() doc block below).
+     */
+    private const ADDRESS_CHARS_PER_LINE = 56;
+
+    /**
      * Header (letterhead) fields shared by every PDF template: company name/tagline,
      * a fixed-height address block, and fixed-height contact rows. Both are padded to
      * a constant line count (rather than only rendered when present) so the header's
@@ -28,10 +38,17 @@ class CompanyLetterheadService
     {
         $address = (string) Setting::get('company_address', '');
         $addressLines = $address !== '' ? preg_split('/\r\n|\r|\n/', trim($address)) : [];
-        $addressOverflowLines = max(0, count($addressLines) - self::ADDRESS_RESERVED_LINES);
 
-        while (count($addressLines) < self::ADDRESS_RESERVED_LINES) {
+        $visualLineCount = fn (string $line): int => $line === ''
+            ? 1
+            : max(1, (int) ceil(mb_strlen($line) / self::ADDRESS_CHARS_PER_LINE));
+
+        $totalVisualLines = array_sum(array_map($visualLineCount, $addressLines));
+        $addressOverflowLines = max(0, $totalVisualLines - self::ADDRESS_RESERVED_LINES);
+
+        while ($totalVisualLines < self::ADDRESS_RESERVED_LINES) {
             $addressLines[] = '';
+            $totalVisualLines++;
         }
 
         return [
