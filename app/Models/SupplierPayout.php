@@ -41,7 +41,7 @@ class SupplierPayout extends Model
         return DB::transaction(function (): string {
             $prefix = strtoupper((string) Setting::get('suppo_prefix', 'SUPPO'));
             $padding = (int) Setting::get('number_padding', 4);
-            $highest = static::query()
+            $highest = static::withTrashed()
                 ->where('reference', 'LIKE', $prefix.'-%')
                 ->lockForUpdate()
                 ->pluck('reference')

@@ -40,6 +40,20 @@ test('creating a payout sets reference automatically', function () {
     expect($payout->reference)->toBe('SUPPO-0001');
 });
 
+test('soft-deleted payouts still occupy their number so it is not reused', function () {
+    $supplier = Supplier::factory()->create();
+
+    $payout = SupplierPayout::create([
+        'supplier_id' => $supplier->id,
+        'amount' => 500,
+        'payout_date' => now(),
+        'created_by' => $this->user->id,
+    ]);
+    $payout->delete();
+
+    expect(SupplierPayout::nextNumber())->toBe('SUPPO-0002');
+});
+
 test('soft-deleting a payout deletes its allocations', function () {
     $supplier = Supplier::factory()->create();
 
