@@ -179,6 +179,67 @@ test('deleting a debit note from the show page does not error', function () {
     expect(SupplierDebitNote::find($note->id))->toBeNull();
 });
 
+test('commitDebitNote ignores trailing empty rows and only stores filled items', function () {
+    $supplier = Supplier::factory()->create(['vat_applied' => false]);
+
+    Livewire::test('pages::supplier-debit-notes.create')
+        ->set('supplier_id', $supplier->id)
+        ->set('doc_date', now()->format('Y-m-d'))
+        ->set('items', [
+            ['description' => 'Damaged goods', 'quantity' => '2', 'amount' => '10', 'total' => 20],
+            ['description' => '', 'quantity' => '', 'amount' => '', 'total' => 0],
+        ])
+        ->call('commitDebitNote')
+        ->assertHasNoErrors();
+
+    $note = SupplierDebitNote::firstWhere('supplier_id', $supplier->id);
+
+    expect($note)->not->toBeNull();
+    expect($note->items)->toHaveCount(1);
+    expect((float) $note->subtotal)->toBe(20.0);
+    expect((float) $note->total)->toBe(20.0);
+});
+
+test('commitDebitNote adds VAT when the supplier has vat_applied enabled', function () {
+    Setting::updateOrCreate(['key' => 'vat_rate'], ['key' => 'vat_rate', 'value' => '20', 'type' => 'integer']);
+    Setting::flushCache();
+
+    $supplier = Supplier::factory()->create(['vat_applied' => true]);
+
+    Livewire::test('pages::supplier-debit-notes.create')
+        ->set('supplier_id', $supplier->id)
+        ->set('doc_date', now()->format('Y-m-d'))
+        ->set('items', [
+            ['description' => 'Damaged goods', 'quantity' => '1', 'amount' => '100', 'total' => 100],
+        ])
+        ->call('commitDebitNote')
+        ->assertHasNoErrors();
+
+    $note = SupplierDebitNote::firstWhere('supplier_id', $supplier->id);
+
+    expect((float) $note->subtotal)->toBe(100.0);
+    expect((float) $note->vat_amount)->toBe(20.0);
+    expect((float) $note->total)->toBe(120.0);
+});
+
+test('commitDebitNote does not add VAT when the supplier has vat_applied disabled', function () {
+    $supplier = Supplier::factory()->create(['vat_applied' => false]);
+
+    Livewire::test('pages::supplier-debit-notes.create')
+        ->set('supplier_id', $supplier->id)
+        ->set('doc_date', now()->format('Y-m-d'))
+        ->set('items', [
+            ['description' => 'Damaged goods', 'quantity' => '1', 'amount' => '100', 'total' => 100],
+        ])
+        ->call('commitDebitNote')
+        ->assertHasNoErrors();
+
+    $note = SupplierDebitNote::firstWhere('supplier_id', $supplier->id);
+
+    expect((float) $note->vat_amount)->toBe(0.0);
+    expect((float) $note->total)->toBe(100.0);
+});
+
 test('soft-deleted debit note is excluded from available debit notes query', function () {
     $supplier = Supplier::factory()->create();
 

@@ -23,6 +23,7 @@ class SupplierDebitNote extends Model
         'supplier_invoice_id',
         'notes',
         'subtotal',
+        'vat_amount',
         'total',
         'status',
         'created_by',
@@ -59,6 +60,7 @@ class SupplierDebitNote extends Model
         return [
             'doc_date' => 'date',
             'subtotal' => 'decimal:2',
+            'vat_amount' => 'decimal:2',
             'total' => 'decimal:2',
             'status' => SupplierDebitNoteStatus::class,
         ];

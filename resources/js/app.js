@@ -1705,13 +1705,20 @@ document.addEventListener('alpine:init', () => {
     // showToast() appends the rendered dialog as a direct child of
     // <ui-toast-group> (or <ui-toast> when used standalone), not nested
     // under <ui-toast>, so the selector must not assume that ancestor.
-    // Capture-phase so it fires before any target-specific handler can
-    // stop propagation, and it never calls preventDefault/stopPropagation
-    // itself so normal Enter behavior elsewhere on the page is unaffected.
+    // Capture-phase so it fires before any target-specific handler.
+    // While a toast is open, this Enter press is consumed entirely (both
+    // preventDefault and stopPropagation) so it can't also reach whatever
+    // element happens to hold focus underneath — e.g. a same-page form
+    // left focused after a non-redirecting submit, which would otherwise
+    // advance to its next field or re-trigger a focused button.
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
         if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-        document.querySelectorAll('[data-flux-toast-dialog]').forEach((dialog) => {
+        const dialogs = document.querySelectorAll('[data-flux-toast-dialog]');
+        if (!dialogs.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dialogs.forEach((dialog) => {
             dialog.querySelector('ui-close button')?.click();
         });
     }, true);
@@ -1916,8 +1923,10 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 
-    window.Alpine.data('supplierDebitNoteItems', (initialItems) => ({
+    window.Alpine.data('supplierDebitNoteItems', (initialItems, vatRate = 20, hasVat = false) => ({
         rows: initialItems.length ? initialItems : [{ description: '', quantity: '', amount: '', total: 0 }],
+        vatRate,
+        hasVat,
         _rowCells: 'input',
 
         addRow() {
@@ -1939,6 +1948,14 @@ document.addEventListener('alpine:init', () => {
 
         get subtotal() {
             return this.rows.reduce((s, r) => s + this.rowTotal(r), 0);
+        },
+
+        get vatTotal() {
+            return this.hasVat ? Math.round(this.subtotal * this.vatRate / 100 * 100) / 100 : 0;
+        },
+
+        get grossTotal() {
+            return Math.round((this.subtotal + this.vatTotal) * 100) / 100;
         },
 
         _focusField(el) {

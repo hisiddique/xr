@@ -171,8 +171,18 @@ new #[Title('Supplier Debit Note')] class extends Component {
         <div class="border-t border-zinc-200/70 bg-gradient-to-br from-red-50 to-rose-50 px-6 py-5 dark:border-white/10 dark:from-red-500/10 dark:to-rose-500/10">
             <dl class="space-y-3">
                 <div class="flex items-center justify-between gap-4">
-                    <dt class="text-base font-semibold text-zinc-900 dark:text-white">Subtotal</dt>
-                    <dd class="font-mono text-lg font-bold text-red-700 dark:text-red-400">£{{ number_format((float) $debitNote->subtotal, 2) }}</dd>
+                    <dt class="text-sm text-zinc-600 dark:text-zinc-400">Subtotal</dt>
+                    <dd class="font-mono text-sm font-medium text-zinc-900 dark:text-white">£{{ number_format((float) $debitNote->subtotal, 2) }}</dd>
+                </div>
+                @if((float) $debitNote->vat_amount > 0)
+                    <div class="flex items-center justify-between gap-4">
+                        <dt class="text-sm text-zinc-600 dark:text-zinc-400">VAT</dt>
+                        <dd class="font-mono text-sm font-medium text-zinc-900 dark:text-white">£{{ number_format((float) $debitNote->vat_amount, 2) }}</dd>
+                    </div>
+                @endif
+                <div class="flex items-center justify-between gap-4 border-t border-red-200/70 pt-3 dark:border-red-500/20">
+                    <dt class="text-base font-semibold text-zinc-900 dark:text-white">Total</dt>
+                    <dd class="font-mono text-lg font-bold text-red-700 dark:text-red-400">£{{ number_format((float) $debitNote->total, 2) }}</dd>
                 </div>
             </dl>
         </div>

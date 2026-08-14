@@ -19,6 +19,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
     public string $notes = '';
     public array $items = [];
     public string $nextReference = '';
+    public float $vatRate = 20.0;
 
     public function mount(): void
     {
@@ -27,12 +28,24 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
             ['description' => '', 'quantity' => '', 'amount' => '', 'total' => 0],
         ];
         $this->nextReference = SupplierDebitNote::nextNumber();
+        $this->vatRate = (float) Setting::get('vat_rate', 20);
     }
 
     public function updatedSupplierId(): void
     {
         $this->supplier_invoice_id = null;
         unset($this->supplierInvoices);
+        $this->dispatch('debit-note-vat-changed', hasVat: $this->supplierHasVat);
+    }
+
+    #[Computed]
+    public function supplierHasVat(): bool
+    {
+        if (! $this->supplier_id) {
+            return false;
+        }
+
+        return (bool) Supplier::withTrashed()->find($this->supplier_id)?->vat_applied;
     }
 
     #[Computed]
@@ -56,6 +69,11 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
 
     public function commitDebitNote(): void
     {
+        $this->items = array_values(array_filter(
+            $this->items,
+            fn ($i) => trim((string) ($i['description'] ?? '')) !== ''
+        ));
+
         $this->validate([
             'supplier_id'         => 'required|integer|exists:suppliers,id',
             'doc_date'            => 'required|date',
@@ -65,23 +83,24 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
             'items.*.amount'      => 'required|numeric|min:0',
         ]);
 
-        $items = array_values(array_filter(
-            $this->items,
-            fn ($i) => trim((string) ($i['description'] ?? '')) !== ''
-        ));
+        $items = $this->items;
 
         $subtotal = collect($items)->sum(
             fn ($i) => round((float) $i['quantity'] * (float) $i['amount'], 2)
         );
 
-        $debitNote = DB::transaction(function () use ($items, $subtotal) {
+        $vatAmount = $this->supplierHasVat ? round($subtotal * $this->vatRate / 100, 2) : 0.0;
+        $total = round($subtotal + $vatAmount, 2);
+
+        $debitNote = DB::transaction(function () use ($items, $subtotal, $vatAmount, $total) {
             $dn = SupplierDebitNote::create([
                 'supplier_id'         => $this->supplier_id,
                 'doc_date'            => $this->doc_date,
                 'supplier_invoice_id' => $this->supplier_invoice_id ?: null,
                 'notes'               => $this->notes ?: null,
                 'subtotal'            => $subtotal,
-                'total'               => $subtotal,
+                'vat_amount'          => $vatAmount,
+                'total'               => $total,
                 'created_by'          => auth()->id(),
             ]);
 
@@ -107,7 +126,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
         });
 
         Flux::modal('confirm-commit-debit-note')->close();
-        Flux::toast(variant: 'success', text: 'Debit note ' . $debitNote->reference . ' committed.');
+        Flux::toast(variant: 'success', text: 'Debit note ' . $debitNote->reference . ' committed.', duration: 0);
 
         $supplierId = $this->supplier_id;
         $linkedInvoiceId = $this->supplier_invoice_id;
@@ -129,6 +148,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
         ];
         unset($this->supplierInvoices);
         $this->dispatch('debit-note-items-reset');
+        $this->dispatch('debit-note-vat-changed', hasVat: false);
     }
 
     public function resetForm(): void
@@ -216,8 +236,9 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
 
                     {{-- Items table (Alpine-managed, wire:ignore) --}}
                     <div class="col-span-full" wire:ignore
-                        x-data="supplierDebitNoteItems(@js($items))"
+                        x-data="supplierDebitNoteItems(@js($items), {{ $vatRate }}, @js($this->supplierHasVat))"
                         @debit-note-items-reset.window="rows = [{ description: '', quantity: '', amount: '', total: 0 }]"
+                        @debit-note-vat-changed.window="hasVat = $event.detail.hasVat"
                         @dn-pre-commit.window="preCommit()"
                         @dn-focus-first-item.window="$nextTick(() => { const f = $el.querySelector('[data-dn-row-desc]'); if (f) { f.focus(); f.scrollIntoView({ block: 'center', behavior: 'smooth' }); } })"
                         @keydown.window="handleKey($event)">
@@ -281,11 +302,27 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                                 </table>
                             </div>
 
-                            <div class="flex items-center justify-between border-t border-zinc-200/70 px-4 py-3 dark:border-white/10">
-                                <span class="text-sm font-semibold text-zinc-900 dark:text-white">Subtotal</span>
-                                <span class="font-mono text-sm font-bold tabular-nums text-red-600 dark:text-red-400">
-                                    −£<span x-text="subtotal.toFixed(2)">0.00</span>
-                                </span>
+                            <div class="flex flex-col gap-1.5 border-t border-zinc-200/70 px-4 py-3 dark:border-white/10">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-zinc-600 dark:text-zinc-400">Subtotal</span>
+                                    <span class="font-mono text-sm font-medium tabular-nums text-zinc-900 dark:text-white">
+                                        −£<span x-text="subtotal.toFixed(2)">0.00</span>
+                                    </span>
+                                </div>
+                                <template x-if="hasVat">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-zinc-600 dark:text-zinc-400">VAT (<span x-text="vatRate"></span>%)</span>
+                                        <span class="font-mono text-sm font-medium tabular-nums text-zinc-900 dark:text-white">
+                                            −£<span x-text="vatTotal.toFixed(2)">0.00</span>
+                                        </span>
+                                    </div>
+                                </template>
+                                <div class="flex items-center justify-between pt-1">
+                                    <span class="text-sm font-semibold text-zinc-900 dark:text-white">Total</span>
+                                    <span class="font-mono text-sm font-bold tabular-nums text-red-600 dark:text-red-400">
+                                        −£<span x-text="grossTotal.toFixed(2)">0.00</span>
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
