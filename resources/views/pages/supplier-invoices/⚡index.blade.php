@@ -140,7 +140,7 @@ new #[Title('Supplier Invoices')] class extends Component {
                 (float) $this->amountMax
             ))
             ->tap(fn ($q) => $this->applySort($q))
-            ->when($this->sortColumn === '', fn ($q) => $q->orderByDesc('invoice_date'))
+            ->when($this->sortColumn === '', fn ($q) => $q->orderByDesc('invoice_date')->orderByDesc('supplier_invoice_no'))
             ->paginate($this->perPage);
     }
 }; ?>

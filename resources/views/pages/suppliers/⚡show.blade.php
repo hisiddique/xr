@@ -22,6 +22,7 @@ new #[Title('Supplier Details')] class extends Component {
             ->supplierInvoices()
             ->with('items')
             ->orderByDesc('invoice_date')
+            ->orderByDesc('supplier_invoice_no')
             ->paginate(10, pageName: 'inv_page');
     }
 
@@ -32,6 +33,7 @@ new #[Title('Supplier Details')] class extends Component {
             ->debitNotes()
             ->with('supplierInvoice')
             ->orderByDesc('doc_date')
+            ->orderByDesc('reference')
             ->paginate(10, pageName: 'dn_page');
     }
 
@@ -42,6 +44,7 @@ new #[Title('Supplier Details')] class extends Component {
             ->payouts()
             ->withSum('allocations', 'allocated_amount')
             ->orderByDesc('payout_date')
+            ->orderByDesc('reference')
             ->paginate(10, pageName: 'pay_page');
     }
 

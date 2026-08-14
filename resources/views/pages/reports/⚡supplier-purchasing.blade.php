@@ -29,6 +29,7 @@ new #[Title('Supplier Purchasing Report')] class extends Component {
     {
         return SupplierInvoice::with(['supplier', 'items'])
             ->orderByDesc('invoice_date')
+            ->orderByDesc('supplier_invoice_no')
             ->get();
     }
 

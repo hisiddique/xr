@@ -90,7 +90,7 @@ new #[Title('Payments')] class extends Component
             ->when($this->amountMin, fn ($q) => $q->where('amount', '>=', $this->amountMin))
             ->when($this->amountMax, fn ($q) => $q->where('amount', '<=', $this->amountMax))
             ->tap(fn ($q) => $this->applySort($q))
-            ->when($this->sortColumn === '', fn ($q) => $q->latest('payment_date')->orderBy('reference'))
+            ->when($this->sortColumn === '', fn ($q) => $q->latest('payment_date')->orderByDesc('reference'))
             ->paginate($this->perPage);
     }
 }; ?>

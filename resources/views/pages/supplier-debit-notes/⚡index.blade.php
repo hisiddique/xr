@@ -95,6 +95,7 @@ new #[Title('Supplier Debit Notes')] class extends Component {
             ->when($this->amountMin !== '', fn ($q) => $q->where('total', '>=', $this->amountMin))
             ->when($this->amountMax !== '', fn ($q) => $q->where('total', '<=', $this->amountMax))
             ->orderBy($this->sortBy, $this->sortDir)
+            ->when($this->sortBy === 'doc_date', fn ($q) => $q->orderBy('reference', $this->sortDir))
             ->paginate($this->perPage);
     }
 }; ?>

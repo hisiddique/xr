@@ -87,7 +87,7 @@ new #[Title('Customer Details')] class extends Component {
     #[Computed]
     public function invoices()
     {
-        return $this->customer->invoices()->with('assignee')->latest()->paginate(100, pageName: 'inv_page');
+        return $this->customer->invoices()->with('assignee')->orderByDesc('doc_date')->orderByDesc('doc_number')->paginate(100, pageName: 'inv_page');
     }
 
     #[Computed]
@@ -95,20 +95,21 @@ new #[Title('Customer Details')] class extends Component {
     {
         return $this->customer->deliveryNotes()
             ->with('assignee')
-            ->latest()
+            ->orderByDesc('doc_date')
+            ->orderByDesc('doc_number')
             ->paginate(25, pageName: 'dn_page');
     }
 
     #[Computed]
     public function creditNotes()
     {
-        return $this->customer->creditNotes()->with(['assignee', 'creditedInvoice'])->latest()->paginate(100, pageName: 'cn_page');
+        return $this->customer->creditNotes()->with(['assignee', 'creditedInvoice'])->orderByDesc('doc_date')->orderByDesc('doc_number')->paginate(100, pageName: 'cn_page');
     }
 
     #[Computed]
     public function payments()
     {
-        return $this->customer->payments()->with('paymentMethod')->withSum('allocations', 'allocated_amount')->latest()->paginate(100, pageName: 'pay_page');
+        return $this->customer->payments()->with('paymentMethod')->withSum('allocations', 'allocated_amount')->orderByDesc('payment_date')->orderByDesc('reference')->paginate(100, pageName: 'pay_page');
     }
 
     #[Computed]
