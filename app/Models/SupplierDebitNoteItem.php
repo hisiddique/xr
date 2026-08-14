@@ -17,6 +17,7 @@ class SupplierDebitNoteItem extends Model
         'description',
         'quantity',
         'amount',
+        'vat_applicable',
         'total',
         'sort_order',
     ];
@@ -26,6 +27,7 @@ class SupplierDebitNoteItem extends Model
         return [
             'quantity' => 'decimal:2',
             'amount' => 'decimal:2',
+            'vat_applicable' => 'boolean',
             'total' => 'decimal:2',
             'sort_order' => 'integer',
         ];

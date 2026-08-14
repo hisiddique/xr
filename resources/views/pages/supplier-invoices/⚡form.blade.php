@@ -69,7 +69,7 @@ new #[Title('Supplier Invoice')] class extends Component {
             $this->selectedDebitNoteIds = $this->supplierInvoice->debitNotes()->pluck('supplier_debit_notes.id')->toArray();
         } else {
             $this->invoice_date = now()->format('Y-m-d');
-            $this->items = [['product_code' => '', 'invoice_no' => '', 'quantity' => 1, 'unit_amount' => '', 'vat_applicable' => false]];
+            $this->items = [['product_code' => '', 'invoice_no' => '', 'quantity' => 1, 'unit_amount' => '', 'vat_applicable' => true]];
         }
     }
 
@@ -566,7 +566,7 @@ new #[Title('Supplier Invoice')] class extends Component {
                                         </td>
                                         <td class="px-4 py-2.5">
                                             <select
-                                                x-model="row.vat_applicable"
+                                                x-model.boolean="row.vat_applicable"
                                                 x-on:focus="$el.showPicker?.()"
                                                 class="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                             >

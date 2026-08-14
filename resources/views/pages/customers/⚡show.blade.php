@@ -182,11 +182,16 @@ new #[Title('Customer Details')] class extends Component {
             $balance = (float) $invoice->total_value - $allocatedTotal - $creditedTotal;
             $dueDate = CreditTermDueDateCalculator::calculate($this->customer->creditTerm?->name, $invoice->doc_date);
 
+            $isOverdue = $dueDate && $dueDate->isPast() && $balance > 0;
+            $isPartial = $balance > 0 && $balance < (float) $invoice->total_value;
+
             if ($balance <= 0.005) {
                 $status = 'paid';
-            } elseif ($dueDate && $dueDate->isPast() && $balance > 0) {
+            } elseif ($isOverdue && $isPartial) {
+                $status = 'overdue_partial';
+            } elseif ($isOverdue) {
                 $status = 'overdue';
-            } elseif ($balance < (float) $invoice->total_value) {
+            } elseif ($isPartial) {
                 $status = 'partial';
             } else {
                 $status = 'outstanding';
@@ -613,6 +618,7 @@ new #[Title('Customer Details')] class extends Component {
                                 @php
                                     $statusClasses = match ($row['status']) {
                                         'overdue' => 'text-rose-600 bg-rose-50 border-rose-200 dark:text-rose-400 dark:bg-rose-500/10 dark:border-rose-500/20',
+                                        'overdue_partial' => 'text-orange-600 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-500/10 dark:border-orange-500/20',
                                         'paid' => 'text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20',
                                         'partial' => 'text-amber-600 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-500/10 dark:border-amber-500/20',
                                         default => 'text-zinc-600 bg-zinc-100 border-zinc-200 dark:text-zinc-300 dark:bg-zinc-800 dark:border-zinc-700',
@@ -677,6 +683,10 @@ new #[Title('Customer Details')] class extends Component {
                     <div class="flex items-start gap-2">
                         <span class="mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border text-rose-600 bg-rose-50 border-rose-200 dark:text-rose-400 dark:bg-rose-500/10 dark:border-rose-500/20">Overdue</span>
                         <p class="text-xs text-zinc-500 dark:text-zinc-400">Unpaid and past due date</p>
+                    </div>
+                    <div class="flex items-start gap-2">
+                        <span class="mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border text-orange-600 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-500/10 dark:border-orange-500/20">Overdue &amp; Partial</span>
+                        <p class="text-xs text-zinc-500 dark:text-zinc-400">Partially paid and past due date</p>
                     </div>
                     <div class="flex items-start gap-2">
                         <span class="mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20">Paid</span>

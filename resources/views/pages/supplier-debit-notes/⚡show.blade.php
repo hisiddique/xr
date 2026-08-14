@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\SupplierDebitNote;
+use App\Models\SupplierDebitNoteItem;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Flux\Flux;
@@ -11,6 +13,30 @@ new #[Title('Supplier Debit Note')] class extends Component {
     public function mount(): void
     {
         $this->debitNote->load(['supplier', 'supplierInvoice', 'items', 'appliedInvoices', 'creator']);
+    }
+
+    #[Computed]
+    public function effectiveVatRate(): float
+    {
+        $vatApplicableSubtotal = (float) $this->debitNote->items->where('vat_applicable', true)->sum('total');
+
+        if ($vatApplicableSubtotal <= 0) {
+            return 0.0;
+        }
+
+        return round(((float) $this->debitNote->vat_amount / $vatApplicableSubtotal) * 100, 4);
+    }
+
+    public function itemVat(SupplierDebitNoteItem $item): float
+    {
+        return $item->vat_applicable
+            ? round((float) $item->total * $this->effectiveVatRate / 100, 2)
+            : 0.0;
+    }
+
+    public function itemGross(SupplierDebitNoteItem $item): float
+    {
+        return (float) $item->total + $this->itemVat($item);
     }
 
     public function delete(): void
@@ -148,6 +174,8 @@ new #[Title('Supplier Debit Note')] class extends Component {
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-400 sm:px-6 dark:text-zinc-500">Description</th>
                         <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-zinc-400 sm:px-6 dark:text-zinc-500">Qty</th>
                         <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-zinc-400 sm:px-6 dark:text-zinc-500">Amount (£)</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-400 sm:px-6 dark:text-zinc-500">VAT</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-zinc-400 sm:px-6 dark:text-zinc-500">VAT Amt (£)</th>
                         <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-zinc-400 sm:px-6 dark:text-zinc-500">Total (£)</th>
                     </tr>
                 </thead>
@@ -157,11 +185,21 @@ new #[Title('Supplier Debit Note')] class extends Component {
                             <td class="px-4 py-3 text-zinc-900 sm:px-6 dark:text-white">{{ $item->description ?: '—' }}</td>
                             <td class="px-4 py-3 text-right text-zinc-700 sm:px-6 dark:text-zinc-300">{{ number_format((float) $item->quantity, 2) }}</td>
                             <td class="px-4 py-3 text-right text-zinc-700 sm:px-6 dark:text-zinc-300">{{ number_format((float) $item->amount, 2) }}</td>
-                            <td class="px-4 py-3 text-right font-medium text-zinc-900 sm:px-6 dark:text-white">{{ number_format((float) $item->total, 2) }}</td>
+                            <td class="px-4 py-3 sm:px-6">
+                                @if($item->vat_applicable)
+                                    <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400">Yes</span>
+                                @else
+                                    <span class="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 ring-1 ring-inset ring-zinc-500/20 dark:bg-zinc-800 dark:text-zinc-400">No</span>
+                                @endif
+                            </td>
+                            <td class="px-4 py-3 text-right text-zinc-700 sm:px-6 dark:text-zinc-300">
+                                {{ $item->vat_applicable ? number_format($this->itemVat($item), 2) : '—' }}
+                            </td>
+                            <td class="px-4 py-3 text-right font-medium text-zinc-900 sm:px-6 dark:text-white">{{ number_format($this->itemGross($item), 2) }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="4" class="px-4 py-6 text-center text-sm text-zinc-400 sm:px-6">No line items.</td>
+                            <td colspan="6" class="px-4 py-6 text-center text-sm text-zinc-400 sm:px-6">No line items.</td>
                         </tr>
                     @endforelse
                 </tbody>

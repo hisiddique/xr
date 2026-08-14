@@ -200,17 +200,17 @@ test('commitDebitNote ignores trailing empty rows and only stores filled items',
     expect((float) $note->total)->toBe(20.0);
 });
 
-test('commitDebitNote adds VAT when the supplier has vat_applied enabled', function () {
+test('commitDebitNote adds VAT for items marked vat_applicable', function () {
     Setting::updateOrCreate(['key' => 'vat_rate'], ['key' => 'vat_rate', 'value' => '20', 'type' => 'integer']);
     Setting::flushCache();
 
-    $supplier = Supplier::factory()->create(['vat_applied' => true]);
+    $supplier = Supplier::factory()->create();
 
     Livewire::test('pages::supplier-debit-notes.create')
         ->set('supplier_id', $supplier->id)
         ->set('doc_date', now()->format('Y-m-d'))
         ->set('items', [
-            ['description' => 'Damaged goods', 'quantity' => '1', 'amount' => '100', 'total' => 100],
+            ['description' => 'Damaged goods', 'quantity' => '1', 'amount' => '100', 'vat_applicable' => true, 'total' => 100],
         ])
         ->call('commitDebitNote')
         ->assertHasNoErrors();
@@ -220,16 +220,17 @@ test('commitDebitNote adds VAT when the supplier has vat_applied enabled', funct
     expect((float) $note->subtotal)->toBe(100.0);
     expect((float) $note->vat_amount)->toBe(20.0);
     expect((float) $note->total)->toBe(120.0);
+    expect($note->items->first()->vat_applicable)->toBeTrue();
 });
 
-test('commitDebitNote does not add VAT when the supplier has vat_applied disabled', function () {
-    $supplier = Supplier::factory()->create(['vat_applied' => false]);
+test('commitDebitNote does not add VAT for items not marked vat_applicable', function () {
+    $supplier = Supplier::factory()->create();
 
     Livewire::test('pages::supplier-debit-notes.create')
         ->set('supplier_id', $supplier->id)
         ->set('doc_date', now()->format('Y-m-d'))
         ->set('items', [
-            ['description' => 'Damaged goods', 'quantity' => '1', 'amount' => '100', 'total' => 100],
+            ['description' => 'Damaged goods', 'quantity' => '1', 'amount' => '100', 'vat_applicable' => false, 'total' => 100],
         ])
         ->call('commitDebitNote')
         ->assertHasNoErrors();
@@ -238,6 +239,30 @@ test('commitDebitNote does not add VAT when the supplier has vat_applied disable
 
     expect((float) $note->vat_amount)->toBe(0.0);
     expect((float) $note->total)->toBe(100.0);
+    expect($note->items->first()->vat_applicable)->toBeFalse();
+});
+
+test('commitDebitNote mixes VAT and non-VAT items on the same note', function () {
+    Setting::updateOrCreate(['key' => 'vat_rate'], ['key' => 'vat_rate', 'value' => '20', 'type' => 'integer']);
+    Setting::flushCache();
+
+    $supplier = Supplier::factory()->create();
+
+    Livewire::test('pages::supplier-debit-notes.create')
+        ->set('supplier_id', $supplier->id)
+        ->set('doc_date', now()->format('Y-m-d'))
+        ->set('items', [
+            ['description' => 'VAT item', 'quantity' => '1', 'amount' => '100', 'vat_applicable' => true, 'total' => 100],
+            ['description' => 'Non-VAT item', 'quantity' => '1', 'amount' => '50', 'vat_applicable' => false, 'total' => 50],
+        ])
+        ->call('commitDebitNote')
+        ->assertHasNoErrors();
+
+    $note = SupplierDebitNote::firstWhere('supplier_id', $supplier->id);
+
+    expect((float) $note->subtotal)->toBe(150.0);
+    expect((float) $note->vat_amount)->toBe(20.0);
+    expect((float) $note->total)->toBe(170.0);
 });
 
 test('soft-deleted debit note is excluded from available debit notes query', function () {

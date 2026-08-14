@@ -3,6 +3,7 @@
 use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\SupplierDebitNote;
+use App\Models\SupplierDebitNoteItem;
 use App\Models\SupplierInvoice;
 use App\Models\User;
 use App\SupplierDebitNoteStatus;
@@ -104,6 +105,95 @@ test('backfill keeps applied-invoice pivot amount in sync with the recalculated 
     $pivotAmount = (float) $note->appliedInvoices()->first()->pivot->applied_amount;
 
     expect($pivotAmount)->toBe(120.0);
+});
+
+test('backfill syncs item vat_applicable to false for a note with no VAT', function () {
+    $supplier = Supplier::factory()->create(['vat_applied' => false]);
+
+    $note = SupplierDebitNote::create([
+        'supplier_id' => $supplier->id,
+        'doc_date' => now(),
+        'status' => SupplierDebitNoteStatus::Committed,
+        'subtotal' => 50,
+        'vat_amount' => 0,
+        'total' => 50,
+        'created_by' => $this->user->id,
+    ]);
+
+    $item = SupplierDebitNoteItem::create([
+        'supplier_debit_note_id' => $note->id,
+        'description' => 'Damaged goods',
+        'quantity' => 1,
+        'amount' => 50,
+        'vat_applicable' => true,
+        'total' => 50,
+        'sort_order' => 0,
+    ]);
+
+    $this->artisan('supplier-debit-notes:backfill-vat')
+        ->expectsConfirmation('Apply these changes?', 'yes')
+        ->assertExitCode(0);
+
+    expect($item->fresh()->vat_applicable)->toBeFalse();
+});
+
+test('backfill syncs item vat_applicable to true once a note is recalculated with VAT', function () {
+    $supplier = Supplier::factory()->create(['vat_applied' => true]);
+
+    $note = SupplierDebitNote::create([
+        'supplier_id' => $supplier->id,
+        'doc_date' => now(),
+        'status' => SupplierDebitNoteStatus::Committed,
+        'subtotal' => 100,
+        'vat_amount' => 0,
+        'total' => 100,
+        'created_by' => $this->user->id,
+    ]);
+
+    $item = SupplierDebitNoteItem::create([
+        'supplier_debit_note_id' => $note->id,
+        'description' => 'Damaged goods',
+        'quantity' => 1,
+        'amount' => 100,
+        'vat_applicable' => false,
+        'total' => 100,
+        'sort_order' => 0,
+    ]);
+
+    $this->artisan('supplier-debit-notes:backfill-vat')
+        ->expectsConfirmation('Apply these changes?', 'yes')
+        ->assertExitCode(0);
+
+    expect($item->fresh()->vat_applicable)->toBeTrue();
+});
+
+test('dry-run does not touch item vat_applicable', function () {
+    $supplier = Supplier::factory()->create(['vat_applied' => false]);
+
+    $note = SupplierDebitNote::create([
+        'supplier_id' => $supplier->id,
+        'doc_date' => now(),
+        'status' => SupplierDebitNoteStatus::Committed,
+        'subtotal' => 50,
+        'vat_amount' => 0,
+        'total' => 50,
+        'created_by' => $this->user->id,
+    ]);
+
+    $item = SupplierDebitNoteItem::create([
+        'supplier_debit_note_id' => $note->id,
+        'description' => 'Damaged goods',
+        'quantity' => 1,
+        'amount' => 50,
+        'vat_applicable' => true,
+        'total' => 50,
+        'sort_order' => 0,
+    ]);
+
+    $this->artisan('supplier-debit-notes:backfill-vat', ['--dry-run' => true])
+        ->assertExitCode(0);
+
+    expect($item->fresh()->vat_applicable)->toBeTrue();
 });
 
 test('dry-run makes no changes', function () {

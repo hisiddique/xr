@@ -1423,9 +1423,9 @@ document.addEventListener('alpine:init', () => {
 
     // ─── Supplier Invoice Line Form Component ───────────────────
     window.Alpine.data('supplierInvoiceLineForm', (initialRows = [], vatRate = 20) => ({
-        rows: initialRows.length ? initialRows : [{ product_code: '', invoice_no: '', quantity: 1, unit_amount: '', vat_applicable: false }],
+        rows: initialRows.length ? initialRows : [{ product_code: '', invoice_no: '', quantity: 1, unit_amount: '', vat_applicable: true }],
         vatRate,
-        _rowDefault: { product_code: '', invoice_no: '', quantity: 1, unit_amount: '', vat_applicable: false },
+        _rowDefault: { product_code: '', invoice_no: '', quantity: 1, unit_amount: '', vat_applicable: true },
         _rowCells: 'input, select',
 
         init() {
@@ -1923,14 +1923,13 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 
-    window.Alpine.data('supplierDebitNoteItems', (initialItems, vatRate = 20, hasVat = false) => ({
-        rows: initialItems.length ? initialItems : [{ description: '', quantity: '', amount: '', total: 0 }],
+    window.Alpine.data('supplierDebitNoteItems', (initialItems, vatRate = 20) => ({
+        rows: initialItems.length ? initialItems : [{ description: '', quantity: '', amount: '', vat_applicable: true, total: 0 }],
         vatRate,
-        hasVat,
-        _rowCells: 'input',
+        _rowCells: 'input, select',
 
         addRow() {
-            this.rows.push({ description: '', quantity: '', amount: '', total: 0 });
+            this.rows.push({ description: '', quantity: '', amount: '', vat_applicable: true, total: 0 });
             this.$nextTick(() => {
                 const inputs = this.$el.querySelectorAll('[data-dn-row-desc]');
                 const last = inputs[inputs.length - 1];
@@ -1950,8 +1949,16 @@ document.addEventListener('alpine:init', () => {
             return this.rows.reduce((s, r) => s + this.rowTotal(r), 0);
         },
 
+        get hasVat() {
+            return this.rows.some(r => r.vat_applicable);
+        },
+
         get vatTotal() {
-            return this.hasVat ? Math.round(this.subtotal * this.vatRate / 100 * 100) / 100 : 0;
+            return Math.round(
+                this.rows
+                    .filter(r => r.vat_applicable)
+                    .reduce((s, r) => s + this.rowTotal(r) * this.vatRate / 100, 0)
+                * 100) / 100;
         },
 
         get grossTotal() {
@@ -1962,10 +1969,14 @@ document.addEventListener('alpine:init', () => {
             if (!el) return;
             el.focus();
             if (el.type !== 'number' && typeof el.select === 'function') el.select();
+            if (el.tagName === 'SELECT' && typeof el.showPicker === 'function') {
+                try { el.showPicker(); } catch (_) {}
+            }
         },
 
         atTextBoundary(input, dir) {
             if (input.type === 'number') return true;
+            if (typeof input.value !== 'string') return true;
             try {
                 const { selectionStart: s, selectionEnd: e } = input;
                 if (s === null) return true;

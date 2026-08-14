@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\Setting;
-use App\Models\Supplier;
 use App\Models\SupplierDebitNote;
 use App\Models\SupplierDebitNoteItem;
 use App\Models\SupplierInvoice;
@@ -25,7 +24,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
     {
         $this->doc_date = now()->format('Y-m-d');
         $this->items = [
-            ['description' => '', 'quantity' => '', 'amount' => '', 'total' => 0],
+            ['description' => '', 'quantity' => '', 'amount' => '', 'vat_applicable' => true, 'total' => 0],
         ];
         $this->nextReference = SupplierDebitNote::nextNumber();
         $this->vatRate = (float) Setting::get('vat_rate', 20);
@@ -35,17 +34,6 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
     {
         $this->supplier_invoice_id = null;
         unset($this->supplierInvoices);
-        $this->dispatch('debit-note-vat-changed', hasVat: $this->supplierHasVat);
-    }
-
-    #[Computed]
-    public function supplierHasVat(): bool
-    {
-        if (! $this->supplier_id) {
-            return false;
-        }
-
-        return (bool) Supplier::withTrashed()->find($this->supplier_id)?->vat_applied;
     }
 
     #[Computed]
@@ -81,6 +69,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
             'items.*.description' => 'required|string|max:500',
             'items.*.quantity'    => 'required|numeric|min:0.01',
             'items.*.amount'      => 'required|numeric|min:0',
+            'items.*.vat_applicable' => 'boolean',
         ]);
 
         $items = $this->items;
@@ -89,7 +78,11 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
             fn ($i) => round((float) $i['quantity'] * (float) $i['amount'], 2)
         );
 
-        $vatAmount = $this->supplierHasVat ? round($subtotal * $this->vatRate / 100, 2) : 0.0;
+        $vatAmount = collect($items)->sum(
+            fn ($i) => ($i['vat_applicable'] ?? false)
+                ? round(round((float) $i['quantity'] * (float) $i['amount'], 2) * $this->vatRate / 100, 2)
+                : 0.0
+        );
         $total = round($subtotal + $vatAmount, 2);
 
         $debitNote = DB::transaction(function () use ($items, $subtotal, $vatAmount, $total) {
@@ -110,6 +103,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                     'description'            => $item['description'],
                     'quantity'               => (float) $item['quantity'],
                     'amount'                 => (float) $item['amount'],
+                    'vat_applicable'         => (bool) ($item['vat_applicable'] ?? false),
                     'total'                  => round((float) $item['quantity'] * (float) $item['amount'], 2),
                     'sort_order'             => $idx,
                 ]);
@@ -144,11 +138,10 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
         $this->supplier_invoice_id = null;
         $this->notes = '';
         $this->items = [
-            ['description' => '', 'quantity' => '', 'amount' => '', 'total' => 0],
+            ['description' => '', 'quantity' => '', 'amount' => '', 'vat_applicable' => true, 'total' => 0],
         ];
         unset($this->supplierInvoices);
         $this->dispatch('debit-note-items-reset');
-        $this->dispatch('debit-note-vat-changed', hasVat: false);
     }
 
     public function resetForm(): void
@@ -236,9 +229,8 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
 
                     {{-- Items table (Alpine-managed, wire:ignore) --}}
                     <div class="col-span-full" wire:ignore
-                        x-data="supplierDebitNoteItems(@js($items), {{ $vatRate }}, @js($this->supplierHasVat))"
-                        @debit-note-items-reset.window="rows = [{ description: '', quantity: '', amount: '', total: 0 }]"
-                        @debit-note-vat-changed.window="hasVat = $event.detail.hasVat"
+                        x-data="supplierDebitNoteItems(@js($items), {{ $vatRate }})"
+                        @debit-note-items-reset.window="rows = [{ description: '', quantity: '', amount: '', vat_applicable: true, total: 0 }]"
                         @dn-pre-commit.window="preCommit()"
                         @dn-focus-first-item.window="$nextTick(() => { const f = $el.querySelector('[data-dn-row-desc]'); if (f) { f.focus(); f.scrollIntoView({ block: 'center', behavior: 'smooth' }); } })"
                         @keydown.window="handleKey($event)">
@@ -250,20 +242,21 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                             </div>
 
                             <div class="overflow-x-auto">
-                                <table class="w-full text-sm">
+                                <table class="w-full table-fixed text-sm">
                                     <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                                         <tr>
-                                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Description</th>
-                                            <th class="w-24 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Qty</th>
-                                            <th class="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Amount (£)</th>
-                                            <th class="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Total (£)</th>
-                                            <th class="w-10 px-4 py-3"></th>
+                                            <th class="px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Description</th>
+                                            <th class="w-20 px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Qty</th>
+                                            <th class="w-28 px-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Amount (£)</th>
+                                            <th class="w-20 px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT</th>
+                                            <th class="w-28 px-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Total (£)</th>
+                                            <th class="w-10 px-2 py-3"></th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                                         <template x-for="(row, i) in rows" :key="i">
                                             <tr :data-row-idx="i">
-                                                <td class="px-4 py-2.5">
+                                                <td class="px-2 py-2.5">
                                                     <input
                                                         type="text"
                                                         x-model="row.description"
@@ -272,7 +265,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                                                         class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                                     />
                                                 </td>
-                                                <td class="px-4 py-2.5">
+                                                <td class="px-2 py-2.5">
                                                     <input
                                                         type="number"
                                                         x-model="row.quantity"
@@ -281,7 +274,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                                                         class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-right text-sm text-zinc-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                                     />
                                                 </td>
-                                                <td class="px-4 py-2.5">
+                                                <td class="px-2 py-2.5">
                                                     <input
                                                         type="number"
                                                         x-model="row.amount"
@@ -290,10 +283,21 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                                                         class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-right text-sm text-zinc-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                                     />
                                                 </td>
-                                                <td class="px-4 py-2.5 text-right font-mono text-sm font-semibold tabular-nums text-zinc-900 dark:text-white">
+                                                <td class="px-2 py-2.5">
+                                                    <select
+                                                        x-model.boolean="row.vat_applicable"
+                                                        data-dn-row-vat
+                                                        x-on:focus="$el.showPicker?.()"
+                                                        class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                                    >
+                                                        <option :value="false">No</option>
+                                                        <option :value="true">Yes</option>
+                                                    </select>
+                                                </td>
+                                                <td class="px-2 py-2.5 text-right font-mono text-sm font-semibold tabular-nums text-zinc-900 dark:text-white">
                                                     £<span x-text="rowTotal(row).toFixed(2)">0.00</span>
                                                 </td>
-                                                <td class="px-4 py-2.5">
+                                                <td class="px-2 py-2.5">
                                                     <flux:button size="xs" variant="ghost" icon="x-mark" type="button" @click="removeRow(i)" x-show="rows.length > 1" />
                                                 </td>
                                             </tr>
