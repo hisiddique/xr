@@ -248,7 +248,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                                             <th class="px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Description</th>
                                             <th class="w-20 px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Qty</th>
                                             <th class="w-28 px-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Amount (£)</th>
-                                            <th class="w-20 px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT</th>
+                                            <th class="w-22 px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT</th>
                                             <th class="w-28 px-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Total (£)</th>
                                             <th class="w-10 px-2 py-3"></th>
                                         </tr>
@@ -290,8 +290,8 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                                                         x-on:focus="$el.showPicker?.()"
                                                         class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                                     >
-                                                        <option :value="false">No</option>
                                                         <option :value="true">Yes</option>
+                                                        <option :value="false">No</option>
                                                     </select>
                                                 </td>
                                                 <td class="px-2 py-2.5 text-right font-mono text-sm font-semibold tabular-nums text-zinc-900 dark:text-white">
