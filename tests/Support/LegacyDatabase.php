@@ -111,6 +111,27 @@ function createLegacyTables(array $tables): void
                 $table->string('status', 1)->nullable();
             });
         },
+        'AccountEntries' => function (): void {
+            Schema::connection('legacy')->create('AccountEntries', function (Blueprint $table): void {
+                $table->unsignedBigInteger('uid');
+                $table->string('rtype', 1);
+                $table->unsignedBigInteger('custid')->nullable();
+                $table->decimal('value', 12, 2)->nullable();
+                $table->decimal('osvalue', 12, 2)->nullable();
+                $table->string('txndate')->nullable();
+                $table->string('invno')->nullable();
+                $table->unsignedBigInteger('posttype')->nullable();
+                $table->string('createddate')->nullable();
+                $table->string('modifieddate')->nullable();
+            });
+        },
+        'AccountPostTypes' => function (): void {
+            Schema::connection('legacy')->create('AccountPostTypes', function (Blueprint $table): void {
+                $table->unsignedBigInteger('uid');
+                $table->string('rtype', 1)->nullable();
+                $table->string('inout', 3)->nullable();
+            });
+        },
     ];
 
     foreach ($tables as $table) {

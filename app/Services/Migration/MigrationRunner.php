@@ -8,6 +8,8 @@ use App\Models\Document;
 use App\Models\DocumentItem;
 use App\Models\MigrationRun;
 use App\Models\MigrationRunTable;
+use App\Models\Payment;
+use App\Models\PaymentAllocation;
 use App\Models\Supplier;
 use App\Models\SupplierDebitNote;
 use App\Models\SupplierDebitNoteItem;
@@ -18,6 +20,7 @@ use App\Services\Migration\Mappers\CustomerMapper;
 use App\Services\Migration\Mappers\DocumentItemMapper;
 use App\Services\Migration\Mappers\DocumentMapper;
 use App\Services\Migration\Mappers\LookupUnitMapper;
+use App\Services\Migration\Mappers\PaymentMapper;
 use App\Services\Migration\Mappers\SettingsMapper;
 use App\Services\Migration\Mappers\SupplierDebitNoteItemMapper;
 use App\Services\Migration\Mappers\SupplierDebitNoteMapper;
@@ -45,6 +48,7 @@ class MigrationRunner
         'suppliers' => ['suppliers'],
         'documents' => ['documents'],
         'document_items' => ['document_items'],
+        'payments' => ['payments'],
         'purchase_invoices' => ['supplier_invoices', 'supplier_invoice_items'],
         'purchase_credit_notes' => ['supplier_debit_notes', 'supplier_debit_note_items'],
     ];
@@ -162,6 +166,7 @@ class MigrationRunner
             'suppliers' => new SupplierMapper,
             'documents' => new DocumentMapper,
             'document_items' => new DocumentItemMapper,
+            'payments' => new PaymentMapper,
             'supplier_invoices' => new SupplierInvoiceMapper,
             'supplier_invoice_items' => new SupplierInvoiceItemMapper,
             'supplier_debit_notes' => new SupplierDebitNoteMapper,
@@ -169,7 +174,7 @@ class MigrationRunner
             default => throw new \InvalidArgumentException("Unknown mapper key: {$mapperKey}"),
         };
 
-        if ($mapper instanceof CustomerMapper || $mapper instanceof SupplierMapper || $mapper instanceof DocumentMapper || $mapper instanceof SupplierInvoiceMapper || $mapper instanceof SupplierDebitNoteMapper) {
+        if ($mapper instanceof CustomerMapper || $mapper instanceof SupplierMapper || $mapper instanceof DocumentMapper || $mapper instanceof SupplierInvoiceMapper || $mapper instanceof SupplierDebitNoteMapper || $mapper instanceof PaymentMapper) {
             $mapper->setCreatedBy($createdByUserId);
         }
 
@@ -468,9 +473,22 @@ class MigrationRunner
             $this->clearTable(SupplierInvoice::class, $clearMode, softDeletes: false);
         }
 
-        if (in_array('delivery_documents', $selectedGroups, true)) {
+        if (in_array('documents', $selectedGroups, true)) {
             $this->clearTable(DocumentItem::class, $clearMode, softDeletes: false);
             $this->clearTable(Document::class, $clearMode, softDeletes: true);
+        }
+
+        if (in_array('payments', $selectedGroups, true)) {
+            // Must precede clearTable(Payment::class, ...) below: clearTable's own
+            // forceDelete would otherwise leave payment_allocations FK-orphaned once
+            // their payment row is gone (no cascade defined on that column).
+            $paymentIdsQuery = Payment::withTrashed();
+            if ($clearMode === 'migrated_only') {
+                $paymentIdsQuery->whereNotNull('legacy_uid');
+            }
+            PaymentAllocation::withTrashed()->whereIn('payment_id', $paymentIdsQuery->pluck('id'))->forceDelete();
+
+            $this->clearTable(Payment::class, $clearMode, softDeletes: true);
         }
 
         if (in_array('suppliers', $selectedGroups, true)) {

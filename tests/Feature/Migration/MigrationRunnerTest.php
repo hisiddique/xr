@@ -145,6 +145,31 @@ test('clearing migrated-only data then re-importing avoids duplicates', function
 });
 
 /**
+ * Isolates the `documents` clear branch from the `customers` one: `documents.customer_id`
+ * has cascadeOnDelete(), so clearing `customers` alone would already delete `documents`
+ * as a side effect and mask a broken/missing `documents` branch. Selecting only
+ * `documents` (not `customers`) here forces the branch itself to do the deleting.
+ */
+test('clearing migrated-only documents without touching customers still clears and re-creates the document row', function () {
+    $run1 = MigrationRun::create(['status' => MigrationRunStatus::Pending]);
+    (new MigrationRunner($run1))->run(['customers', 'documents'], DuplicateStrategy::UpdateExisting, 'none', $this->admin->id);
+
+    $firstDocumentId = Document::where('legacy_uid', 301)->value('id');
+
+    $run2 = MigrationRun::create(['status' => MigrationRunStatus::Pending]);
+    (new MigrationRunner($run2))->run(['documents'], DuplicateStrategy::UpdateExisting, 'migrated_only', $this->admin->id);
+
+    $run2->refresh();
+
+    expect($run2->status)->toBe(MigrationRunStatus::Completed);
+    expect(Document::count())->toBe(2);
+
+    $newDocumentId = Document::where('legacy_uid', 301)->value('id');
+
+    expect($newDocumentId)->not->toBe($firstDocumentId);
+});
+
+/**
  * Forces the failure on CustomerMapper directly: the `customers` table's
  * `company_name` column is NOT NULL, and CustomerMapper maps a blank legacy
  * name straight through to null, so a row with no name reliably violates the

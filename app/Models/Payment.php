@@ -17,6 +17,7 @@ class Payment extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
+        'legacy_uid',
         'customer_id',
         'payment_method_id',
         'source_type',
@@ -28,6 +29,8 @@ class Payment extends Model
         'notes',
         'receipt_path',
         'created_by',
+        'created_at',
+        'updated_at',
     ];
 
     protected function casts(): array

@@ -42,6 +42,7 @@ new #[Title('Legacy Data Migration')] class extends Component {
         'suppliers' => 'Suppliers',
         'documents' => 'Delivery Notes, Invoices & Credit Notes',
         'document_items' => 'Document Line Items',
+        'payments' => 'Customer Payments',
         'purchase_invoices' => 'Purchase Invoices',
         'purchase_credit_notes' => 'Purchase Credit Notes',
     ];
