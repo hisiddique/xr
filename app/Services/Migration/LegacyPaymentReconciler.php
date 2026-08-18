@@ -43,11 +43,16 @@ class LegacyPaymentReconciler
     {
         [$osvalueByDocumentLegacyUid, $ambiguousRefs] = $this->buildLegacyTargetMap();
 
+        // Filtered in PHP against the preloaded map rather than whereIn('legacy_uid', $keys):
+        // that list can hold tens of thousands of entries, which risks MySQL's 65535
+        // prepared-statement placeholder cap (see MigrationRunner::applyBulkChunk()'s
+        // identical concern) — the same reason every mapper here preloads maps instead
+        // of building large IN clauses.
         $targetDocuments = Document::query()
             ->invoices()
             ->whereNotNull('legacy_uid')
-            ->whereIn('legacy_uid', array_keys($osvalueByDocumentLegacyUid))
             ->get()
+            ->filter(fn (Document $document) => array_key_exists($document->legacy_uid, $osvalueByDocumentLegacyUid))
             ->keyBy('legacy_uid');
 
         $targets = $targetDocuments->map(function (Document $document) use ($osvalueByDocumentLegacyUid) {
@@ -62,13 +67,13 @@ class LegacyPaymentReconciler
             ];
         });
 
-        $customerIds = $targets->pluck('document.customer_id')->unique()->values();
+        $customerIds = $targets->pluck('document.customer_id')->unique()->flip();
 
         $paymentsByCustomer = Payment::query()
             ->whereNotNull('legacy_uid')
-            ->whereIn('customer_id', $customerIds)
             ->orderBy('payment_date')
             ->get()
+            ->filter(fn (Payment $payment) => $customerIds->has($payment->customer_id))
             ->groupBy('customer_id')
             ->map(fn ($payments) => $payments->map(fn (Payment $payment) => [
                 'payment' => $payment,
