@@ -4,6 +4,7 @@ use App\Http\Controllers\ConvertDeliveryNoteController;
 use App\Http\Controllers\CustomerOutstandingExportController;
 use App\Http\Controllers\CustomerStatementController;
 use App\Http\Controllers\DocumentPdfController;
+use App\Http\Controllers\ExportDownloadController;
 use App\Http\Controllers\SupplierInvoiceAttachmentController;
 use Illuminate\Support\Facades\Route;
 
@@ -80,6 +81,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('reports/customer-outstanding-payments/export/{format}', [CustomerOutstandingExportController::class, 'export'])
         ->where('format', 'csv|xlsx|pdf')
         ->name('reports.customer-outstanding-payments.export');
+
+    // Exports
+    Route::livewire('exports', 'pages::exports.index')->name('exports.index');
+    Route::get('exports/{exportJob}/download', [ExportDownloadController::class, 'download'])->name('exports.download');
 
     // Supplier Payouts
     Route::livewire('supplier-payouts', 'pages::supplier-payouts.index')->name('supplier-payouts.index');

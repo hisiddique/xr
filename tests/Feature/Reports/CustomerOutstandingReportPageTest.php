@@ -1,11 +1,12 @@
 <?php
 
-use App\Mail\CustomerOutstandingReportMail;
+use App\Jobs\SendCustomerOutstandingReportJob;
 use App\Models\Customer;
 use App\Models\Document;
+use App\Models\ExportJob;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
@@ -80,8 +81,8 @@ test('sending the report requires at least one recipient and at least one format
         ->assertHasErrors(['reportEmails', 'reportFormats']);
 });
 
-test('sending the report emails the current filtered results with the selected attachments', function () {
-    Mail::fake();
+test('sending the report queues a job instead of sending inline', function () {
+    Queue::fake();
 
     $user = User::factory()->staff()->create(['email_verified_at' => now()]);
     $customer = Customer::factory()->create();
@@ -94,7 +95,7 @@ test('sending the report emails the current filtered results with the selected a
         ->call('sendReportEmail')
         ->assertHasNoErrors();
 
-    Mail::assertSent(CustomerOutstandingReportMail::class, function (CustomerOutstandingReportMail $mail) {
-        return $mail->hasTo('ops@example.com') && count($mail->attachments()) === 2;
-    });
+    expect(ExportJob::query()->where('format', 'email')->where('created_by', $user->id)->exists())->toBeTrue();
+
+    Queue::assertPushed(SendCustomerOutstandingReportJob::class);
 });

@@ -145,3 +145,100 @@ test('report service search matches customer name and invoice number', function 
     expect($service->buildExportData(['search' => $invoice->doc_number]))->toHaveCount(1);
     expect($service->buildExportData(['search' => 'no-match-xyz']))->toHaveCount(0);
 });
+
+test('exportChunks yields customers ordered by company_name then id', function () {
+    $customerA = Customer::factory()->create(['company_name' => 'Duplicate Co']);
+    $customerB = Customer::factory()->create(['company_name' => 'Duplicate Co']);
+
+    Document::factory()->invoice()->create(['customer_id' => $customerA->id, 'total_value' => 10, 'doc_date' => now()]);
+    Document::factory()->invoice()->create(['customer_id' => $customerB->id, 'total_value' => 20, 'doc_date' => now()]);
+
+    [$first, $second] = min($customerA->id, $customerB->id) === $customerA->id
+        ? [$customerA, $customerB]
+        : [$customerB, $customerA];
+
+    $service = app(CustomerOutstandingReportService::class);
+    $results = iterator_to_array($service->exportChunks([]));
+
+    expect($results)->toHaveCount(2);
+    expect($results[0]['reference'])->toBe((string) $first->reference);
+    expect($results[1]['reference'])->toBe((string) $second->reference);
+});
+
+test('exportChunks yields every customer across a chunk boundary without duplicates', function () {
+    $count = 205;
+
+    $customers = Customer::factory()->count($count)->create();
+
+    foreach ($customers as $customer) {
+        Document::factory()->invoice()->create([
+            'customer_id' => $customer->id,
+            'total_value' => 10,
+            'doc_date' => now(),
+        ]);
+    }
+
+    $service = app(CustomerOutstandingReportService::class);
+    $results = iterator_to_array($service->exportChunks([]));
+
+    expect($results)->toHaveCount($count);
+
+    $references = array_column($results, 'reference');
+    expect(count(array_unique($references)))->toBe($count);
+
+    $names = array_column($results, 'company_name');
+    $sortedNames = $names;
+    sort($sortedNames, SORT_STRING);
+    expect($names)->toBe($sortedNames);
+});
+
+test('buildExportData returns the same shape as before the generator refactor', function () {
+    $customer = Customer::factory()->create();
+    $invoice = Document::factory()->invoice()->create([
+        'customer_id' => $customer->id,
+        'total_value' => 42.5,
+        'doc_date' => now(),
+    ]);
+
+    $service = app(CustomerOutstandingReportService::class);
+    $results = $service->buildExportData([]);
+
+    expect($results)->toHaveCount(1);
+    expect($results[0])->toHaveKeys(['company_name', 'reference', 'invoices']);
+    expect($results[0]['company_name'])->toBe($customer->company_name);
+    expect($results[0]['reference'])->toBe((string) $customer->reference);
+    expect($results[0]['invoices'][0])->toHaveKeys(['doc_date', 'doc_number', 'total_value', 'outstanding']);
+    expect($results[0]['invoices'][0]['doc_number'])->toBe($invoice->doc_number);
+    expect($results[0]['invoices'][0]['total_value'])->toBe(42.5);
+    expect($results[0]['invoices'][0]['outstanding'])->toBe(42.5);
+});
+
+test('writeCsvToPath writes headings and rows incrementally and reports totals', function () {
+    $customer = Customer::factory()->create(['company_name' => 'Csv Writer Co']);
+    Document::factory()->invoice()->create([
+        'customer_id' => $customer->id,
+        'total_value' => 30,
+        'doc_date' => now(),
+    ]);
+
+    $service = app(CustomerOutstandingReportService::class);
+    $path = tempnam(sys_get_temp_dir(), 'csv-export-test');
+
+    $onChunkCalls = 0;
+
+    try {
+        $result = $service->writeCsvToPath($path, $service->exportChunks([]), function () use (&$onChunkCalls) {
+            $onChunkCalls++;
+        });
+
+        $contents = file_get_contents($path);
+
+        expect($contents)->toContain('Customer,Reference,Date,Invoice,Total,Outstanding');
+        expect($contents)->toContain('Csv Writer Co');
+        expect($result['customerCount'])->toBe(1);
+        expect($result['totalOutstanding'])->toBe(30.0);
+        expect($onChunkCalls)->toBe(1);
+    } finally {
+        @unlink($path);
+    }
+});

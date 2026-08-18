@@ -63,6 +63,18 @@
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 font-mono text-[10px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F5</kbd>
                     </a>
 
+                    <a
+                        href="{{ route('exports.index') }}"
+                        wire:navigate
+                        @class([
+                            'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                            'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('exports.*'),
+                            'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('exports.*'),
+                        ])
+                    >
+                        Exports
+                    </a>
+
                     <flux:dropdown>
                         <button
                             type="button"
@@ -364,6 +376,20 @@
                             >
                                 <flux:icon.truck class="size-5 shrink-0" />
                                 Delivery Notes
+                            </a>
+                        </li>
+                        <li>
+                            <a
+                                href="{{ route('exports.index') }}"
+                                wire:navigate
+                                @class([
+                                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('exports.*'),
+                                    'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('exports.*'),
+                                ])
+                            >
+                                <flux:icon.arrow-down-tray class="size-5 shrink-0" />
+                                Exports
                             </a>
                         </li>
                         <li>

@@ -13,3 +13,10 @@ Artisan::command('inspire', function () {
 Schedule::command('queue:work --queue=migrations --stop-when-empty --max-time=50 --tries=1')
     ->everyMinute()
     ->withoutOverlapping(300);
+
+// Requires `* * * * * php artisan schedule:run` in crontab (no persistent worker here).
+// Overlap lock (2100s) sized above this job's own 1800s timeout so a second
+// `queue:work` doesn't start while an export job may still be running.
+Schedule::command('queue:work --queue=exports --stop-when-empty --max-time=50 --tries=1')
+    ->everyMinute()
+    ->withoutOverlapping(2100);

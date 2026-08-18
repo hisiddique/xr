@@ -22,6 +22,14 @@ class CustomerOutstandingReportService
 
     protected const EXPORT_CHUNK_SIZE = 200;
 
+    /**
+     * dompdf cannot stream — it must hold the fully-rendered document in memory
+     * regardless of how the data is built. Above this many invoice rows the
+     * render is both slow and memory-risky on shared hosting, so PDF exports
+     * are rejected in favour of CSV/XLSX rather than attempting them.
+     */
+    public const PDF_ROW_CAP = 5000;
+
     protected const OUTSTANDING_EXPR = '(documents.total_value
         - COALESCE((select sum(pa.allocated_amount) from payment_allocations pa where pa.document_id = documents.id and pa.deleted_at is null), 0)
         - COALESCE((select sum(ca.amount) from credit_allocations ca where ca.invoice_id = documents.id and ca.deleted_at is null), 0))';
@@ -93,53 +101,83 @@ class CustomerOutstandingReportService
     }
 
     /**
-     * Build export data in bounded chunks instead of eager-loading every matching
-     * customer/invoice into one giant collection at once. Each chunk's Eloquent
-     * models are converted to plain arrays and discarded before the next chunk
-     * loads, keeping peak memory bounded regardless of total dataset size.
+     * Yield export rows one customer at a time using keyset pagination on
+     * (company_name, id) instead of chunkById, so ordering is preserved
+     * without a final in-memory sort and peak memory stays bounded regardless
+     * of total dataset size.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return \Generator<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>
+     */
+    public function exportChunks(array $filters): \Generator
+    {
+        $cursor = null;
+
+        while (true) {
+            $query = $this->customersQuery($filters)
+                ->reorder()
+                ->select('customers.id', 'customers.company_name', 'customers.reference')
+                ->orderBy('company_name')
+                ->orderBy('id');
+
+            if ($cursor !== null) {
+                [$lastName, $lastId] = $cursor;
+                $query->where(function ($q) use ($lastName, $lastId) {
+                    $q->where('company_name', '>', $lastName)
+                        ->orWhere(function ($q2) use ($lastName, $lastId) {
+                            $q2->where('company_name', $lastName)->where('id', '>', $lastId);
+                        });
+                });
+            }
+
+            $customersChunk = $query->limit(self::EXPORT_CHUNK_SIZE)->get();
+
+            if ($customersChunk->isEmpty()) {
+                return;
+            }
+
+            $invoicesByCustomer = Document::invoices()
+                ->whereIn('customer_id', $customersChunk->pluck('id'))
+                ->tap(fn ($q) => $this->applyOutstandingFilters($q, $filters))
+                ->orderBy('doc_date')
+                ->get()
+                ->groupBy('customer_id');
+
+            foreach ($customersChunk as $customer) {
+                $invoices = $invoicesByCustomer->get($customer->id, collect())
+                    ->map(fn (Document $invoice) => [
+                        'doc_date' => $invoice->doc_date?->format('d M Y'),
+                        'doc_number' => $invoice->doc_number,
+                        'total_value' => (float) $invoice->total_value,
+                        'outstanding' => $this->outstandingAmount($invoice),
+                    ])->all();
+
+                if (! empty($invoices)) {
+                    yield [
+                        'company_name' => $customer->company_name,
+                        'reference' => (string) $customer->reference,
+                        'invoices' => $invoices,
+                    ];
+                }
+            }
+
+            $last = $customersChunk->last();
+            $cursor = [$last->company_name, $last->id];
+        }
+    }
+
+    /**
+     * Materializes the full result of exportChunks() into an array. Use this
+     * only when a caller genuinely needs the whole dataset in memory at once
+     * (e.g. PDF rendering); callers that can process one customer at a time
+     * should call exportChunks() directly to stay memory-bounded.
      *
      * @param  array<string, mixed>  $filters
      * @return array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>
      */
     public function buildExportData(array $filters): array
     {
-        $data = [];
-
-        $this->customersQuery($filters)
-            ->reorder()
-            ->select('customers.id', 'customers.company_name', 'customers.reference')
-            ->chunkById(self::EXPORT_CHUNK_SIZE, function ($customersChunk) use (&$data, $filters) {
-                $invoicesByCustomer = Document::invoices()
-                    ->whereIn('customer_id', $customersChunk->pluck('id'))
-                    ->tap(fn ($q) => $this->applyOutstandingFilters($q, $filters))
-                    ->orderBy('doc_date')
-                    ->get()
-                    ->groupBy('customer_id');
-
-                foreach ($customersChunk as $customer) {
-                    $invoices = $invoicesByCustomer->get($customer->id, collect())
-                        ->map(fn (Document $invoice) => [
-                            'doc_date' => $invoice->doc_date?->format('d M Y'),
-                            'doc_number' => $invoice->doc_number,
-                            'total_value' => (float) $invoice->total_value,
-                            'outstanding' => $this->outstandingAmount($invoice),
-                        ])->all();
-
-                    if (empty($invoices)) {
-                        continue;
-                    }
-
-                    $data[] = [
-                        'company_name' => $customer->company_name,
-                        'reference' => (string) $customer->reference,
-                        'invoices' => $invoices,
-                    ];
-                }
-            });
-
-        usort($data, fn ($a, $b) => $a['company_name'] <=> $b['company_name']);
-
-        return $data;
+        return iterator_to_array($this->exportChunks($filters));
     }
 
     /**
@@ -154,6 +192,38 @@ class CustomerOutstandingReportService
     }
 
     /**
+     * @param  array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}  $customer
+     * @return array<int, array{0: array<int, string>, 1: bool}>
+     */
+    protected function customerRows(array $customer): array
+    {
+        $rows = [];
+        $customerTotal = 0.0;
+        $customerOutstanding = 0.0;
+
+        foreach ($customer['invoices'] as $invoice) {
+            $rows[] = [[
+                $customer['company_name'].' ('.$customer['reference'].')',
+                $invoice['doc_date'] ?? '',
+                $invoice['doc_number'],
+                number_format($invoice['total_value'], 2, '.', ''),
+                number_format($invoice['outstanding'], 2, '.', ''),
+            ], false];
+
+            $customerTotal += $invoice['total_value'];
+            $customerOutstanding += $invoice['outstanding'];
+        }
+
+        $rows[] = [[
+            '', '', '',
+            number_format($customerTotal, 2, '.', ''),
+            number_format($customerOutstanding, 2, '.', ''),
+        ], true];
+
+        return $rows;
+    }
+
+    /**
      * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
      * @return array<int, array{0: array<int, string>, 1: bool}>
      */
@@ -162,30 +232,71 @@ class CustomerOutstandingReportService
         $rows = [];
 
         foreach ($data as $customer) {
-            $customerTotal = 0.0;
-            $customerOutstanding = 0.0;
-
-            foreach ($customer['invoices'] as $invoice) {
-                $rows[] = [[
-                    $customer['company_name'].' ('.$customer['reference'].')',
-                    $invoice['doc_date'] ?? '',
-                    $invoice['doc_number'],
-                    number_format($invoice['total_value'], 2, '.', ''),
-                    number_format($invoice['outstanding'], 2, '.', ''),
-                ], false];
-
-                $customerTotal += $invoice['total_value'];
-                $customerOutstanding += $invoice['outstanding'];
-            }
-
-            $rows[] = [[
-                '', '', '',
-                number_format($customerTotal, 2, '.', ''),
-                number_format($customerOutstanding, 2, '.', ''),
-            ], true];
+            $rows = array_merge($rows, $this->customerRows($customer));
         }
 
         return $rows;
+    }
+
+    /**
+     * @return array{customerCount: int, totalOutstanding: float}
+     */
+    public function writeCsvToPath(string $path, \Generator $chunks, ?callable $onChunk = null): array
+    {
+        $writer = CsvWriter::createFromPath($path, 'w');
+        $writer->insertOne(self::EXPORT_HEADINGS);
+
+        $customerCount = 0;
+        $totalOutstanding = 0.0;
+
+        foreach ($chunks as $customer) {
+            foreach ($this->customerRows($customer) as [$row]) {
+                $writer->insertOne($row);
+            }
+
+            $customerCount++;
+            $totalOutstanding += array_sum(array_column($customer['invoices'], 'outstanding'));
+
+            if ($onChunk !== null) {
+                $onChunk($customer);
+            }
+        }
+
+        return ['customerCount' => $customerCount, 'totalOutstanding' => $totalOutstanding];
+    }
+
+    /**
+     * @return array{customerCount: int, totalOutstanding: float}
+     */
+    public function writeXlsxToPath(string $path, \Generator $chunks, ?callable $onChunk = null): array
+    {
+        $writer = new XlsxWriter;
+        $writer->openToFile($path);
+
+        $boldStyle = (new Style)->withFontBold(true);
+        $writer->addRow(Row::fromValuesWithStyle(self::EXPORT_HEADINGS, $boldStyle));
+
+        $customerCount = 0;
+        $totalOutstanding = 0.0;
+
+        try {
+            foreach ($chunks as $customer) {
+                foreach ($this->customerRows($customer) as [$row, $isSubtotal]) {
+                    $writer->addRow($isSubtotal ? Row::fromValuesWithStyle($row, $boldStyle) : Row::fromValues($row));
+                }
+
+                $customerCount++;
+                $totalOutstanding += array_sum(array_column($customer['invoices'], 'outstanding'));
+
+                if ($onChunk !== null) {
+                    $onChunk($customer);
+                }
+            }
+        } finally {
+            $writer->close();
+        }
+
+        return ['customerCount' => $customerCount, 'totalOutstanding' => $totalOutstanding];
     }
 
     /**
@@ -276,7 +387,15 @@ class CustomerOutstandingReportService
     /**
      * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
      */
-    protected function pdfBinary(array $data): string
+    public function invoiceRowCount(array $data): int
+    {
+        return array_sum(array_map(fn (array $customer) => count($customer['invoices']), $data));
+    }
+
+    /**
+     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
+     */
+    public function pdfBinary(array $data): string
     {
         return Pdf::loadView('pdfs.customer-outstanding', ['customers' => $data])
             ->setOption('isPhpEnabled', true)

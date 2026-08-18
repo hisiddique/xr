@@ -1,7 +1,10 @@
 <?php
 
+use App\ExportJobStatus;
+use App\Jobs\SendCustomerOutstandingReportJob;
 use App\Models\Customer;
 use App\Models\Document;
+use App\Models\ExportJob;
 use App\Services\CustomerOutstandingReportService;
 use App\Traits\WithPerPage;
 use Flux\Flux;
@@ -193,19 +196,26 @@ new #[Title('Customer Outstanding Payments')] class extends Component
             'reportNotes' => 'nullable|string|max:2000',
         ]);
 
-        try {
-            app(CustomerOutstandingReportService::class)->sendReport(
-                $this->filters(),
-                $this->reportEmails,
-                $this->reportFormats,
-                $this->reportNotes ?: null,
-            );
+        $filters = $this->filters();
 
-            Flux::modal('send-report')->close();
-            Flux::toast(variant: 'success', text: __('Report sent to :recipient.', ['recipient' => $this->reportEmails[0]]));
-        } catch (\Throwable $e) {
-            $this->addError('reportEmails', $e->getMessage());
-        }
+        $exportJob = ExportJob::create([
+            'status' => ExportJobStatus::Pending,
+            'type' => 'customer_outstanding_payments',
+            'format' => 'email',
+            'filters' => $filters,
+            'rows_total' => app(CustomerOutstandingReportService::class)->customersQuery($filters)->count(),
+            'created_by' => auth()->id(),
+        ]);
+
+        SendCustomerOutstandingReportJob::dispatch(
+            $exportJob->id,
+            $this->reportEmails,
+            $this->reportFormats,
+            $this->reportNotes ?: null,
+        );
+
+        Flux::modal('send-report')->close();
+        Flux::toast(variant: 'success', text: __('Report queued — you will receive it by email shortly.'));
     }
 }; ?>
 
