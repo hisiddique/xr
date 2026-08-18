@@ -383,6 +383,26 @@ new #[Title('Legacy Data Migration')] class extends Component {
                 </div>
             @endif
 
+            @if (isset($activeRun->options['reconciliation']))
+                <div class="rounded-xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-400">
+                    <p class="font-semibold">Customer payments reconciled against invoices</p>
+                    <p class="mt-1">
+                        {{ number_format($activeRun->options['reconciliation']['settled']) }} invoice(s) settled,
+                        {{ number_format($activeRun->options['reconciliation']['allocation_rows']) }} allocation(s) written,
+                        {{ number_format($activeRun->options['reconciliation']['shortfalls']) }} shortfall(s),
+                        {{ number_format($activeRun->options['reconciliation']['ambiguous_refs']) }} excluded (ambiguous legacy ref).
+                    </p>
+                </div>
+            @endif
+
+            @if (isset($activeRun->options['reconciliation_error']))
+                <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
+                    <p class="font-semibold">Migration succeeded, but reconciling payments to invoices afterward failed</p>
+                    <p class="mt-1">{{ $activeRun->options['reconciliation_error'] }}</p>
+                    <p class="mt-1 text-xs">You can retry from Documents + Customer Payments again, or run <span class="font-mono">php artisan payments:reconcile-legacy-allocations</span> where the legacy connection is configured.</p>
+                </div>
+            @endif
+
             @if ($activeRun->status === MigrationRunStatus::Failed && $activeRun->error)
                 <div class="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
                     {{ $activeRun->error }}
