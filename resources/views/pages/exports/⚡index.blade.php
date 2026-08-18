@@ -4,6 +4,7 @@ use App\ExportJobStatus;
 use App\Models\ExportJob;
 use App\Traits\WithPerPage;
 use Flux\Flux;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -15,6 +16,14 @@ new #[Title('Exports')] class extends Component
     use WithPerPage;
 
     public int $perPage = 25;
+
+    /** @var array<int, int> */
+    public array $selected = [];
+
+    public bool $selectAll = false;
+
+    /** @var array<int, int> */
+    public array $deletingIds = [];
 
     public function mount(): void
     {
@@ -32,6 +41,11 @@ new #[Title('Exports')] class extends Component
         $this->resetPage();
     }
 
+    public function updatedSelectAll(bool $value): void
+    {
+        $this->selected = $value ? $this->deletableJobIds->all() : [];
+    }
+
     public function cancel(int $exportJobId): void
     {
         ExportJob::query()
@@ -41,6 +55,41 @@ new #[Title('Exports')] class extends Component
             ->update(['cancelled_at' => now()]);
     }
 
+    public function confirmDelete(?int $exportJobId = null): void
+    {
+        $this->deletingIds = $exportJobId !== null ? [$exportJobId] : $this->selected;
+
+        if (empty($this->deletingIds)) {
+            return;
+        }
+
+        Flux::modal('confirm-delete-exports')->show();
+    }
+
+    public function deleteConfirmed(): void
+    {
+        $exports = ExportJob::query()
+            ->where('created_by', auth()->id())
+            ->whereIn('id', $this->deletingIds)
+            ->whereNotIn('status', [ExportJobStatus::Pending, ExportJobStatus::Running])
+            ->get();
+
+        foreach ($exports as $export) {
+            if ($export->download_path) {
+                Storage::disk('local')->delete($export->download_path);
+            }
+
+            $export->delete();
+        }
+
+        $this->selected = array_values(array_diff($this->selected, $this->deletingIds));
+        $this->selectAll = false;
+        $this->deletingIds = [];
+
+        Flux::modal('confirm-delete-exports')->close();
+        Flux::toast(variant: 'success', text: __(':count export(s) deleted.', ['count' => $exports->count()]));
+    }
+
     #[Computed]
     public function exportJobs()
     {
@@ -48,6 +97,14 @@ new #[Title('Exports')] class extends Component
             ->where('created_by', auth()->id())
             ->latest()
             ->paginate($this->perPage);
+    }
+
+    #[Computed]
+    public function deletableJobIds()
+    {
+        return $this->exportJobs
+            ->filter(fn (ExportJob $export) => ! in_array($export->status, [ExportJobStatus::Pending, ExportJobStatus::Running], true))
+            ->pluck('id');
     }
 
     #[Computed]
@@ -69,7 +126,15 @@ new #[Title('Exports')] class extends Component
     <x-ui.page-header
         title="Exports"
         subtitle="Track and download your report exports."
-    />
+    >
+        @if(count($selected) > 0)
+            <x-slot:action>
+                <flux:button size="sm" variant="danger" icon="trash" wire:click="confirmDelete()">
+                    Delete Selected ({{ count($selected) }})
+                </flux:button>
+            </x-slot:action>
+        @endif
+    </x-ui.page-header>
 
     <div class="overflow-x-clip rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
         @if($this->exportJobs->isEmpty())
@@ -83,6 +148,9 @@ new #[Title('Exports')] class extends Component
                 <table class="w-full text-sm">
                     <thead class="bg-zinc-50 dark:bg-zinc-800">
                         <tr>
+                            <th class="w-10 px-4 py-2">
+                                <flux:checkbox wire:model.live="selectAll" :disabled="$this->deletableJobIds->isEmpty()" />
+                            </th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Report</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Format</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Status</th>
@@ -97,8 +165,14 @@ new #[Title('Exports')] class extends Component
                                 $percent = $export->rows_total > 0
                                     ? min(100, (int) round($export->rows_processed / $export->rows_total * 100))
                                     : 0;
+                                $isTerminal = ! in_array($export->status, [ExportJobStatus::Pending, ExportJobStatus::Running], true);
                             @endphp
                             <tr wire:key="export-{{ $export->id }}">
+                                <td class="px-4 py-2">
+                                    @if($isTerminal)
+                                        <flux:checkbox wire:model.live="selected" value="{{ $export->id }}" />
+                                    @endif
+                                </td>
                                 <td class="px-4 py-2 text-zinc-700 dark:text-zinc-300">Customer Outstanding Payments</td>
                                 <td class="px-4 py-2 uppercase text-zinc-500 dark:text-zinc-400">{{ $export->format }}</td>
                                 <td class="px-4 py-2">
@@ -119,7 +193,7 @@ new #[Title('Exports')] class extends Component
                                     @endif
                                 </td>
                                 <td class="px-4 py-2">
-                                    @if(in_array($export->status, [ExportJobStatus::Pending, ExportJobStatus::Running], true))
+                                    @if(! $isTerminal)
                                         <div class="flex items-center gap-2">
                                             <div class="h-2 w-28 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
                                                 <div class="h-full rounded-full bg-indigo-600 transition-all" style="width: {{ $percent }}%"></div>
@@ -132,11 +206,17 @@ new #[Title('Exports')] class extends Component
                                 </td>
                                 <td class="px-4 py-2 text-xs text-zinc-500 dark:text-zinc-400">{{ $export->created_at->diffForHumans() }}</td>
                                 <td class="px-4 py-2 text-right">
-                                    @if($export->status === ExportJobStatus::Completed && $export->download_path)
-                                        <flux:button size="sm" icon="arrow-down-tray" :href="route('exports.download', $export)">Download</flux:button>
-                                    @elseif(in_array($export->status, [ExportJobStatus::Pending, ExportJobStatus::Running], true) && ! $export->cancelled_at)
-                                        <flux:button size="sm" variant="danger" wire:click="cancel({{ $export->id }})">Cancel</flux:button>
-                                    @endif
+                                    <div class="flex items-center justify-end gap-2">
+                                        @if($export->status === ExportJobStatus::Completed && $export->download_path)
+                                            <flux:button size="sm" icon="arrow-down-tray" :href="route('exports.download', $export)">Download</flux:button>
+                                        @elseif(! $isTerminal && ! $export->cancelled_at)
+                                            <flux:button size="sm" variant="danger" wire:click="cancel({{ $export->id }})">Cancel</flux:button>
+                                        @endif
+
+                                        @if($isTerminal)
+                                            <flux:button size="sm" variant="danger" icon="trash" wire:click="confirmDelete({{ $export->id }})" />
+                                        @endif
+                                    </div>
                                 </td>
                             </tr>
                         @endforeach
@@ -147,5 +227,26 @@ new #[Title('Exports')] class extends Component
             <flux:pagination :paginator="$this->exportJobs" class="px-6" />
         @endif
     </div>
+
+    <flux:modal name="confirm-delete-exports" focusable class="max-w-md">
+        <div class="space-y-4">
+            <div>
+                <flux:heading size="lg">{{ __('Delete Export(s)') }}</flux:heading>
+                <flux:subheading>
+                    {{ __('This will permanently delete :count export(s) and their downloaded files. This cannot be undone.', ['count' => count($deletingIds)]) }}
+                </flux:subheading>
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <flux:modal.close>
+                    <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                </flux:modal.close>
+
+                <flux:button variant="danger" wire:click="deleteConfirmed">
+                    {{ __('Delete') }}
+                </flux:button>
+            </div>
+        </div>
+    </flux:modal>
 
 </div>

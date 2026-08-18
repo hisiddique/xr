@@ -203,7 +203,8 @@ class CustomerOutstandingReportService
 
         foreach ($customer['invoices'] as $invoice) {
             $rows[] = [[
-                $customer['company_name'].' ('.$customer['reference'].')',
+                $customer['company_name'],
+                $customer['reference'],
                 $invoice['doc_date'] ?? '',
                 $invoice['doc_number'],
                 number_format($invoice['total_value'], 2, '.', ''),
@@ -215,7 +216,7 @@ class CustomerOutstandingReportService
         }
 
         $rows[] = [[
-            '', '', '',
+            '', '', '', '',
             number_format($customerTotal, 2, '.', ''),
             number_format($customerOutstanding, 2, '.', ''),
         ], true];

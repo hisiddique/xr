@@ -8,6 +8,7 @@ use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use App\Services\CustomerOutstandingReportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use League\Csv\Reader;
 
 uses(RefreshDatabase::class);
 
@@ -240,5 +241,56 @@ test('writeCsvToPath writes headings and rows incrementally and reports totals',
         expect($onChunkCalls)->toBe(1);
     } finally {
         @unlink($path);
+    }
+});
+
+test('csv and xlsx rows have one value per heading column, aligned under the right header', function () {
+    $customer = Customer::factory()->create(['company_name' => 'Aligned Co', 'reference' => 'REF-1']);
+    $invoice = Document::factory()->invoice()->create([
+        'customer_id' => $customer->id,
+        'total_value' => 55,
+        'doc_date' => now(),
+    ]);
+
+    $service = app(CustomerOutstandingReportService::class);
+
+    $csvPath = tempnam(sys_get_temp_dir(), 'csv-align-test');
+    $xlsxPath = tempnam(sys_get_temp_dir(), 'xlsx-align-test');
+
+    try {
+        $service->writeCsvToPath($csvPath, $service->exportChunks([]));
+        $records = Reader::createFromPath($csvPath)->getRecords();
+        $rows = iterator_to_array($records, false);
+
+        // Heading row, one invoice row, one subtotal row — each with exactly 6 columns.
+        expect($rows[0])->toBe(['Customer', 'Reference', 'Date', 'Invoice', 'Total', 'Outstanding']);
+        expect(count($rows[1]))->toBe(6);
+        expect($rows[1][0])->toBe('Aligned Co');
+        expect($rows[1][1])->toBe('REF-1');
+        expect($rows[1][3])->toBe($invoice->doc_number);
+        expect($rows[1][5])->toBe('55.00');
+        expect(count($rows[2]))->toBe(6);
+        expect($rows[2][5])->toBe('55.00');
+
+        $service->writeXlsxToPath($xlsxPath, $service->exportChunks([]));
+        $reader = new OpenSpout\Reader\XLSX\Reader;
+        $reader->open($xlsxPath);
+        $xlsxRows = [];
+        foreach ($reader->getSheetIterator() as $sheet) {
+            foreach ($sheet->getRowIterator() as $row) {
+                $xlsxRows[] = $row->toArray();
+            }
+        }
+        $reader->close();
+
+        expect($xlsxRows[0])->toBe(['Customer', 'Reference', 'Date', 'Invoice', 'Total', 'Outstanding']);
+        expect(count($xlsxRows[1]))->toBe(6);
+        expect($xlsxRows[1][0])->toBe('Aligned Co');
+        expect($xlsxRows[1][1])->toBe('REF-1');
+        expect($xlsxRows[1][3])->toBe($invoice->doc_number);
+        expect($xlsxRows[1][5])->toBe('55.00');
+    } finally {
+        @unlink($csvPath);
+        @unlink($xlsxPath);
     }
 });

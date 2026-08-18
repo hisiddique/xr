@@ -4,6 +4,7 @@ use App\ExportJobStatus;
 use App\Models\ExportJob;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
@@ -104,6 +105,86 @@ test('download button is hidden until the export is completed', function () {
     Livewire::actingAs($user)
         ->test('pages::exports.index')
         ->assertSee(route('exports.download', $export));
+});
+
+test('deleting a completed export removes the record and its file', function () {
+    Storage::fake('local');
+    Storage::disk('local')->put('exports/1/x.csv', 'a,b,c');
+
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+    $export = ExportJob::create([
+        'status' => ExportJobStatus::Completed,
+        'type' => 'customer_outstanding_payments',
+        'format' => 'csv',
+        'download_path' => 'exports/1/x.csv',
+        'created_by' => $user->id,
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::exports.index')
+        ->call('confirmDelete', $export->id)
+        ->call('deleteConfirmed');
+
+    expect(ExportJob::find($export->id))->toBeNull();
+    expect(Storage::disk('local')->exists('exports/1/x.csv'))->toBeFalse();
+});
+
+test('bulk delete removes only the selected completed exports', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+
+    $exportA = ExportJob::create(['status' => ExportJobStatus::Completed, 'type' => 'customer_outstanding_payments', 'format' => 'csv', 'created_by' => $user->id]);
+    $exportB = ExportJob::create(['status' => ExportJobStatus::Completed, 'type' => 'customer_outstanding_payments', 'format' => 'xlsx', 'created_by' => $user->id]);
+    $exportC = ExportJob::create(['status' => ExportJobStatus::Completed, 'type' => 'customer_outstanding_payments', 'format' => 'pdf', 'created_by' => $user->id]);
+
+    Livewire::actingAs($user)
+        ->test('pages::exports.index')
+        ->set('selected', [$exportA->id, $exportB->id])
+        ->call('confirmDelete')
+        ->call('deleteConfirmed');
+
+    expect(ExportJob::find($exportA->id))->toBeNull();
+    expect(ExportJob::find($exportB->id))->toBeNull();
+    expect(ExportJob::find($exportC->id))->not->toBeNull();
+});
+
+test('select all only selects deletable (terminal-status) jobs', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+
+    $completed = ExportJob::create(['status' => ExportJobStatus::Completed, 'type' => 'customer_outstanding_payments', 'format' => 'csv', 'created_by' => $user->id]);
+    $running = ExportJob::create(['status' => ExportJobStatus::Running, 'type' => 'customer_outstanding_payments', 'format' => 'xlsx', 'created_by' => $user->id]);
+
+    $component = Livewire::actingAs($user)
+        ->test('pages::exports.index')
+        ->set('selectAll', true);
+
+    expect($component->get('selected'))->toBe([$completed->id]);
+    expect($component->get('selected'))->not->toContain($running->id);
+});
+
+test('a pending or running export cannot be deleted even if targeted directly', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+    $export = ExportJob::create(['status' => ExportJobStatus::Running, 'type' => 'customer_outstanding_payments', 'format' => 'csv', 'created_by' => $user->id]);
+
+    Livewire::actingAs($user)
+        ->test('pages::exports.index')
+        ->call('confirmDelete', $export->id)
+        ->call('deleteConfirmed');
+
+    expect(ExportJob::find($export->id))->not->toBeNull();
+});
+
+test('delete does not affect another user\'s export', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+    $other = User::factory()->staff()->create(['email_verified_at' => now()]);
+
+    $export = ExportJob::create(['status' => ExportJobStatus::Completed, 'type' => 'customer_outstanding_payments', 'format' => 'csv', 'created_by' => $other->id]);
+
+    Livewire::actingAs($user)
+        ->test('pages::exports.index')
+        ->call('confirmDelete', $export->id)
+        ->call('deleteConfirmed');
+
+    expect(ExportJob::find($export->id))->not->toBeNull();
 });
 
 test('polling is only active while a job is pending or running', function () {
