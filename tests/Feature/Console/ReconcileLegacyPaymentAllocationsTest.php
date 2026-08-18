@@ -16,6 +16,7 @@ beforeEach(function () {
     Schema::connection('legacy')->create('AccountEntries', function (Blueprint $table): void {
         $table->unsignedBigInteger('uid');
         $table->string('rtype', 1);
+        $table->unsignedBigInteger('custid')->nullable();
         $table->unsignedBigInteger('posttype')->nullable();
         $table->string('invno')->nullable();
         $table->decimal('osvalue', 12, 2)->nullable();
@@ -32,7 +33,7 @@ beforeEach(function () {
         ]);
 
         DB::connection('legacy')->table('AccountEntries')->insert([
-            'uid' => 90000 + $uid, 'rtype' => 'a', 'posttype' => 85, 'invno' => $ref, 'osvalue' => $osvalue,
+            'uid' => 90000 + $uid, 'rtype' => 'a', 'custid' => 1, 'posttype' => 85, 'invno' => $ref, 'osvalue' => $osvalue,
         ]);
     };
 });
@@ -99,7 +100,7 @@ test('excludes an invoice whose legacy ref collides with another document and le
         ['uid' => 302, 'rtype' => 'i', 'acctuid' => 1, 'orderno' => null, 'date' => '2024-02-01', 'goods' => 0, 'value' => 0, 'notes' => null, 'ref' => '3001', 'bline' => 0],
     ]);
     DB::connection('legacy')->table('AccountEntries')->insert([
-        'uid' => 90301, 'rtype' => 'a', 'posttype' => 85, 'invno' => '3001', 'osvalue' => 0,
+        'uid' => 90301, 'rtype' => 'a', 'custid' => 1, 'posttype' => 85, 'invno' => '3001', 'osvalue' => 0,
     ]);
 
     $documentA = Document::factory()->create([

@@ -19,7 +19,7 @@ class ReconcileLegacyPaymentAllocations extends Command
             $this->table(
                 ['Doc Number', 'Target Settled Amount'],
                 $plan['to_settle']->map(fn (array $t) => [
-                    $t['document']->doc_number,
+                    $t['doc_number'],
                     number_format($t['target_settled'], 2),
                 ])->all(),
             );

@@ -27,13 +27,32 @@ use Illuminate\Support\Facades\DB;
  * Split into plan()/apply() so both the CLI command (preview, confirm, dry-run) and
  * the migration job (apply immediately, same request-scoped legacy connection) can
  * share this logic without either owning console I/O.
+ *
+ * Local Document/Payment Eloquent collections are processed in customer batches (see
+ * CUSTOMER_BATCH_SIZE) — the same reason BulkEntityMapper implementations chunk
+ * instead of loading a whole table at once (EntityMapper's own docblock cites legacy
+ * tables here reaching millions of rows), and why plain Eloquent models (this app's
+ * `documents`/`payments`) are far heavier per row than the raw legacy `stdClass` rows
+ * `buildLegacyTargetMap()` reads. Rows can't be chunked independently here — correctly
+ * funding invoices oldest-first requires seeing *all* of one customer's invoices and
+ * payments together — so the batch boundary is drawn at the customer level.
+ *
+ * `buildLegacyTargetMap()` itself stays a single global pass, not customer-scoped:
+ * scoping it by customer was tried and reverted — a small number of legacy
+ * `AccountEntries.Custid` values (52 out of 52,580, confirmed against live data) don't
+ * match the `Documents.Acctuid` of the invoice they actually reference, so filtering
+ * either side by customer silently drops real matches. The raw rows it reads are
+ * lightweight `stdClass` objects, not Eloquent models, so loading them in one pass is
+ * cheap relative to the Eloquent collections this class batches.
  */
 class LegacyPaymentReconciler
 {
+    private const int CUSTOMER_BATCH_SIZE = 500;
+
     /**
      * @return array{
-     *     to_settle: Collection<int, array{document: Document, target_settled: float}>,
-     *     to_unsettle: Collection<int, Document>,
+     *     to_settle: Collection<int, array{document_id: int, doc_number: ?string, target_settled: float}>,
+     *     to_unsettle: Collection<int, int>,
      *     allocation_rows: array<int, array{payment_id: int, document_id: int, allocated_amount: float, created_at: Carbon, updated_at: Carbon}>,
      *     shortfalls: array<int, array{customer_id: int, doc_number: ?string, shortfall: float}>,
      *     ambiguous_refs: array<string, int>,
@@ -43,13 +62,84 @@ class LegacyPaymentReconciler
     {
         [$osvalueByDocumentLegacyUid, $ambiguousRefs] = $this->buildLegacyTargetMap();
 
-        // Filtered in PHP against the preloaded map rather than whereIn('legacy_uid', $keys):
-        // that list can hold tens of thousands of entries, which risks MySQL's 65535
-        // prepared-statement placeholder cap (see MigrationRunner::applyBulkChunk()'s
-        // identical concern) — the same reason every mapper here preloads maps instead
-        // of building large IN clauses.
+        $customerIds = Document::query()
+            ->invoices()
+            ->whereNotNull('legacy_uid')
+            ->distinct()
+            ->pluck('customer_id');
+
+        $toSettle = collect();
+        $toUnsettle = collect();
+        $allocationRows = [];
+        $shortfalls = [];
+
+        foreach ($customerIds->chunk(self::CUSTOMER_BATCH_SIZE) as $batch) {
+            $batchPlan = $this->planForCustomerBatch($batch->values(), $osvalueByDocumentLegacyUid);
+
+            $toSettle = $toSettle->concat($batchPlan['to_settle']);
+            $toUnsettle = $toUnsettle->concat($batchPlan['to_unsettle']);
+            array_push($allocationRows, ...$batchPlan['allocation_rows']);
+            array_push($shortfalls, ...$batchPlan['shortfalls']);
+        }
+
+        return [
+            'to_settle' => $toSettle,
+            'to_unsettle' => $toUnsettle,
+            'allocation_rows' => $allocationRows,
+            'shortfalls' => $shortfalls,
+            'ambiguous_refs' => $ambiguousRefs,
+        ];
+    }
+
+    public function isEmpty(array $plan): bool
+    {
+        return $plan['to_settle']->isEmpty()
+            && $plan['to_unsettle']->isEmpty()
+            && empty($plan['allocation_rows'])
+            && empty($plan['shortfalls'])
+            && empty($plan['ambiguous_refs']);
+    }
+
+    /**
+     * @param  array{to_settle: Collection, to_unsettle: Collection, allocation_rows: array, shortfalls: array, ambiguous_refs: array}  $plan
+     */
+    public function apply(array $plan): void
+    {
+        DB::transaction(function () use ($plan) {
+            // Subquery instead of pulling every migrated payment id into PHP for an
+            // IN-list: at real scale that list itself risks the same placeholder cap.
+            PaymentAllocation::whereIn('payment_id', Payment::whereNotNull('legacy_uid')->select('id'))
+                ->forceDelete();
+
+            foreach (array_chunk($plan['allocation_rows'], 1000) as $chunk) {
+                PaymentAllocation::insert($chunk);
+            }
+
+            foreach ($plan['to_settle']->pluck('document_id')->chunk(1000) as $ids) {
+                Document::whereIn('id', $ids)->update(['is_settled' => true]);
+            }
+
+            foreach ($plan['to_unsettle']->chunk(1000) as $ids) {
+                Document::whereIn('id', $ids)->update(['is_settled' => false]);
+            }
+        });
+    }
+
+    /**
+     * @param  Collection<int, int>  $customerIds
+     * @param  array<int, float>  $osvalueByDocumentLegacyUid
+     * @return array{
+     *     to_settle: Collection<int, array{document_id: int, doc_number: ?string, target_settled: float}>,
+     *     to_unsettle: Collection<int, int>,
+     *     allocation_rows: array<int, array{payment_id: int, document_id: int, allocated_amount: float, created_at: Carbon, updated_at: Carbon}>,
+     *     shortfalls: array<int, array{customer_id: int, doc_number: ?string, shortfall: float}>,
+     * }
+     */
+    private function planForCustomerBatch(Collection $customerIds, array $osvalueByDocumentLegacyUid): array
+    {
         $targetDocuments = Document::query()
             ->invoices()
+            ->whereIn('customer_id', $customerIds)
             ->whereNotNull('legacy_uid')
             ->get()
             ->filter(fn (Document $document) => array_key_exists($document->legacy_uid, $osvalueByDocumentLegacyUid))
@@ -67,13 +157,11 @@ class LegacyPaymentReconciler
             ];
         });
 
-        $customerIds = $targets->pluck('document.customer_id')->unique()->flip();
-
         $paymentsByCustomer = Payment::query()
+            ->whereIn('customer_id', $customerIds)
             ->whereNotNull('legacy_uid')
             ->orderBy('payment_date')
             ->get()
-            ->filter(fn (Payment $payment) => $customerIds->has($payment->customer_id))
             ->groupBy('customer_id')
             ->map(fn ($payments) => $payments->map(fn (Payment $payment) => [
                 'payment' => $payment,
@@ -125,50 +213,27 @@ class LegacyPaymentReconciler
         }
 
         return [
-            'to_settle' => $targets->filter(fn (array $t) => $t['is_settled'] && ! $t['document']->is_settled)->values(),
-            'to_unsettle' => $targets->filter(fn (array $t) => ! $t['is_settled'] && $t['document']->is_settled)->map(fn (array $t) => $t['document'])->values(),
+            'to_settle' => $targets
+                ->filter(fn (array $t) => $t['is_settled'] && ! $t['document']->is_settled)
+                ->map(fn (array $t) => [
+                    'document_id' => $t['document']->id,
+                    'doc_number' => $t['document']->doc_number,
+                    'target_settled' => $t['target_settled'],
+                ])
+                ->values(),
+            'to_unsettle' => $targets
+                ->filter(fn (array $t) => ! $t['is_settled'] && $t['document']->is_settled)
+                ->map(fn (array $t) => $t['document']->id)
+                ->values(),
             'allocation_rows' => $allocationRows,
             'shortfalls' => $shortfalls,
-            'ambiguous_refs' => $ambiguousRefs,
         ];
-    }
-
-    public function isEmpty(array $plan): bool
-    {
-        return $plan['to_settle']->isEmpty()
-            && $plan['to_unsettle']->isEmpty()
-            && empty($plan['allocation_rows'])
-            && empty($plan['shortfalls'])
-            && empty($plan['ambiguous_refs']);
-    }
-
-    /**
-     * @param  array{to_settle: Collection, to_unsettle: Collection, allocation_rows: array, shortfalls: array, ambiguous_refs: array}  $plan
-     */
-    public function apply(array $plan): void
-    {
-        DB::transaction(function () use ($plan) {
-            $migratedPaymentIds = Payment::whereNotNull('legacy_uid')->pluck('id');
-
-            PaymentAllocation::whereIn('payment_id', $migratedPaymentIds)->forceDelete();
-
-            foreach (array_chunk($plan['allocation_rows'], 1000) as $chunk) {
-                PaymentAllocation::insert($chunk);
-            }
-
-            if ($plan['to_settle']->isNotEmpty()) {
-                Document::whereIn('id', $plan['to_settle']->pluck('document.id'))->update(['is_settled' => true]);
-            }
-
-            if ($plan['to_unsettle']->isNotEmpty()) {
-                Document::whereIn('id', $plan['to_unsettle']->pluck('id'))->update(['is_settled' => false]);
-            }
-        });
     }
 
     /**
      * Builds the map of documents.legacy_uid => legacy outstanding balance (Osvalue),
      * restricted to Invno/Ref matches that resolve to exactly one legacy Documents row.
+     * A single global pass — see the class docblock for why this isn't customer-scoped.
      *
      * @return array{0: array<int, float>, 1: array<string, int>}
      */
