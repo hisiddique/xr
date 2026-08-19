@@ -59,6 +59,41 @@ test('migrates a legacy write-off to the invoice its batch item resolves to', fu
         ->and($writeOff->reason)->not->toBeEmpty();
 });
 
+test('splits one legacy write-off across two invoices into two write-off rows', function () {
+    ($this->seedInvoice)(110, '1101');
+    ($this->seedInvoice)(111, '1102');
+    ($this->seedWriteOffEntry)(9010, '2024-03-10');
+    ($this->seedBatchItem)(9010, '1101', 5);
+    ($this->seedBatchItem)(9010, '1102', 7.5);
+
+    $invoiceA = Document::factory()->create(['legacy_uid' => 110, 'customer_id' => $this->customer->id, 'type' => 'INV', 'total_value' => 100]);
+    $invoiceB = Document::factory()->create(['legacy_uid' => 111, 'customer_id' => $this->customer->id, 'type' => 'INV', 'total_value' => 100]);
+
+    $this->artisan('write-offs:reconcile-legacy')
+        ->expectsConfirmation('Apply these changes?', 'yes')
+        ->assertSuccessful();
+
+    expect(WriteOff::where('legacy_uid', 9010)->count())->toBe(2);
+    expect((float) WriteOff::where('legacy_uid', 9010)->where('document_id', $invoiceA->id)->value('amount'))->toBe(5.0);
+    expect((float) WriteOff::where('legacy_uid', 9010)->where('document_id', $invoiceB->id)->value('amount'))->toBe(7.5);
+});
+
+test('sums two batch items against the same invoice into one write-off row instead of violating the unique constraint', function () {
+    ($this->seedInvoice)(112, '1103');
+    ($this->seedWriteOffEntry)(9011);
+    ($this->seedBatchItem)(9011, '1103', 3);
+    ($this->seedBatchItem)(9011, '1103', 2);
+
+    $invoice = Document::factory()->create(['legacy_uid' => 112, 'customer_id' => $this->customer->id, 'type' => 'INV', 'total_value' => 100]);
+
+    $this->artisan('write-offs:reconcile-legacy')
+        ->expectsConfirmation('Apply these changes?', 'yes')
+        ->assertSuccessful();
+
+    expect(WriteOff::where('legacy_uid', 9011)->where('document_id', $invoice->id)->count())->toBe(1);
+    expect((float) WriteOff::where('legacy_uid', 9011)->value('amount'))->toBe(5.0);
+});
+
 test('reports a write-off with no batch item instead of guessing', function () {
     ($this->seedWriteOffEntry)(9002);
 

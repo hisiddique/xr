@@ -102,17 +102,29 @@ class LegacyPaymentReconciler
                     return;
                 }
 
-                $allocationRows[] = [
-                    'payment_id' => $paymentId,
-                    'document_id' => $documentId,
-                    'allocated_amount' => $amount,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
+                // A payment can carry more than one AccountBatchItems row against the
+                // same invoice (e.g. two lines posted in the same batch) — the target
+                // table's (payment_id, document_id) unique constraint means those must
+                // collapse into one summed row, not one insert per legacy line.
+                $key = $paymentId.'-'.$documentId;
+
+                if (isset($allocationRows[$key])) {
+                    $allocationRows[$key]['allocated_amount'] = round($allocationRows[$key]['allocated_amount'] + $amount, 2);
+                } else {
+                    $allocationRows[$key] = [
+                        'payment_id' => $paymentId,
+                        'document_id' => $documentId,
+                        'allocated_amount' => $amount,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                }
 
                 $allocatedByPaymentLegacyUid[$row->cshuid] = ($allocatedByPaymentLegacyUid[$row->cshuid] ?? 0) + $amount;
                 $allocatedByDocumentId[$documentId] = ($allocatedByDocumentId[$documentId] ?? 0) + $amount;
             });
+
+        $allocationRows = array_values($allocationRows);
 
         $unallocated = ['count' => 0, 'sample' => []];
         $partial = ['count' => 0, 'sample' => []];

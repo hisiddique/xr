@@ -70,6 +70,30 @@ test('allocates a payment to the invoices legacy actually recorded it against', 
         ->and((float) PaymentAllocation::where('document_id', $newer->id)->sum('allocated_amount'))->toBe(50.0);
 });
 
+test('sums two batch items against the same invoice into one allocation row instead of violating the unique constraint', function () {
+    ($this->seedInvoiceEntry)(120, '1201', 0.00);
+
+    $document = Document::factory()->create([
+        'legacy_uid' => 120, 'customer_id' => $this->customer->id, 'type' => 'INV', 'total_value' => 100,
+    ]);
+
+    $payment = Payment::factory()->create([
+        'payment_method_id' => $this->paymentMethod->id, 'legacy_uid' => 5020, 'customer_id' => $this->customer->id,
+        'amount' => 100, 'payment_date' => '2024-01-01',
+    ]);
+
+    // Two separate legacy batch lines posted against the same invoice in one batch.
+    ($this->seedBatchItem)($payment->legacy_uid, '1201', 60);
+    ($this->seedBatchItem)($payment->legacy_uid, '1201', 40);
+
+    $this->artisan('payments:reconcile-legacy-allocations')
+        ->expectsConfirmation('Apply these changes?', 'yes')
+        ->assertSuccessful();
+
+    expect(PaymentAllocation::where('payment_id', $payment->id)->where('document_id', $document->id)->count())->toBe(1);
+    expect((float) PaymentAllocation::where('document_id', $document->id)->sum('allocated_amount'))->toBe(100.0);
+});
+
 test('applies the entryvalue sign multiplier from AccountPostTypes to paymt', function () {
     ($this->seedInvoiceEntry)(110, '1101', 0.00);
 

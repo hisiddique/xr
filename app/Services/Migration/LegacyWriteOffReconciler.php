@@ -47,7 +47,12 @@ class LegacyWriteOffReconciler
 
         $invoiceLocalIdByLegacyUid = Document::query()->invoices()->whereNotNull('legacy_uid')->pluck('id', 'legacy_uid')->all();
         $entryvalueByPosttype = DB::connection('legacy')->table('AccountPostTypes')->pluck('entryvalue', 'uid')->all();
-        $alreadyMigratedLegacyUids = WriteOff::query()->whereNotNull('legacy_uid')->pluck('legacy_uid')->all();
+
+        // A write-off entry can split across more than one invoice (mirrors payments),
+        // so idempotency is keyed per (legacy_uid, document_id) pair, not legacy_uid alone.
+        $alreadyMigrated = WriteOff::query()->whereNotNull('legacy_uid')->get(['legacy_uid', 'document_id']);
+        $alreadyMigratedPairs = $alreadyMigrated->map(fn ($w) => $w->legacy_uid.'-'.$w->document_id)->all();
+        $alreadyMigratedLegacyUids = $alreadyMigrated->pluck('legacy_uid')->all();
 
         $writeOffEntries = DB::connection('legacy')->table('AccountEntries')
             ->where('rtype', 'a')
@@ -73,7 +78,7 @@ class LegacyWriteOffReconciler
 
             $entry = $writeOffEntries->get($item->cshuid);
 
-            if ($entry === null || in_array($item->cshuid, $alreadyMigratedLegacyUids, true)) {
+            if ($entry === null) {
                 continue;
             }
 
@@ -89,6 +94,12 @@ class LegacyWriteOffReconciler
             $documentId = $invoiceLocalIdByLegacyUid[$matches->first()->uid] ?? null;
 
             if ($documentId === null) {
+                continue;
+            }
+
+            if (in_array($item->cshuid.'-'.$documentId, $alreadyMigratedPairs, true)) {
+                $resolvedLegacyUids[$item->cshuid] = true;
+
                 continue;
             }
 
@@ -109,19 +120,30 @@ class LegacyWriteOffReconciler
                 continue;
             }
 
-            $writeOffRows[] = [
-                'legacy_uid' => $item->cshuid,
-                'document_id' => $documentId,
-                'amount' => $amount,
-                'reason' => 'Migrated from legacy — no reason was recorded there.',
-                'written_off_at' => $writtenOffAt,
-                'written_off_by' => $this->createdBy,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
+            // Two AccountBatchItems rows can carry the same (cshuid, invoice) pairing
+            // (e.g. two lines posted in the same batch) — the target table's unique
+            // constraint means those must collapse into one summed row.
+            $key = $item->cshuid.'-'.$documentId;
+
+            if (isset($writeOffRows[$key])) {
+                $writeOffRows[$key]['amount'] = round($writeOffRows[$key]['amount'] + $amount, 2);
+            } else {
+                $writeOffRows[$key] = [
+                    'legacy_uid' => $item->cshuid,
+                    'document_id' => $documentId,
+                    'amount' => $amount,
+                    'reason' => 'Migrated from legacy — no reason was recorded there.',
+                    'written_off_at' => $writtenOffAt,
+                    'written_off_by' => $this->createdBy,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
 
             $resolvedLegacyUids[$item->cshuid] = true;
         }
+
+        $writeOffRows = array_values($writeOffRows);
 
         foreach ($writeOffEntries as $legacyUid => $entry) {
             if (isset($resolvedLegacyUids[$legacyUid]) || in_array($legacyUid, $alreadyMigratedLegacyUids, true)) {
