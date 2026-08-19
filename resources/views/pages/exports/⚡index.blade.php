@@ -17,6 +17,8 @@ new #[Title('Exports')] class extends Component
 
     public int $perPage = 25;
 
+    public ?string $backUrl = null;
+
     /** @var array<int, int> */
     public array $selected = [];
 
@@ -33,6 +35,15 @@ new #[Title('Exports')] class extends Component
 
         if (session()->has('error')) {
             Flux::toast(variant: 'danger', text: session('error'));
+        }
+
+        $referer = request()->header('referer');
+
+        if ($referer
+            && parse_url($referer, PHP_URL_HOST) === request()->getHost()
+            && rtrim(parse_url($referer, PHP_URL_PATH) ?? '', '/') !== rtrim(parse_url(url()->current(), PHP_URL_PATH) ?? '', '/')
+        ) {
+            $this->backUrl = $referer;
         }
     }
 
@@ -127,13 +138,21 @@ new #[Title('Exports')] class extends Component
         title="Exports"
         subtitle="Track and download your report exports."
     >
-        @if(count($selected) > 0)
-            <x-slot:action>
-                <flux:button size="sm" variant="danger" icon="trash" wire:click="confirmDelete()">
-                    Delete Selected ({{ count($selected) }})
-                </flux:button>
-            </x-slot:action>
-        @endif
+        <x-slot:action>
+            <div class="flex items-center gap-2">
+                @if($backUrl)
+                    <flux:button size="sm" variant="ghost" icon="arrow-left" :href="$backUrl" wire:navigate>
+                        Back
+                    </flux:button>
+                @endif
+
+                @if(count($selected) > 0)
+                    <flux:button size="sm" variant="danger" icon="trash" wire:click="confirmDelete()">
+                        Delete Selected ({{ count($selected) }})
+                    </flux:button>
+                @endif
+            </div>
+        </x-slot:action>
     </x-ui.page-header>
 
     <div class="overflow-x-clip rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">

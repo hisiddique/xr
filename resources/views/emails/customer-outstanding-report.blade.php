@@ -110,7 +110,23 @@
                     <p class="body-text" style="white-space:pre-line">{{ $notes }}</p>
                 @endif
 
-                <p class="closing">The full report is attached as a PDF.</p>
+                @if(! empty($downloadLinks))
+                    <p class="body-text">
+                        The report files were too large to attach directly. Download them here (links expire once the export is removed):
+                    </p>
+                    <table class="summary-table">
+                        @foreach($downloadLinks as $link)
+                            <tr>
+                                <td class="summary-label">{{ $link['format'] }}</td>
+                                <td class="summary-value"><a href="{{ $link['url'] }}">Download</a></td>
+                            </tr>
+                        @endforeach
+                    </table>
+                @elseif(! empty($attachmentsData))
+                    <p class="closing">
+                        The full report is attached as {{ implode(' and ', array_map(fn ($a) => strtoupper(pathinfo($a['filename'], PATHINFO_EXTENSION)), $attachmentsData)) }}.
+                    </p>
+                @endif
 
                 <p class="closing" style="margin-top:16px">Kind regards,</p>
                 <p class="signature">{{ \App\Models\Setting::get('company_name', config('app.name')) }}</p>

@@ -187,6 +187,32 @@ test('delete does not affect another user\'s export', function () {
     expect(ExportJob::find($export->id))->not->toBeNull();
 });
 
+test('back button appears when navigated from another page on this site', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+
+    $this->actingAs($user)
+        ->withHeaders(['referer' => url('/reports/customer-outstanding-payments')])
+        ->get('/exports')
+        ->assertSee('Back', false);
+});
+
+test('back button does not appear on a direct url load with no referer', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+
+    $this->actingAs($user)
+        ->get('/exports')
+        ->assertDontSee('>Back<', false);
+});
+
+test('back button does not appear when the referer is the exports page itself', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+
+    $this->actingAs($user)
+        ->withHeaders(['referer' => url('/exports')])
+        ->get('/exports')
+        ->assertDontSee('>Back<', false);
+});
+
 test('polling is only active while a job is pending or running', function () {
     $user = User::factory()->staff()->create(['email_verified_at' => now()]);
 

@@ -16,12 +16,14 @@ class CustomerOutstandingReportMail extends Mailable
 
     /**
      * @param  array<int, array{data: string, filename: string, mime: string}>  $attachmentsData
+     * @param  array<int, array{format: string, url: string}>  $downloadLinks
      */
     public function __construct(
         public int $customerCount,
         public float $totalOutstanding,
         public ?string $notes,
         public array $attachmentsData,
+        public array $downloadLinks = [],
     ) {}
 
     public function envelope(): Envelope
