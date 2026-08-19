@@ -151,6 +151,11 @@ class Document extends Model
         return $this->hasMany(CreditAllocation::class, 'invoice_id');
     }
 
+    public function writeOffs(): HasMany
+    {
+        return $this->hasMany(WriteOff::class);
+    }
+
     public function availableCredit(): float
     {
         $used = (float) ($this->credit_allocations_sum_amount ?? $this->creditAllocations()->sum('amount'));

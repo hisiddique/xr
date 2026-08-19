@@ -86,17 +86,34 @@ test('reconciliation runs automatically when a run includes both documents and p
         $table->unsignedBigInteger('uid');
         $table->string('rtype', 1)->nullable();
         $table->string('inout', 3)->nullable();
+        $table->integer('entryvalue')->nullable();
     });
 
     DB::connection('legacy')->table('AccountPostTypes')->insert([
-        ['uid' => 85, 'rtype' => 'i', 'inout' => 'OUT'],
-        ['uid' => 11, 'rtype' => 'A', 'inout' => 'IN'],
+        ['uid' => 85, 'rtype' => 'i', 'inout' => 'OUT', 'entryvalue' => 1],
+        ['uid' => 11, 'rtype' => 'A', 'inout' => 'IN', 'entryvalue' => 1],
     ]);
 
     // The invoice entry itself (osvalue=0 => fully settled) plus a receipt entry.
     DB::connection('legacy')->table('AccountEntries')->insert([
         ['uid' => 901, 'rtype' => 'a', 'custid' => 701, 'value' => 100, 'osvalue' => 0, 'txndate' => '2024-01-01', 'invno' => '900001', 'posttype' => 85],
         ['uid' => 902, 'rtype' => 'a', 'custid' => 701, 'value' => -100, 'osvalue' => 0, 'txndate' => '2024-01-05', 'invno' => 'BACS', 'posttype' => 11],
+    ]);
+
+    Schema::connection('legacy')->create('AccountBatchItems', function (Blueprint $table): void {
+        $table->unsignedBigInteger('bhead')->nullable();
+        $table->unsignedBigInteger('bline')->nullable();
+        $table->unsignedBigInteger('cshuid')->nullable();
+        $table->string('txnabbr')->nullable();
+        $table->string('txnref')->nullable();
+        $table->decimal('paymt', 12, 2)->nullable();
+        $table->decimal('osvalue', 12, 2)->nullable();
+        $table->unsignedBigInteger('posttype')->nullable();
+    });
+
+    // Legacy's own record of this receipt (uid 902) being applied in full to invoice 900001.
+    DB::connection('legacy')->table('AccountBatchItems')->insert([
+        'bhead' => 1, 'bline' => 1, 'cshuid' => 902, 'txnabbr' => 'INV-', 'txnref' => '900001', 'paymt' => 100, 'posttype' => null,
     ]);
 
     foreach (['Bank Transfer', 'Cheque', 'Cash', 'Card'] as $name) {

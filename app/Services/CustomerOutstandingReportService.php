@@ -2,18 +2,15 @@
 
 namespace App\Services;
 
-use App\Mail\CustomerOutstandingReportMail;
 use App\Models\Customer;
 use App\Models\Document;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Contracts\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Mail;
 use League\Csv\Writer as CsvWriter;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Common\Entity\Style\Style;
 use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CustomerOutstandingReportService
 {
@@ -32,7 +29,8 @@ class CustomerOutstandingReportService
 
     protected const OUTSTANDING_EXPR = '(documents.total_value
         - COALESCE((select sum(pa.allocated_amount) from payment_allocations pa where pa.document_id = documents.id and pa.deleted_at is null), 0)
-        - COALESCE((select sum(ca.amount) from credit_allocations ca where ca.invoice_id = documents.id and ca.deleted_at is null), 0))';
+        - COALESCE((select sum(ca.amount) from credit_allocations ca where ca.invoice_id = documents.id and ca.deleted_at is null), 0)
+        - COALESCE((select sum(wo.amount) from write_offs wo where wo.document_id = documents.id and wo.deleted_at is null), 0))';
 
     /**
      * @param  array<string, mixed>  $filters
@@ -44,17 +42,18 @@ class CustomerOutstandingReportService
         return $query
             ->withSum('paymentAllocations as allocated_total', 'allocated_amount')
             ->withSum('creditAllocationsReceived as credited_total', 'amount')
+            ->withSum('writeOffs as written_off_total', 'amount')
             ->when($filters['dateFrom'] ?? '', fn ($q, $date) => $q->whereDate('doc_date', '>=', $date))
             ->when($filters['dateTo'] ?? '', fn ($q, $date) => $q->whereDate('doc_date', '<=', $date))
             ->when(is_numeric($filters['amountMin'] ?? null), fn ($q) => $q->where('total_value', '>=', (float) $filters['amountMin']))
             ->when(is_numeric($filters['amountMax'] ?? null), fn ($q) => $q->where('total_value', '<=', (float) $filters['amountMax']))
             ->where(function ($q) use ($showPaid) {
                 $q->where(function ($q2) {
-                    $q2->whereRaw(self::OUTSTANDING_EXPR.' > 0.001')->where('is_settled', false);
+                    $q2->whereRaw(self::OUTSTANDING_EXPR.' > 0.001')->whereDoesntHave('writeOffs');
                 });
 
                 if ($showPaid) {
-                    $q->orWhere('is_settled', true);
+                    $q->orWhereHas('writeOffs');
                 }
             })
             ->when(is_numeric($filters['osMin'] ?? null), fn ($q) => $q->whereRaw(self::OUTSTANDING_EXPR.' >= CAST(? AS DECIMAL(15,2))', [(float) $filters['osMin']]))
@@ -86,13 +85,16 @@ class CustomerOutstandingReportService
                             ->where('doc_number', 'like', $like));
                 });
             })
-            ->with(['invoices' => fn ($q) => $this->applyOutstandingFilters($q, $filters)->orderBy('doc_date')])
+            ->with(['invoices' => fn ($q) => $this->applyOutstandingFilters($q, $filters)->with('writeOffs.writtenOffBy')->orderBy('doc_date')])
             ->orderBy('company_name');
     }
 
     public function outstandingAmount(Document $invoice): float
     {
-        return (float) $invoice->total_value - (float) ($invoice->allocated_total ?? 0) - (float) ($invoice->credited_total ?? 0);
+        return (float) $invoice->total_value
+            - (float) ($invoice->allocated_total ?? 0)
+            - (float) ($invoice->credited_total ?? 0)
+            - (float) ($invoice->written_off_total ?? 0);
     }
 
     public function customerOutstandingTotal(Customer $customer): float
@@ -225,21 +227,6 @@ class CustomerOutstandingReportService
     }
 
     /**
-     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
-     * @return array<int, array{0: array<int, string>, 1: bool}>
-     */
-    protected function exportRows(array $data): array
-    {
-        $rows = [];
-
-        foreach ($data as $customer) {
-            $rows = array_merge($rows, $this->customerRows($customer));
-        }
-
-        return $rows;
-    }
-
-    /**
      * @return array{customerCount: int, totalOutstanding: float}
      */
     public function writeCsvToPath(string $path, \Generator $chunks, ?callable $onChunk = null): array
@@ -303,91 +290,6 @@ class CustomerOutstandingReportService
     /**
      * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
      */
-    public function streamCsv(array $data): StreamedResponse
-    {
-        return response()->streamDownload(function () use ($data) {
-            $writer = CsvWriter::createFromStream(fopen('php://output', 'w'));
-            $writer->insertOne(self::EXPORT_HEADINGS);
-
-            foreach ($this->exportRows($data) as [$row]) {
-                $writer->insertOne($row);
-            }
-        }, 'customer-outstanding-payments.csv', ['Content-Type' => 'text/csv']);
-    }
-
-    /**
-     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
-     */
-    protected function csvBinary(array $data): string
-    {
-        $writer = CsvWriter::createFromString();
-        $writer->insertOne(self::EXPORT_HEADINGS);
-
-        foreach ($this->exportRows($data) as [$row]) {
-            $writer->insertOne($row);
-        }
-
-        return $writer->toString();
-    }
-
-    /**
-     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
-     */
-    protected function writeXlsx(XlsxWriter $writer, array $data): void
-    {
-        $boldStyle = (new Style)->withFontBold(true);
-
-        $writer->addRow(Row::fromValuesWithStyle(self::EXPORT_HEADINGS, $boldStyle));
-
-        foreach ($this->exportRows($data) as [$row, $isSubtotal]) {
-            $writer->addRow($isSubtotal ? Row::fromValuesWithStyle($row, $boldStyle) : Row::fromValues($row));
-        }
-    }
-
-    /**
-     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
-     */
-    public function streamXlsx(array $data): StreamedResponse
-    {
-        return response()->streamDownload(function () use ($data) {
-            $writer = new XlsxWriter;
-            $writer->openToFile('php://output');
-
-            try {
-                $this->writeXlsx($writer, $data);
-            } finally {
-                $writer->close();
-            }
-        }, 'customer-outstanding-payments.xlsx', [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ]);
-    }
-
-    /**
-     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
-     */
-    protected function xlsxBinary(array $data): string
-    {
-        $tmpPath = tempnam(sys_get_temp_dir(), 'xlsx');
-
-        $writer = new XlsxWriter;
-        $writer->openToFile($tmpPath);
-
-        try {
-            $this->writeXlsx($writer, $data);
-        } finally {
-            $writer->close();
-        }
-
-        $contents = file_get_contents($tmpPath);
-        unlink($tmpPath);
-
-        return $contents;
-    }
-
-    /**
-     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{doc_date: ?string, doc_number: string, total_value: float, outstanding: float}>}>  $data
-     */
     public function invoiceRowCount(array $data): int
     {
         return array_sum(array_map(fn (array $customer) => count($customer['invoices']), $data));
@@ -417,47 +319,45 @@ class CustomerOutstandingReportService
     }
 
     /**
+     * Generates one export file to disk for the given format, using the same
+     * memory-bounded path as the download/email flows (never materializes a
+     * full CSV/XLSX row set at once; PDF is capped since dompdf can't stream).
+     *
      * @param  array<string, mixed>  $filters
-     * @param  array<int, string>  $emails
-     * @param  array<int, string>  $formats
+     * @return array{customerCount: int, totalOutstanding: float}
      */
-    public function sendReport(array $filters, array $emails, array $formats, ?string $notes = null): void
+    public function generateExportFile(string $format, array $filters, string $absPath, ?callable $onChunk = null): array
+    {
+        return match ($format) {
+            'csv' => $this->writeCsvToPath($absPath, $this->exportChunks($filters), $onChunk),
+            'xlsx' => $this->writeXlsxToPath($absPath, $this->exportChunks($filters), $onChunk),
+            'pdf' => $this->generatePdfFile($filters, $absPath, $onChunk),
+            default => throw new \InvalidArgumentException("Unsupported export format: {$format}"),
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array{customerCount: int, totalOutstanding: float}
+     */
+    protected function generatePdfFile(array $filters, string $absPath, ?callable $onChunk = null): array
     {
         $data = $this->buildExportData($filters);
 
-        $totalOutstanding = $this->exportTotalOutstanding($data);
-
-        $attachments = [];
-
-        if (in_array('pdf', $formats, true)) {
-            $attachments[] = [
-                'data' => $this->pdfBinary($data),
-                'filename' => 'customer-outstanding-payments.pdf',
-                'mime' => 'application/pdf',
-            ];
+        if ($this->invoiceRowCount($data) > self::PDF_ROW_CAP) {
+            throw new \RuntimeException(
+                'PDF export exceeds '.self::PDF_ROW_CAP.' invoice rows; use CSV or Excel instead.'
+            );
         }
 
-        if (in_array('csv', $formats, true)) {
-            $attachments[] = [
-                'data' => $this->csvBinary($data),
-                'filename' => 'customer-outstanding-payments.csv',
-                'mime' => 'text/csv',
-            ];
+        $binary = $this->pdfBinary($data);
+
+        if ($onChunk !== null) {
+            $onChunk();
         }
 
-        if (in_array('xlsx', $formats, true)) {
-            $attachments[] = [
-                'data' => $this->xlsxBinary($data),
-                'filename' => 'customer-outstanding-payments.xlsx',
-                'mime' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            ];
-        }
+        file_put_contents($absPath, $binary);
 
-        Mail::to($emails)->send(new CustomerOutstandingReportMail(
-            count($data),
-            $totalOutstanding,
-            $notes,
-            $attachments,
-        ));
+        return ['customerCount' => count($data), 'totalOutstanding' => $this->exportTotalOutstanding($data)];
     }
 }

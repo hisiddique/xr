@@ -77,6 +77,8 @@ function createLegacyTables(array $tables): void
                 $table->unsignedBigInteger('bline')->nullable();
                 $table->string('deleteddate')->nullable();
                 $table->integer('salesman')->nullable();
+                $table->string('srcabbr')->nullable();
+                $table->string('srcref')->nullable();
             });
         },
         'DocumentDetails' => function (): void {
@@ -130,6 +132,19 @@ function createLegacyTables(array $tables): void
                 $table->unsignedBigInteger('uid');
                 $table->string('rtype', 1)->nullable();
                 $table->string('inout', 3)->nullable();
+                $table->integer('entryvalue')->nullable();
+            });
+        },
+        'AccountBatchItems' => function (): void {
+            Schema::connection('legacy')->create('AccountBatchItems', function (Blueprint $table): void {
+                $table->unsignedBigInteger('bhead')->nullable();
+                $table->unsignedBigInteger('bline')->nullable();
+                $table->unsignedBigInteger('cshuid')->nullable();
+                $table->string('txnabbr')->nullable();
+                $table->string('txnref')->nullable();
+                $table->decimal('paymt', 12, 2)->nullable();
+                $table->decimal('osvalue', 12, 2)->nullable();
+                $table->unsignedBigInteger('posttype')->nullable();
             });
         },
     ];

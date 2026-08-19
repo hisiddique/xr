@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\LookupPaymentMethod;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
+use App\Models\WriteOff;
 use App\Services\CustomerOutstandingReportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use League\Csv\Reader;
@@ -93,7 +94,7 @@ test('report service treats invoices fully settled by a credit note as not outst
     expect($service->buildExportData([]))->toHaveCount(0);
 });
 
-test('report service showPaid filter reveals manually settled invoices without affecting payment-settled ones', function () {
+test('report service showPaid filter reveals written-off invoices without affecting payment-settled ones', function () {
     $paymentMethod = LookupPaymentMethod::factory()->create();
     $customer = Customer::factory()->create();
 
@@ -107,7 +108,12 @@ test('report service showPaid filter reveals manually settled invoices without a
         'customer_id' => $customer->id,
         'total_value' => 75,
         'doc_date' => now(),
-        'is_settled' => true,
+    ]);
+    WriteOff::create([
+        'document_id' => $manuallySettledInvoice->id,
+        'amount' => 75,
+        'reason' => 'Bad debt',
+        'written_off_at' => now(),
     ]);
 
     $paymentSettledInvoice = Document::factory()->invoice()->create([

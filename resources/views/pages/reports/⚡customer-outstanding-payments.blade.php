@@ -5,9 +5,11 @@ use App\Jobs\SendCustomerOutstandingReportJob;
 use App\Models\Customer;
 use App\Models\Document;
 use App\Models\ExportJob;
+use App\Models\WriteOff;
 use App\Services\CustomerOutstandingReportService;
 use App\Traits\WithPerPage;
 use Flux\Flux;
+use Illuminate\Support\Carbon;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -55,6 +57,14 @@ new #[Title('Customer Outstanding Payments')] class extends Component
     public array $reportFormats = ['pdf'];
 
     public string $reportNotes = '';
+
+    public ?int $writeOffDocumentId = null;
+
+    public string $writeOffAmount = '';
+
+    public string $writeOffReason = '';
+
+    public string $writeOffDateTime = '';
 
     public function updatedSearch(): void
     {
@@ -106,10 +116,47 @@ new #[Title('Customer Outstanding Payments')] class extends Component
         $this->resetPage();
     }
 
-    public function toggleSettled(int $invoiceId): void
+    public function openWriteOffModal(int $invoiceId): void
     {
         $invoice = Document::invoices()->findOrFail($invoiceId);
-        $invoice->update(['is_settled' => ! $invoice->is_settled]);
+
+        $this->writeOffDocumentId = $invoiceId;
+        $this->writeOffAmount = number_format(app(CustomerOutstandingReportService::class)->outstandingAmount($invoice), 2, '.', '');
+        $this->writeOffReason = '';
+        $this->writeOffDateTime = now()->format('Y-m-d\TH:i');
+
+        Flux::modal('write-off')->show();
+    }
+
+    public function removeWriteOff(int $invoiceId): void
+    {
+        $invoice = Document::invoices()->findOrFail($invoiceId);
+        $invoice->writeOffs()->delete();
+
+        Flux::toast(variant: 'success', text: __('Write-off removed.'));
+    }
+
+    public function saveWriteOff(): void
+    {
+        $this->validate([
+            'writeOffAmount' => 'required|numeric|min:0.01',
+            'writeOffReason' => 'required|string|max:2000',
+            'writeOffDateTime' => 'required|date',
+        ]);
+
+        $invoice = Document::invoices()->findOrFail($this->writeOffDocumentId);
+
+        WriteOff::create([
+            'document_id' => $invoice->id,
+            'amount' => $this->writeOffAmount,
+            'reason' => $this->writeOffReason,
+            'written_off_at' => Carbon::parse($this->writeOffDateTime),
+            'written_off_by' => auth()->id(),
+        ]);
+
+        $this->writeOffDocumentId = null;
+        Flux::modal('write-off')->close();
+        Flux::toast(variant: 'success', text: __('Invoice written off.'));
     }
 
     public function clearFilters(): void
@@ -345,10 +392,37 @@ new #[Title('Customer Outstanding Payments')] class extends Component
                                     <td class="px-2 py-1 text-right font-mono tabular-nums text-zinc-900 dark:text-white">£{{ number_format($invoice->total_value, 2) }}</td>
                                     <td class="px-2 py-1 text-right font-mono tabular-nums font-medium text-amber-600 dark:text-amber-400">£{{ number_format($outstanding, 2) }}</td>
                                     <td class="px-2 py-1 text-center">
-                                        <flux:switch
-                                            wire:click="toggleSettled({{ $invoice->id }})"
-                                            :checked="$invoice->is_settled"
-                                        />
+                                        @if((float) ($invoice->written_off_total ?? 0) > 0)
+                                            @php $writeOff = $invoice->writeOffs->sortByDesc('written_off_at')->first(); @endphp
+                                            <div class="inline-flex items-center gap-1">
+                                                <flux:tooltip>
+                                                    <flux:badge color="amber" size="sm" icon="document-minus">{{ __('Written Off') }}</flux:badge>
+                                                    <flux:tooltip.content>
+                                                        £{{ number_format($writeOff->amount, 2) }} written off<br>
+                                                        {{ __('Reason') }}: {{ Str::limit($writeOff->reason, 60) }}<br>
+                                                        {{ $writeOff->written_off_at->format('d M Y, H:i') }}
+                                                        @if($writeOff->writtenOffBy) &middot; {{ $writeOff->writtenOffBy->name }} @endif
+                                                    </flux:tooltip.content>
+                                                </flux:tooltip>
+                                                <flux:tooltip content="{{ __('Undo write-off') }}">
+                                                    <flux:button
+                                                        wire:click="removeWriteOff({{ $invoice->id }})"
+                                                        icon="arrow-uturn-left"
+                                                        size="xs"
+                                                        variant="ghost"
+                                                    />
+                                                </flux:tooltip>
+                                            </div>
+                                        @else
+                                            <flux:button
+                                                wire:click="openWriteOffModal({{ $invoice->id }})"
+                                                icon="document-minus"
+                                                size="xs"
+                                                variant="ghost"
+                                            >
+                                                {{ __('Write Off') }}
+                                            </flux:button>
+                                        @endif
                                     </td>
                                 </tr>
                             @endforeach
@@ -444,6 +518,59 @@ new #[Title('Customer Outstanding Payments')] class extends Component
                     >
                         <span wire:loading.remove wire:target="sendReportEmail">{{ __('Send Report') }}</span>
                         <span wire:loading wire:target="sendReportEmail">{{ __('Sending…') }}</span>
+                    </flux:button>
+                </div>
+            </form>
+        </div>
+    </flux:modal>
+
+    {{-- Write-off modal --}}
+    <flux:modal name="write-off" focusable class="max-w-md">
+        <div class="space-y-6">
+            <div>
+                <flux:heading size="lg">{{ __('Write Off Invoice') }}</flux:heading>
+                <flux:subheading>
+                    {{ __('Record why this invoice is being written off. This reduces its outstanding balance app-wide.') }}
+                </flux:subheading>
+            </div>
+
+            <form wire:submit="saveWriteOff" class="space-y-4">
+                <div>
+                    <flux:label>{{ __('Amount') }} <span class="text-rose-500">*</span></flux:label>
+                    <flux:input wire:model="writeOffAmount" type="number" step="0.01" min="0.01" icon="currency-pound" />
+                    <flux:error name="writeOffAmount" />
+                </div>
+
+                <div>
+                    <flux:label>{{ __('Date & Time') }} <span class="text-rose-500">*</span></flux:label>
+                    <flux:input wire:model="writeOffDateTime" type="datetime-local" />
+                    <flux:error name="writeOffDateTime" />
+                </div>
+
+                <div>
+                    <flux:label>{{ __('Reason') }} <span class="text-rose-500">*</span></flux:label>
+                    <flux:textarea
+                        wire:model="writeOffReason"
+                        :placeholder="__('Why is this invoice being written off?')"
+                        rows="3"
+                    />
+                    <flux:error name="writeOffReason" />
+                </div>
+
+                <div class="flex justify-end gap-3">
+                    <flux:modal.close>
+                        <flux:button variant="ghost" type="button">{{ __('Cancel') }}</flux:button>
+                    </flux:modal.close>
+
+                    <flux:button
+                        variant="primary"
+                        icon="document-minus"
+                        type="submit"
+                        wire:loading.attr="disabled"
+                        wire:target="saveWriteOff"
+                    >
+                        <span wire:loading.remove wire:target="saveWriteOff">{{ __('Write Off') }}</span>
+                        <span wire:loading wire:target="saveWriteOff">{{ __('Saving…') }}</span>
                     </flux:button>
                 </div>
             </form>

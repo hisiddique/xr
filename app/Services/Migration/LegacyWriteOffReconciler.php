@@ -1,0 +1,158 @@
+<?php
+
+namespace App\Services\Migration;
+
+use App\Models\Document;
+use App\Models\WriteOff;
+use App\Services\Migration\Support\LegacyDate;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Migrates legacy write-offs (`AccountEntries.posttype=94`) into `write_offs` rows.
+ *
+ * Unlike invoices/payments, a write-off's own `AccountEntries.invno` is not a usable
+ * reference — legacy stores the free-text label "W'Off"/"W'off" there, not a ref — so
+ * the invoice it applies to can only be resolved the same way a payment's is: via
+ * `AccountBatchItems` (`cshuid` = this write-off's own `AccountEntries.uid`, `txnref`
+ * = the invoice's `Documents.ref`, `paymt` scaled by `AccountPostTypes.entryvalue` the
+ * amount actually applied — see `LegacyPaymentReconciler`'s docblock for why).
+ *
+ * Legacy never recorded a reason for a write-off, so the migrated reason is a fixed,
+ * clearly-labelled placeholder rather than a guess at one.
+ *
+ * Where a write-off's `AccountBatchItems` row is missing, ambiguous, or doesn't
+ * resolve to a migrated invoice, this reports the gap rather than guessing.
+ */
+class LegacyWriteOffReconciler
+{
+    private const int REPORT_SAMPLE_LIMIT = 100;
+
+    public function __construct(private readonly ?int $createdBy = null) {}
+
+    /**
+     * @return array{
+     *     write_off_rows: array<int, array{legacy_uid: int, document_id: int, amount: float, reason: string, written_off_at: string, written_off_by: ?int, created_at: Carbon, updated_at: Carbon}>,
+     *     ambiguous_refs: array<string, int>,
+     *     unresolved_write_offs: array{count: int, sample: array<int, array{legacy_uid: int, amount: float, reason: string}>},
+     * }
+     */
+    public function plan(): array
+    {
+        $documentsByRef = DB::connection('legacy')->table('Documents')
+            ->where('rtype', 'i')
+            ->select(['uid', 'ref'])
+            ->get()
+            ->groupBy(fn ($row) => trim((string) $row->ref));
+
+        $invoiceLocalIdByLegacyUid = Document::query()->invoices()->whereNotNull('legacy_uid')->pluck('id', 'legacy_uid')->all();
+        $entryvalueByPosttype = DB::connection('legacy')->table('AccountPostTypes')->pluck('entryvalue', 'uid')->all();
+        $alreadyMigratedLegacyUids = WriteOff::query()->whereNotNull('legacy_uid')->pluck('legacy_uid')->all();
+
+        $writeOffEntries = DB::connection('legacy')->table('AccountEntries')
+            ->where('rtype', 'a')
+            ->where('posttype', 94)
+            ->select(['uid', 'txndate'])
+            ->get()
+            ->keyBy('uid');
+
+        $batchItems = DB::connection('legacy')->table('AccountBatchItems')
+            ->whereIn('cshuid', $writeOffEntries->keys())
+            ->select(['cshuid', 'txnabbr', 'txnref', 'paymt', 'posttype'])
+            ->get();
+
+        $writeOffRows = [];
+        $ambiguousRefs = [];
+        $unresolved = ['count' => 0, 'sample' => []];
+        $resolvedLegacyUids = [];
+
+        foreach ($batchItems as $item) {
+            if (trim((string) $item->txnabbr) !== 'INV-') {
+                continue;
+            }
+
+            $entry = $writeOffEntries->get($item->cshuid);
+
+            if ($entry === null || in_array($item->cshuid, $alreadyMigratedLegacyUids, true)) {
+                continue;
+            }
+
+            $ref = trim((string) $item->txnref);
+            $matches = $documentsByRef->get($ref);
+
+            if ($matches === null || $matches->count() !== 1) {
+                $ambiguousRefs[$ref] = ($ambiguousRefs[$ref] ?? 0) + ($matches?->count() ?? 0);
+
+                continue;
+            }
+
+            $documentId = $invoiceLocalIdByLegacyUid[$matches->first()->uid] ?? null;
+
+            if ($documentId === null) {
+                continue;
+            }
+
+            $multiplier = 1.0;
+            if ($item->posttype !== null && (float) ($entryvalueByPosttype[$item->posttype] ?? 0) !== 0.0) {
+                $multiplier = (float) $entryvalueByPosttype[$item->posttype];
+            }
+
+            $amount = round((float) $item->paymt * $multiplier, 2);
+
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $writtenOffAt = LegacyDate::parse($entry->txndate);
+
+            if ($writtenOffAt === null) {
+                continue;
+            }
+
+            $writeOffRows[] = [
+                'legacy_uid' => $item->cshuid,
+                'document_id' => $documentId,
+                'amount' => $amount,
+                'reason' => 'Migrated from legacy — no reason was recorded there.',
+                'written_off_at' => $writtenOffAt,
+                'written_off_by' => $this->createdBy,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+
+            $resolvedLegacyUids[$item->cshuid] = true;
+        }
+
+        foreach ($writeOffEntries as $legacyUid => $entry) {
+            if (isset($resolvedLegacyUids[$legacyUid]) || in_array($legacyUid, $alreadyMigratedLegacyUids, true)) {
+                continue;
+            }
+
+            $unresolved['count']++;
+            if (count($unresolved['sample']) < self::REPORT_SAMPLE_LIMIT) {
+                $unresolved['sample'][] = ['legacy_uid' => $legacyUid];
+            }
+        }
+
+        return [
+            'write_off_rows' => $writeOffRows,
+            'ambiguous_refs' => $ambiguousRefs,
+            'unresolved_write_offs' => $unresolved,
+        ];
+    }
+
+    public function isEmpty(array $plan): bool
+    {
+        return empty($plan['write_off_rows']) && empty($plan['ambiguous_refs']);
+    }
+
+    /**
+     * @param  array{write_off_rows: array}  $plan
+     */
+    public function apply(array $plan): void
+    {
+        foreach (array_chunk($plan['write_off_rows'], 1000) as $chunk) {
+            WriteOff::insert($chunk);
+        }
+    }
+}

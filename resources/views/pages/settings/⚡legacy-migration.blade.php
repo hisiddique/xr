@@ -388,9 +388,16 @@ new #[Title('Legacy Data Migration')] class extends Component {
                     <p class="font-semibold">Customer payments reconciled against invoices</p>
                     <p class="mt-1">
                         {{ number_format($activeRun->options['reconciliation']['settled']) }} invoice(s) settled,
-                        {{ number_format($activeRun->options['reconciliation']['allocation_rows']) }} allocation(s) written,
-                        {{ number_format($activeRun->options['reconciliation']['shortfalls']) }} shortfall(s),
+                        {{ number_format($activeRun->options['reconciliation']['allocation_rows']) }} allocation(s) written from legacy's own payment-to-invoice records,
                         {{ number_format($activeRun->options['reconciliation']['ambiguous_refs']) }} excluded (ambiguous legacy ref).
+                    </p>
+                    <p class="mt-1">
+                        Reported, not guessed:
+                        {{ number_format($activeRun->options['reconciliation']['unallocated_payments']) }} payment(s) with no legacy allocation record,
+                        {{ number_format($activeRun->options['reconciliation']['partially_allocated_payments']) }} partially allocated,
+                        {{ number_format($activeRun->options['reconciliation']['over_allocated_payments']) }} over-allocated,
+                        {{ number_format($activeRun->options['reconciliation']['orphaned_batch_items']) }} orphaned legacy batch item(s),
+                        {{ number_format($activeRun->options['reconciliation']['invoice_target_mismatches']) }} invoice(s) whose allocations don't match legacy's balance.
                     </p>
                 </div>
             @endif
@@ -400,6 +407,43 @@ new #[Title('Legacy Data Migration')] class extends Component {
                     <p class="font-semibold">Migration succeeded, but reconciling payments to invoices afterward failed</p>
                     <p class="mt-1">{{ $activeRun->options['reconciliation_error'] }}</p>
                     <p class="mt-1 text-xs">You can retry from Documents + Customer Payments again, or run <span class="font-mono">php artisan payments:reconcile-legacy-allocations</span> where the legacy connection is configured.</p>
+                </div>
+            @endif
+
+            @if (isset($activeRun->options['credit_note_reconciliation']))
+                <div class="rounded-xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-400">
+                    <p class="font-semibold">Credit notes reconciled against invoices</p>
+                    <p class="mt-1">
+                        {{ number_format($activeRun->options['credit_note_reconciliation']['credited_invoice_updates']) }} credit note(s) linked to their source invoice,
+                        {{ number_format($activeRun->options['credit_note_reconciliation']['allocation_rows']) }} allocation(s) written,
+                        {{ number_format($activeRun->options['credit_note_reconciliation']['ambiguous_refs']) }} excluded (ambiguous legacy ref),
+                        {{ number_format($activeRun->options['credit_note_reconciliation']['unresolved_credit_notes']) }} reported unresolved (not guessed).
+                    </p>
+                </div>
+            @endif
+
+            @if (isset($activeRun->options['credit_note_reconciliation_error']))
+                <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
+                    <p class="font-semibold">Migration succeeded, but reconciling credit notes to invoices afterward failed</p>
+                    <p class="mt-1">{{ $activeRun->options['credit_note_reconciliation_error'] }}</p>
+                </div>
+            @endif
+
+            @if (isset($activeRun->options['write_off_reconciliation']))
+                <div class="rounded-xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-400">
+                    <p class="font-semibold">Legacy write-offs migrated</p>
+                    <p class="mt-1">
+                        {{ number_format($activeRun->options['write_off_reconciliation']['write_off_rows']) }} write-off(s) written,
+                        {{ number_format($activeRun->options['write_off_reconciliation']['ambiguous_refs']) }} excluded (ambiguous legacy ref),
+                        {{ number_format($activeRun->options['write_off_reconciliation']['unresolved_write_offs']) }} reported unresolved (not guessed).
+                    </p>
+                </div>
+            @endif
+
+            @if (isset($activeRun->options['write_off_reconciliation_error']))
+                <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
+                    <p class="font-semibold">Migration succeeded, but migrating write-offs afterward failed</p>
+                    <p class="mt-1">{{ $activeRun->options['write_off_reconciliation_error'] }}</p>
                 </div>
             @endif
 

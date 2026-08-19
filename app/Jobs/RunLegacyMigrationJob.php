@@ -5,7 +5,9 @@ namespace App\Jobs;
 use App\MigrationRunStatus;
 use App\Models\MigrationRun;
 use App\Services\Migration\DuplicateStrategy;
+use App\Services\Migration\LegacyCreditNoteReconciler;
 use App\Services\Migration\LegacyPaymentReconciler;
+use App\Services\Migration\LegacyWriteOffReconciler;
 use App\Services\Migration\MigrationRunner;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -52,6 +54,8 @@ class RunLegacyMigrationJob implements ShouldQueue
             );
 
             $this->reconcilePaymentsIfApplicable($run);
+            $this->reconcileCreditNotesIfApplicable($run);
+            $this->reconcileWriteOffsIfApplicable($run);
         } catch (\Throwable $e) {
             // MigrationRunner already marks the run Failed on per-row/per-mapper
             // failures; this only catches an unexpected escape (e.g. a lost DB
@@ -107,8 +111,12 @@ class RunLegacyMigrationJob implements ShouldQueue
                     'settled' => $plan['to_settle']->count(),
                     'unsettled' => $plan['to_unsettle']->count(),
                     'allocation_rows' => count($plan['allocation_rows']),
-                    'shortfalls' => count($plan['shortfalls']),
                     'ambiguous_refs' => count($plan['ambiguous_refs']),
+                    'unallocated_payments' => $plan['unallocated_payments']['count'],
+                    'partially_allocated_payments' => $plan['partially_allocated_payments']['count'],
+                    'over_allocated_payments' => $plan['over_allocated_payments']['count'],
+                    'orphaned_batch_items' => $plan['orphaned_batch_items']['count'],
+                    'invoice_target_mismatches' => $plan['invoice_target_mismatches']['count'],
                 ],
             ])]);
         } catch (\Throwable $e) {
@@ -119,6 +127,94 @@ class RunLegacyMigrationJob implements ShouldQueue
 
             $run->update(['options' => array_merge($run->options ?? [], [
                 'reconciliation_error' => Str::limit($e->getMessage(), 500),
+            ])]);
+        }
+    }
+
+    /**
+     * Links migrated credit notes to the invoice they were raised against — see
+     * LegacyCreditNoteReconciler's docblock. Runs whenever 'documents' was migrated;
+     * unlike payment reconciliation this doesn't need 'payments' in the same run.
+     */
+    private function reconcileCreditNotesIfApplicable(MigrationRun $run): void
+    {
+        if (! in_array('documents', $this->selectedGroups, true)) {
+            return;
+        }
+
+        if ($run->fresh()->status !== MigrationRunStatus::Completed) {
+            return;
+        }
+
+        try {
+            $reconciler = app(LegacyCreditNoteReconciler::class);
+            $plan = $reconciler->plan();
+
+            if ($reconciler->isEmpty($plan)) {
+                return;
+            }
+
+            $reconciler->apply($plan);
+
+            $run->update(['options' => array_merge($run->options ?? [], [
+                'credit_note_reconciliation' => [
+                    'credited_invoice_updates' => count($plan['credited_invoice_updates']),
+                    'allocation_rows' => count($plan['allocation_rows']),
+                    'ambiguous_refs' => count($plan['ambiguous_refs']),
+                    'unresolved_credit_notes' => $plan['unresolved_credit_notes']['count'],
+                ],
+            ])]);
+        } catch (\Throwable $e) {
+            Log::warning('Legacy credit note reconciliation failed after a successful migration run', [
+                'migration_run_id' => $run->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            $run->update(['options' => array_merge($run->options ?? [], [
+                'credit_note_reconciliation_error' => Str::limit($e->getMessage(), 500),
+            ])]);
+        }
+    }
+
+    /**
+     * Migrates legacy write-offs into `write_offs` rows — see LegacyWriteOffReconciler's
+     * docblock. Runs whenever 'documents' was migrated, same trigger as credit notes.
+     */
+    private function reconcileWriteOffsIfApplicable(MigrationRun $run): void
+    {
+        if (! in_array('documents', $this->selectedGroups, true)) {
+            return;
+        }
+
+        if ($run->fresh()->status !== MigrationRunStatus::Completed) {
+            return;
+        }
+
+        try {
+            $reconciler = new LegacyWriteOffReconciler($this->createdByUserId);
+            $plan = $reconciler->plan();
+
+            if ($reconciler->isEmpty($plan)) {
+                return;
+            }
+
+            $reconciler->apply($plan);
+
+            $run->update(['options' => array_merge($run->options ?? [], [
+                'write_off_reconciliation' => [
+                    'write_off_rows' => count($plan['write_off_rows']),
+                    'ambiguous_refs' => count($plan['ambiguous_refs']),
+                    'unresolved_write_offs' => $plan['unresolved_write_offs']['count'],
+                ],
+            ])]);
+        } catch (\Throwable $e) {
+            Log::warning('Legacy write-off reconciliation failed after a successful migration run', [
+                'migration_run_id' => $run->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            $run->update(['options' => array_merge($run->options ?? [], [
+                'write_off_reconciliation_error' => Str::limit($e->getMessage(), 500),
             ])]);
         }
     }

@@ -10,84 +10,180 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Links migrated payments to migrated invoices and derives each invoice's settled
- * status. Legacy never recorded which payment paid which invoice — only each
- * invoice's current outstanding balance (AccountEntries.Osvalue) — so this computes
- * each invoice's true target-settled amount from that legacy fact, then funds
- * oldest-invoice-first from that customer's oldest migrated payments. That's an
- * approximation of *which* payment funded *which* invoice (not a reconstruction of
- * real history), but the resulting outstanding-per-invoice figure is exact, since
- * it's read directly from legacy, not guessed.
+ * Links migrated payments to migrated invoices using legacy's real, row-level
+ * allocation table (`AccountBatchItems`) — one row per (payment, invoice) pairing,
+ * carrying the exact amount that payment applied to that invoice. This is historical
+ * fact, not a guess: `cshuid` identifies the payment (matches `payments.legacy_uid`,
+ * the same `AccountEntries.uid` `PaymentMapper` reads), `txnref` identifies the
+ * invoice (matches `Documents.ref` where `rtype='i'`), and `paymt` — scaled by that
+ * row's `AccountPostTypes.entryvalue` sign flag, the same way the legacy app's own
+ * `sp_CustSupp_Transactions_Details` proc displays it — is the amount applied.
  *
- * Kept independent of `App\Services\PaymentAllocator`, which optimizes for "settle
- * oldest invoices fully, whatever it takes" — correct for a live user allocating a
- * *new* payment, but wrong here: it would fully settle an invoice legacy shows as
- * still partially outstanding, and starve another.
+ * Where that link can't be resolved (no batch-item row for a payment, a `txnref`
+ * that doesn't map to exactly one invoice, a `cshuid` with no matching migrated
+ * payment, or a resolved sum that doesn't match the payment's own value or the
+ * invoice's legacy target-settled amount), this reports the gap instead of
+ * papering over it with a guess — there is no reliable fallback for a payment
+ * that legacy itself never fully accounted for.
  *
- * Split into plan()/apply() so both the CLI command (preview, confirm, dry-run) and
- * the migration job (apply immediately, same request-scoped legacy connection) can
- * share this logic without either owning console I/O.
- *
- * Local Document/Payment Eloquent collections are processed in customer batches (see
- * CUSTOMER_BATCH_SIZE) — the same reason BulkEntityMapper implementations chunk
- * instead of loading a whole table at once (EntityMapper's own docblock cites legacy
- * tables here reaching millions of rows), and why plain Eloquent models (this app's
- * `documents`/`payments`) are far heavier per row than the raw legacy `stdClass` rows
- * `buildLegacyTargetMap()` reads. Rows can't be chunked independently here — correctly
- * funding invoices oldest-first requires seeing *all* of one customer's invoices and
- * payments together — so the batch boundary is drawn at the customer level.
- *
- * `buildLegacyTargetMap()` itself stays a single global pass, not customer-scoped:
- * scoping it by customer was tried and reverted — a small number of legacy
- * `AccountEntries.Custid` values (52 out of 52,580, confirmed against live data) don't
- * match the `Documents.Acctuid` of the invoice they actually reference, so filtering
- * either side by customer silently drops real matches. The raw rows it reads are
- * lightweight `stdClass` objects, not Eloquent models, so loading them in one pass is
- * cheap relative to the Eloquent collections this class batches.
+ * `is_settled` is derived independently from `AccountEntries.Osvalue` (each
+ * invoice's own outstanding balance) — exact regardless of allocation resolution,
+ * so it is never influenced by how well the allocation rows above resolved.
  */
 class LegacyPaymentReconciler
 {
-    private const int CUSTOMER_BATCH_SIZE = 500;
+    private const float TOLERANCE = 0.01;
+
+    private const int REPORT_SAMPLE_LIMIT = 100;
 
     /**
      * @return array{
      *     to_settle: Collection<int, array{document_id: int, doc_number: ?string, target_settled: float}>,
      *     to_unsettle: Collection<int, int>,
      *     allocation_rows: array<int, array{payment_id: int, document_id: int, allocated_amount: float, created_at: Carbon, updated_at: Carbon}>,
-     *     shortfalls: array<int, array{customer_id: int, doc_number: ?string, shortfall: float}>,
      *     ambiguous_refs: array<string, int>,
+     *     unallocated_payments: array{count: int, sample: array<int, array{legacy_uid: int, reference: ?string, amount: float}>},
+     *     partially_allocated_payments: array{count: int, sample: array<int, array{legacy_uid: int, reference: ?string, amount: float, allocated: float}>},
+     *     over_allocated_payments: array{count: int, sample: array<int, array{legacy_uid: int, reference: ?string, amount: float, allocated: float}>},
+     *     orphaned_batch_items: array{count: int, sample: array<int, int>},
+     *     invoice_target_mismatches: array{count: int, sample: array<int, array{doc_number: ?string, target_settled: float, allocated: float}>},
      * }
      */
     public function plan(): array
     {
-        [$osvalueByDocumentLegacyUid, $ambiguousRefs] = $this->buildLegacyTargetMap();
+        [$osvalueByDocumentLegacyUid, $ambiguousRefs, $documentIdByRef] = $this->buildInvoiceRefMaps();
 
-        $customerIds = Document::query()
-            ->invoices()
-            ->whereNotNull('legacy_uid')
-            ->distinct()
-            ->pluck('customer_id');
+        $paymentIdByLegacyUid = Payment::query()->whereNotNull('legacy_uid')->pluck('id', 'legacy_uid')->all();
+        $paymentAmountByLegacyUid = Payment::query()->whereNotNull('legacy_uid')->pluck('amount', 'legacy_uid')->all();
+        $paymentReferenceByLegacyUid = Payment::query()->whereNotNull('legacy_uid')->pluck('payment_reference', 'legacy_uid')->all();
 
-        $toSettle = collect();
-        $toUnsettle = collect();
+        $entryvalueByPosttype = DB::connection('legacy')->table('AccountPostTypes')->pluck('entryvalue', 'uid')->all();
+
         $allocationRows = [];
-        $shortfalls = [];
+        $allocatedByPaymentLegacyUid = [];
+        $allocatedByDocumentId = [];
+        $orphanedCshuids = [];
 
-        foreach ($customerIds->chunk(self::CUSTOMER_BATCH_SIZE) as $batch) {
-            $batchPlan = $this->planForCustomerBatch($batch->values(), $osvalueByDocumentLegacyUid);
+        DB::connection('legacy')->table('AccountBatchItems')
+            ->whereNotNull('cshuid')
+            ->where('cshuid', '!=', 0)
+            ->select(['cshuid', 'txnabbr', 'txnref', 'paymt', 'posttype'])
+            ->orderBy('cshuid')
+            ->each(function ($row) use (
+                &$allocationRows, &$allocatedByPaymentLegacyUid, &$allocatedByDocumentId, &$orphanedCshuids,
+                $paymentIdByLegacyUid, $documentIdByRef, $entryvalueByPosttype,
+            ) {
+                if (trim((string) $row->txnabbr) !== 'INV-') {
+                    return;
+                }
 
-            $toSettle = $toSettle->concat($batchPlan['to_settle']);
-            $toUnsettle = $toUnsettle->concat($batchPlan['to_unsettle']);
-            array_push($allocationRows, ...$batchPlan['allocation_rows']);
-            array_push($shortfalls, ...$batchPlan['shortfalls']);
+                $paymentId = $paymentIdByLegacyUid[$row->cshuid] ?? null;
+
+                if ($paymentId === null) {
+                    $orphanedCshuids[$row->cshuid] = true;
+
+                    return;
+                }
+
+                $documentId = $documentIdByRef[trim((string) $row->txnref)] ?? null;
+
+                if ($documentId === null) {
+                    return;
+                }
+
+                $multiplier = 1.0;
+                if ($row->posttype !== null && (float) ($entryvalueByPosttype[$row->posttype] ?? 0) !== 0.0) {
+                    $multiplier = (float) $entryvalueByPosttype[$row->posttype];
+                }
+
+                $amount = round((float) $row->paymt * $multiplier, 2);
+
+                if ($amount <= 0) {
+                    return;
+                }
+
+                $allocationRows[] = [
+                    'payment_id' => $paymentId,
+                    'document_id' => $documentId,
+                    'allocated_amount' => $amount,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+
+                $allocatedByPaymentLegacyUid[$row->cshuid] = ($allocatedByPaymentLegacyUid[$row->cshuid] ?? 0) + $amount;
+                $allocatedByDocumentId[$documentId] = ($allocatedByDocumentId[$documentId] ?? 0) + $amount;
+            });
+
+        $unallocated = ['count' => 0, 'sample' => []];
+        $partial = ['count' => 0, 'sample' => []];
+        $over = ['count' => 0, 'sample' => []];
+
+        foreach ($paymentIdByLegacyUid as $legacyUid => $paymentId) {
+            $expected = (float) $paymentAmountByLegacyUid[$legacyUid];
+            $allocated = $allocatedByPaymentLegacyUid[$legacyUid] ?? 0.0;
+
+            if ($allocated <= self::TOLERANCE) {
+                $bucket = &$unallocated;
+                $row = ['legacy_uid' => $legacyUid, 'reference' => $paymentReferenceByLegacyUid[$legacyUid] ?? null, 'amount' => $expected];
+            } elseif ($allocated > $expected + self::TOLERANCE) {
+                $bucket = &$over;
+                $row = ['legacy_uid' => $legacyUid, 'reference' => $paymentReferenceByLegacyUid[$legacyUid] ?? null, 'amount' => $expected, 'allocated' => round($allocated, 2)];
+            } elseif (abs($allocated - $expected) > self::TOLERANCE) {
+                $bucket = &$partial;
+                $row = ['legacy_uid' => $legacyUid, 'reference' => $paymentReferenceByLegacyUid[$legacyUid] ?? null, 'amount' => $expected, 'allocated' => round($allocated, 2)];
+            } else {
+                continue;
+            }
+
+            $bucket['count']++;
+            if (count($bucket['sample']) < self::REPORT_SAMPLE_LIMIT) {
+                $bucket['sample'][] = $row;
+            }
+            unset($bucket);
         }
+
+        [$toSettle, $toUnsettle] = $this->buildSettlementDiff($osvalueByDocumentLegacyUid);
+
+        $invoiceMismatches = ['count' => 0, 'sample' => []];
+        $documentsByLegacyUid = Document::query()->invoices()->whereNotNull('legacy_uid')->get(['id', 'legacy_uid', 'doc_number', 'total_value'])->keyBy('legacy_uid');
+
+        foreach ($osvalueByDocumentLegacyUid as $legacyUid => $osvalue) {
+            $document = $documentsByLegacyUid[$legacyUid] ?? null;
+
+            if ($document === null) {
+                continue;
+            }
+
+            $targetSettled = min(max((float) $document->total_value - $osvalue, 0.0), (float) $document->total_value);
+            $allocated = $allocatedByDocumentId[$document->id] ?? 0.0;
+
+            if (abs($allocated - $targetSettled) > self::TOLERANCE) {
+                $invoiceMismatches['count']++;
+                if (count($invoiceMismatches['sample']) < self::REPORT_SAMPLE_LIMIT) {
+                    $invoiceMismatches['sample'][] = [
+                        'doc_number' => $document->doc_number,
+                        'target_settled' => round($targetSettled, 2),
+                        'allocated' => round($allocated, 2),
+                    ];
+                }
+            }
+        }
+
+        $orphanedKeys = array_keys($orphanedCshuids);
 
         return [
             'to_settle' => $toSettle,
             'to_unsettle' => $toUnsettle,
             'allocation_rows' => $allocationRows,
-            'shortfalls' => $shortfalls,
             'ambiguous_refs' => $ambiguousRefs,
+            'unallocated_payments' => $unallocated,
+            'partially_allocated_payments' => $partial,
+            'over_allocated_payments' => $over,
+            'orphaned_batch_items' => [
+                'count' => count($orphanedKeys),
+                'sample' => array_slice($orphanedKeys, 0, self::REPORT_SAMPLE_LIMIT),
+            ],
+            'invoice_target_mismatches' => $invoiceMismatches,
         ];
     }
 
@@ -96,12 +192,11 @@ class LegacyPaymentReconciler
         return $plan['to_settle']->isEmpty()
             && $plan['to_unsettle']->isEmpty()
             && empty($plan['allocation_rows'])
-            && empty($plan['shortfalls'])
             && empty($plan['ambiguous_refs']);
     }
 
     /**
-     * @param  array{to_settle: Collection, to_unsettle: Collection, allocation_rows: array, shortfalls: array, ambiguous_refs: array}  $plan
+     * @param  array{to_settle: Collection, to_unsettle: Collection, allocation_rows: array}  $plan
      */
     public function apply(array $plan): void
     {
@@ -126,118 +221,49 @@ class LegacyPaymentReconciler
     }
 
     /**
-     * @param  Collection<int, int>  $customerIds
      * @param  array<int, float>  $osvalueByDocumentLegacyUid
-     * @return array{
-     *     to_settle: Collection<int, array{document_id: int, doc_number: ?string, target_settled: float}>,
-     *     to_unsettle: Collection<int, int>,
-     *     allocation_rows: array<int, array{payment_id: int, document_id: int, allocated_amount: float, created_at: Carbon, updated_at: Carbon}>,
-     *     shortfalls: array<int, array{customer_id: int, doc_number: ?string, shortfall: float}>,
-     * }
+     * @return array{0: Collection, 1: Collection}
      */
-    private function planForCustomerBatch(Collection $customerIds, array $osvalueByDocumentLegacyUid): array
+    private function buildSettlementDiff(array $osvalueByDocumentLegacyUid): array
     {
         $targetDocuments = Document::query()
             ->invoices()
-            ->whereIn('customer_id', $customerIds)
             ->whereNotNull('legacy_uid')
-            ->get()
-            ->filter(fn (Document $document) => array_key_exists($document->legacy_uid, $osvalueByDocumentLegacyUid))
-            ->keyBy('legacy_uid');
+            ->get(['id', 'legacy_uid', 'doc_number', 'total_value', 'is_settled'])
+            ->filter(fn (Document $document) => array_key_exists($document->legacy_uid, $osvalueByDocumentLegacyUid));
 
-        $targets = $targetDocuments->map(function (Document $document) use ($osvalueByDocumentLegacyUid) {
+        $toSettle = collect();
+        $toUnsettle = collect();
+
+        foreach ($targetDocuments as $document) {
             $osvalue = $osvalueByDocumentLegacyUid[$document->legacy_uid];
             $totalValue = (float) $document->total_value;
+            $targetSettled = min(max($totalValue - $osvalue, 0.0), $totalValue);
+            $isSettled = $osvalue <= 0.001;
 
-            return [
-                'document' => $document,
-                'osvalue' => $osvalue,
-                'target_settled' => min(max($totalValue - $osvalue, 0.0), $totalValue),
-                'is_settled' => $osvalue <= 0.001,
-            ];
-        });
-
-        $paymentsByCustomer = Payment::query()
-            ->whereIn('customer_id', $customerIds)
-            ->whereNotNull('legacy_uid')
-            ->orderBy('payment_date')
-            ->get()
-            ->groupBy('customer_id')
-            ->map(fn ($payments) => $payments->map(fn (Payment $payment) => [
-                'payment' => $payment,
-                'remaining' => (float) $payment->amount,
-            ])->all());
-
-        $allocationRows = [];
-        $shortfalls = [];
-
-        foreach ($targets->groupBy('document.customer_id') as $customerId => $customerTargets) {
-            $customerPayments = $paymentsByCustomer[$customerId] ?? [];
-
-            foreach ($customerTargets->sortBy('document.doc_date') as $target) {
-                $needed = $target['target_settled'];
-
-                foreach ($customerPayments as $index => $entry) {
-                    if ($needed <= 0.001) {
-                        break;
-                    }
-
-                    if ($entry['remaining'] <= 0.001) {
-                        continue;
-                    }
-
-                    $draw = min($needed, $entry['remaining']);
-
-                    $allocationRows[] = [
-                        'payment_id' => $entry['payment']->id,
-                        'document_id' => $target['document']->id,
-                        'allocated_amount' => round($draw, 2),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ];
-
-                    $customerPayments[$index]['remaining'] -= $draw;
-                    $needed -= $draw;
-                }
-
-                if ($needed > 0.001) {
-                    $shortfalls[] = [
-                        'customer_id' => $customerId,
-                        'doc_number' => $target['document']->doc_number,
-                        'shortfall' => round($needed, 2),
-                    ];
-                }
+            if ($isSettled && ! $document->is_settled) {
+                $toSettle->push([
+                    'document_id' => $document->id,
+                    'doc_number' => $document->doc_number,
+                    'target_settled' => $targetSettled,
+                ]);
+            } elseif (! $isSettled && $document->is_settled) {
+                $toUnsettle->push($document->id);
             }
-
-            $paymentsByCustomer[$customerId] = $customerPayments;
         }
 
-        return [
-            'to_settle' => $targets
-                ->filter(fn (array $t) => $t['is_settled'] && ! $t['document']->is_settled)
-                ->map(fn (array $t) => [
-                    'document_id' => $t['document']->id,
-                    'doc_number' => $t['document']->doc_number,
-                    'target_settled' => $t['target_settled'],
-                ])
-                ->values(),
-            'to_unsettle' => $targets
-                ->filter(fn (array $t) => ! $t['is_settled'] && $t['document']->is_settled)
-                ->map(fn (array $t) => $t['document']->id)
-                ->values(),
-            'allocation_rows' => $allocationRows,
-            'shortfalls' => $shortfalls,
-        ];
+        return [$toSettle, $toUnsettle];
     }
 
     /**
      * Builds the map of documents.legacy_uid => legacy outstanding balance (Osvalue),
-     * restricted to Invno/Ref matches that resolve to exactly one legacy Documents row.
-     * A single global pass — see the class docblock for why this isn't customer-scoped.
+     * restricted to Invno/Ref matches that resolve to exactly one legacy Documents row,
+     * plus that same ref => local document id map reused for AccountBatchItems.txnref
+     * resolution (same underlying `Documents` rows, so one ambiguity report covers both).
      *
-     * @return array{0: array<int, float>, 1: array<string, int>}
+     * @return array{0: array<int, float>, 1: array<string, int>, 2: array<string, int>}
      */
-    private function buildLegacyTargetMap(): array
+    private function buildInvoiceRefMaps(): array
     {
         $entries = DB::connection('legacy')->table('AccountEntries')
             ->where('rtype', 'a')
@@ -251,22 +277,43 @@ class LegacyPaymentReconciler
             ->get()
             ->groupBy(fn ($row) => trim((string) $row->ref));
 
+        $localIdByLegacyUid = Document::query()->invoices()->whereNotNull('legacy_uid')->pluck('id', 'legacy_uid')->all();
+
         $osvalueByDocumentLegacyUid = [];
+        $documentIdByRef = [];
         $ambiguousRefs = [];
+
+        foreach ($documentsByRef as $ref => $matches) {
+            if ($matches->count() !== 1) {
+                $ambiguousRefs[$ref] = $matches->count();
+
+                continue;
+            }
+
+            $localId = $localIdByLegacyUid[$matches->first()->uid] ?? null;
+
+            if ($localId !== null) {
+                $documentIdByRef[$ref] = $localId;
+            }
+        }
 
         foreach ($entries as $entry) {
             $ref = trim((string) $entry->invno);
             $matches = $documentsByRef->get($ref);
 
-            if ($matches === null || $matches->count() !== 1) {
-                $ambiguousRefs[$ref] = ($ambiguousRefs[$ref] ?? 0) + ($matches?->count() ?? 0);
+            if ($matches === null) {
+                $ambiguousRefs[$ref] = 0;
 
+                continue;
+            }
+
+            if ($matches->count() !== 1) {
                 continue;
             }
 
             $osvalueByDocumentLegacyUid[$matches->first()->uid] = (float) $entry->osvalue;
         }
 
-        return [$osvalueByDocumentLegacyUid, $ambiguousRefs];
+        return [$osvalueByDocumentLegacyUid, $ambiguousRefs, $documentIdByRef];
     }
 }

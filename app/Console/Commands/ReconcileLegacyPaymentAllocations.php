@@ -8,7 +8,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Signature('payments:reconcile-legacy-allocations {--dry-run : Preview the changes without writing them}')]
-#[Description('Reconciles migrated legacy payments against migrated invoices. Legacy never recorded which payment paid which invoice — only each invoice\'s current outstanding balance (AccountEntries.Osvalue). This command computes each invoice\'s true target-settled amount from that legacy fact, then funds oldest-invoice-first from that customer\'s oldest migrated payments (an approximation of which payment funded which invoice, not a reconstruction of real history — but the resulting outstanding-per-invoice figure is exact, since it is read directly from legacy, not guessed). Manual/dev convenience only — a real migration run reconciles automatically when both Documents and Customer Payments are selected, reusing that run\'s own legacy credentials; this command instead relies on `.env`-configured legacy credentials, so it only works where those are set (e.g. locally).')]
+#[Description("Links migrated legacy payments to migrated invoices using legacy's own row-level allocation record (AccountBatchItems — cshuid/txnref/paymt), not a guess. Each invoice's settled status is derived separately and exactly from legacy's AccountEntries.Osvalue, so it's unaffected by allocation resolution. Payments or invoices whose allocation doesn't fully resolve (no record, partial, over-allocated, an orphaned legacy batch item, or an invoice whose allocations don't match its legacy balance) are reported, never force-balanced. Manual/dev convenience only — a real migration run reconciles automatically when both Documents and Customer Payments are selected, reusing that run's own legacy credentials; this command instead relies on `.env`-configured legacy credentials, so it only works where those are set (e.g. locally).")]
 class ReconcileLegacyPaymentAllocations extends Command
 {
     public function handle(LegacyPaymentReconciler $reconciler): int
@@ -25,21 +25,41 @@ class ReconcileLegacyPaymentAllocations extends Command
             );
         }
 
-        if (! empty($plan['shortfalls'])) {
-            $this->table(
-                ['Doc Number', 'Customer ID', 'Shortfall'],
-                collect($plan['shortfalls'])->map(fn (array $s) => [
-                    $s['doc_number'],
-                    $s['customer_id'],
-                    number_format($s['shortfall'], 2),
-                ])->all(),
-            );
-        }
-
         if (! empty($plan['ambiguous_refs'])) {
             $this->table(
                 ['Legacy Ref', 'Matched Documents Rows'],
                 collect($plan['ambiguous_refs'])->map(fn (int $count, string $ref) => [$ref, $count])->all(),
+            );
+        }
+
+        foreach (['unallocated_payments' => 'Unallocated Payments', 'partially_allocated_payments' => 'Partially Allocated Payments', 'over_allocated_payments' => 'Over-Allocated Payments'] as $key => $label) {
+            if ($plan[$key]['count'] > 0) {
+                $this->line("<comment>{$label}:</comment> {$plan[$key]['count']} (showing up to ".count($plan[$key]['sample']).')');
+                $this->table(
+                    ['Legacy UID', 'Reference', 'Amount', 'Allocated'],
+                    collect($plan[$key]['sample'])->map(fn (array $row) => [
+                        $row['legacy_uid'],
+                        $row['reference'] ?? '—',
+                        number_format($row['amount'], 2),
+                        isset($row['allocated']) ? number_format($row['allocated'], 2) : '—',
+                    ])->all(),
+                );
+            }
+        }
+
+        if ($plan['orphaned_batch_items']['count'] > 0) {
+            $this->warn("Orphaned legacy batch items (no matching migrated payment): {$plan['orphaned_batch_items']['count']}");
+        }
+
+        if ($plan['invoice_target_mismatches']['count'] > 0) {
+            $this->line('<comment>Invoices whose allocation total does not match their legacy balance:</comment> '.$plan['invoice_target_mismatches']['count']);
+            $this->table(
+                ['Doc Number', 'Target Settled', 'Allocated'],
+                collect($plan['invoice_target_mismatches']['sample'])->map(fn (array $row) => [
+                    $row['doc_number'],
+                    number_format($row['target_settled'], 2),
+                    number_format($row['allocated'], 2),
+                ])->all(),
             );
         }
 
@@ -50,9 +70,8 @@ class ReconcileLegacyPaymentAllocations extends Command
         }
 
         $this->info(sprintf(
-            '%d invoice(s) to settle, %d shortfall(s), %d excluded (ambiguous ref), %d allocation row(s) to write.',
+            '%d invoice(s) to settle, %d excluded (ambiguous ref), %d allocation row(s) to write.',
             $plan['to_settle']->count(),
-            count($plan['shortfalls']),
             count($plan['ambiguous_refs']),
             count($plan['allocation_rows']),
         ));
@@ -72,10 +91,9 @@ class ReconcileLegacyPaymentAllocations extends Command
         $reconciler->apply($plan);
 
         $this->info(sprintf(
-            'Reconciliation complete. %d invoice(s) settled, %d allocation row(s) written, %d shortfall(s) remain.',
+            'Reconciliation complete. %d invoice(s) settled, %d allocation row(s) written.',
             $plan['to_settle']->count(),
             count($plan['allocation_rows']),
-            count($plan['shortfalls']),
         ));
 
         return self::SUCCESS;

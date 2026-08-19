@@ -5,22 +5,16 @@ use App\Models\Document;
 use App\Models\LookupPaymentMethod;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 beforeEach(function () {
     useLegacyDatabase();
-    createLegacyTables(['Documents']);
+    createLegacyTables(['Documents', 'AccountEntries', 'AccountPostTypes', 'AccountBatchItems']);
 
-    Schema::connection('legacy')->create('AccountEntries', function (Blueprint $table): void {
-        $table->unsignedBigInteger('uid');
-        $table->string('rtype', 1);
-        $table->unsignedBigInteger('custid')->nullable();
-        $table->unsignedBigInteger('posttype')->nullable();
-        $table->string('invno')->nullable();
-        $table->decimal('osvalue', 12, 2)->nullable();
-    });
+    DB::connection('legacy')->table('AccountPostTypes')->insert([
+        ['uid' => 3, 'rtype' => 'A', 'inout' => 'IN', 'entryvalue' => 1],
+        ['uid' => 25, 'rtype' => 'A', 'inout' => 'IN', 'entryvalue' => -1],
+    ]);
 
     $this->customer = Customer::factory()->create(['legacy_uid' => 1]);
     $this->paymentMethod = LookupPaymentMethod::create(['name' => 'Cash']);
@@ -36,11 +30,17 @@ beforeEach(function () {
             'uid' => 90000 + $uid, 'rtype' => 'a', 'custid' => 1, 'posttype' => 85, 'invno' => $ref, 'osvalue' => $osvalue,
         ]);
     };
+
+    $this->seedBatchItem = function (int $cshuid, string $ref, float $paymt, ?int $posttype = null): void {
+        DB::connection('legacy')->table('AccountBatchItems')->insert([
+            'bhead' => 1, 'bline' => 1, 'cshuid' => $cshuid, 'txnabbr' => 'INV-', 'txnref' => $ref, 'paymt' => $paymt, 'posttype' => $posttype,
+        ]);
+    };
 });
 
-test('funds the older invoice fully before the newer one, from oldest payments first', function () {
-    ($this->seedInvoiceEntry)(101, '1001', 0.00); // fully paid: total 100, osvalue 0
-    ($this->seedInvoiceEntry)(102, '1002', 50.00); // half outstanding: total 100, osvalue 50
+test('allocates a payment to the invoices legacy actually recorded it against', function () {
+    ($this->seedInvoiceEntry)(101, '1001', 0.00);
+    ($this->seedInvoiceEntry)(102, '1002', 50.00);
 
     $older = Document::factory()->create([
         'legacy_uid' => 101, 'customer_id' => $this->customer->id,
@@ -56,6 +56,9 @@ test('funds the older invoice fully before the newer one, from oldest payments f
         'amount' => 150, 'payment_date' => '2024-01-15',
     ]);
 
+    ($this->seedBatchItem)($payment->legacy_uid, '1001', 100);
+    ($this->seedBatchItem)($payment->legacy_uid, '1002', 50);
+
     $this->artisan('payments:reconcile-legacy-allocations')
         ->expectsConfirmation('Apply these changes?', 'yes')
         ->assertSuccessful();
@@ -63,19 +66,37 @@ test('funds the older invoice fully before the newer one, from oldest payments f
     expect($older->fresh()->is_settled)->toBeTrue()
         ->and($newer->fresh()->is_settled)->toBeFalse();
 
-    $olderAllocated = PaymentAllocation::where('document_id', $older->id)->sum('allocated_amount');
-    $newerAllocated = PaymentAllocation::where('document_id', $newer->id)->sum('allocated_amount');
-
-    expect((float) $olderAllocated)->toBe(100.0)
-        ->and((float) $newerAllocated)->toBe(50.0);
+    expect((float) PaymentAllocation::where('document_id', $older->id)->sum('allocated_amount'))->toBe(100.0)
+        ->and((float) PaymentAllocation::where('document_id', $newer->id)->sum('allocated_amount'))->toBe(50.0);
 });
 
-test('reports a shortfall without force-balancing when payments run out', function () {
-    ($this->seedInvoiceEntry)(201, '2001', 20.00); // total 100, osvalue 20 -> target 80
+test('applies the entryvalue sign multiplier from AccountPostTypes to paymt', function () {
+    ($this->seedInvoiceEntry)(110, '1101', 0.00);
 
     $document = Document::factory()->create([
-        'legacy_uid' => 201, 'customer_id' => $this->customer->id,
-        'type' => 'INV', 'doc_date' => '2024-01-01', 'total_value' => 100,
+        'legacy_uid' => 110, 'customer_id' => $this->customer->id, 'type' => 'INV', 'total_value' => 100,
+    ]);
+
+    $payment = Payment::factory()->create([
+        'payment_method_id' => $this->paymentMethod->id, 'legacy_uid' => 5010, 'customer_id' => $this->customer->id,
+        'amount' => 100, 'payment_date' => '2024-01-01',
+    ]);
+
+    // posttype 25 has entryvalue=-1, so a negative paymt of -100 applies as +100.
+    ($this->seedBatchItem)($payment->legacy_uid, '1101', -100, posttype: 25);
+
+    $this->artisan('payments:reconcile-legacy-allocations')
+        ->expectsConfirmation('Apply these changes?', 'yes')
+        ->assertSuccessful();
+
+    expect((float) PaymentAllocation::where('document_id', $document->id)->sum('allocated_amount'))->toBe(100.0);
+});
+
+test('reports a payment with no legacy allocation record instead of guessing', function () {
+    ($this->seedInvoiceEntry)(201, '2001', 20.00);
+
+    $document = Document::factory()->create([
+        'legacy_uid' => 201, 'customer_id' => $this->customer->id, 'type' => 'INV', 'total_value' => 100,
     ]);
 
     Payment::factory()->create([
@@ -83,15 +104,15 @@ test('reports a shortfall without force-balancing when payments run out', functi
         'amount' => 30, 'payment_date' => '2024-01-10',
     ]);
 
+    // Nothing resolves and nothing is settled/unsettled, so there's nothing to write —
+    // the command reports the gap and exits without prompting to apply changes.
     $this->artisan('payments:reconcile-legacy-allocations')
-        ->expectsConfirmation('Apply these changes?', 'yes')
+        ->expectsOutputToContain('Unallocated Payments')
         ->assertSuccessful();
 
-    // is_settled is driven by legacy osvalue directly (still 20 outstanding), not by the funding pass.
     expect($document->fresh()->is_settled)->toBeFalse();
 
-    $allocated = PaymentAllocation::where('document_id', $document->id)->sum('allocated_amount');
-    expect((float) $allocated)->toBe(30.0);
+    expect(PaymentAllocation::count())->toBe(0);
 });
 
 test('excludes an invoice whose legacy ref collides with another document and leaves it unsettled', function () {
@@ -126,9 +147,10 @@ test('dry-run writes nothing', function () {
         'legacy_uid' => 401, 'customer_id' => $this->customer->id, 'type' => 'INV', 'total_value' => 100,
     ]);
 
-    Payment::factory()->create([
+    $payment = Payment::factory()->create([
         'payment_method_id' => $this->paymentMethod->id, 'legacy_uid' => 5004, 'customer_id' => $this->customer->id, 'amount' => 100, 'payment_date' => '2024-01-01',
     ]);
+    ($this->seedBatchItem)($payment->legacy_uid, '4001', 100);
 
     $this->artisan('payments:reconcile-legacy-allocations', ['--dry-run' => true])
         ->assertSuccessful();
@@ -147,6 +169,7 @@ test('re-running is idempotent and never touches allocations belonging to a live
     $migratedPayment = Payment::factory()->create([
         'payment_method_id' => $this->paymentMethod->id, 'legacy_uid' => 5005, 'customer_id' => $this->customer->id, 'amount' => 100, 'payment_date' => '2024-01-01',
     ]);
+    ($this->seedBatchItem)($migratedPayment->legacy_uid, '5001', 100);
 
     $liveDocument = Document::factory()->create([
         'customer_id' => $this->customer->id, 'type' => 'INV', 'total_value' => 50,
