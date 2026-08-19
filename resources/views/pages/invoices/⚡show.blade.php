@@ -11,7 +11,7 @@ new #[Title('Invoice')] class extends Component
 
     public function mount(): void
     {
-        $this->document->load(['customer', 'items', 'emailLogs', 'convertedFrom', 'creator', 'creditNotesIssued']);
+        $this->document->load(['customer', 'items', 'emailLogs', 'convertedFrom', 'creator', 'creditNotesIssued', 'paymentAllocations.payment.paymentMethod']);
     }
 
     #[On('email-log-updated')]
@@ -211,6 +211,36 @@ new #[Title('Invoice')] class extends Component
                         @endif
                     </div>
                 </div>
+            </x-ui.section-card>
+
+            {{-- Payments --}}
+            <x-ui.section-card title="Payments">
+                @if($document->paymentAllocations->isEmpty())
+                    <x-ui.empty-state
+                        icon="banknotes"
+                        title="No payments recorded"
+                        description="No payments have been allocated to this invoice yet."
+                    />
+                @else
+                    <ul class="space-y-3">
+                        @foreach($document->paymentAllocations as $allocation)
+                            <li class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <a href="{{ route('payments.show', $allocation->payment) }}" wire:navigate class="font-semibold text-zinc-900 hover:text-indigo-600 dark:text-white dark:hover:text-indigo-400 transition-colors">
+                                        {{ $allocation->payment->reference }}
+                                    </a>
+                                    <p class="text-xs text-zinc-400 dark:text-zinc-500">
+                                        {{ $allocation->payment->payment_date?->format('d F Y') }}
+                                        @if($allocation->payment->paymentMethod)
+                                            · {{ $allocation->payment->paymentMethod->name }}
+                                        @endif
+                                    </p>
+                                </div>
+                                <span class="shrink-0 font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">£{{ number_format($allocation->allocated_amount, 2) }}</span>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
             </x-ui.section-card>
 
             {{-- Email History --}}
