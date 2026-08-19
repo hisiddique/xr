@@ -291,6 +291,13 @@ new #[Title('Payment')] class extends Component
                         <dd class="mt-1 text-sm text-zinc-900 dark:text-white">{{ $payment->paymentMethod?->name ?? $payment->source_type->label() }}</dd>
                     </div>
 
+                    @if($payment->payment_reference)
+                        <div>
+                            <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Payment Reference</dt>
+                            <dd class="mt-1 font-mono text-sm text-zinc-900 dark:text-white">{{ $payment->payment_reference }}</dd>
+                        </div>
+                    @endif
+
                     @if(count($this->fundingReferences) > 0)
                         <div>
                             <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">

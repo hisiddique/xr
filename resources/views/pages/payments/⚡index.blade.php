@@ -83,6 +83,7 @@ new #[Title('Payments')] class extends Component
             ->withSum('allocations', 'allocated_amount')
             ->when($this->search, fn ($q) => $q->where(function ($q) {
                 $q->where('reference', 'like', "%{$this->search}%")
+                    ->orWhere('payment_reference', 'like', "%{$this->search}%")
                     ->orWhereHas('customer', fn ($q) => $q->where('company_name', 'like', "%{$this->search}%")->orWhere('reference', 'like', "%{$this->search}%"));
             }))
             ->when($this->dateFrom, fn ($q) => $q->where('payment_date', '>=', $this->dateFrom))
@@ -111,7 +112,7 @@ new #[Title('Payments')] class extends Component
                     data-search-input
                     autocomplete="off"
                     icon="magnifying-glass"
-                    :placeholder="__('Search by reference or customer…')"
+                    :placeholder="__('Search by reference, payment reference, or customer…')"
                     clearable
                     class="flex-1 max-w-sm"
                 />
@@ -149,6 +150,7 @@ new #[Title('Payments')] class extends Component
                     <thead class="sticky top-14 lg:top-16 z-10 bg-zinc-50 dark:bg-zinc-800">
                         <tr>
                             <x-ui.sortable-header column="reference" :state="$this->sortStateFor('reference')">Reference</x-ui.sortable-header>
+                            <th class="px-4 py-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Payment Reference</th>
                             <th class="px-4 py-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Customer</th>
                             <th class="px-4 py-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Method</th>
                             <x-ui.sortable-header column="amount" align="right" :state="$this->sortStateFor('amount')">Amount</x-ui.sortable-header>
@@ -176,6 +178,7 @@ new #[Title('Payments')] class extends Component
                                         {{ $payment->reference }}
                                     </a>
                                 </td>
+                                <td class="px-4 py-2 font-mono text-zinc-600 dark:text-zinc-300">{{ $payment->payment_reference ?: '—' }}</td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center gap-2.5">
                                         <x-ui.avatar :name="$payment->customer->company_name ?? $payment->customer->first_name" size="xs" />
