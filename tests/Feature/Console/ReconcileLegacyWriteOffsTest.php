@@ -31,9 +31,9 @@ beforeEach(function () {
         ]);
     };
 
-    $this->seedBatchItem = function (int $cshuid, string $ref, float $paymt, ?int $posttype = null): void {
+    $this->seedBatchItem = function (int $cshuid, string $ref, float $paymt, ?int $posttype = null, ?string $txndetails = null): void {
         DB::connection('legacy')->table('AccountBatchItems')->insert([
-            'bhead' => 1, 'bline' => 1, 'cshuid' => $cshuid, 'txnabbr' => 'INV-', 'txnref' => $ref, 'paymt' => $paymt, 'posttype' => $posttype,
+            'bhead' => 1, 'bline' => 1, 'cshuid' => $cshuid, 'txnabbr' => 'INV-', 'txnref' => $ref, 'txndetails' => $txndetails, 'paymt' => $paymt, 'posttype' => $posttype,
         ]);
     };
 });
@@ -92,6 +92,20 @@ test('sums two batch items against the same invoice into one write-off row inste
 
     expect(WriteOff::where('legacy_uid', 9011)->where('document_id', $invoice->id)->count())->toBe(1);
     expect((float) WriteOff::where('legacy_uid', 9011)->value('amount'))->toBe(5.0);
+});
+
+test('resolves a bulk batch-labeled write-off via txndetails when txnref only holds the batch label', function () {
+    ($this->seedInvoice)(113, '830101');
+    ($this->seedWriteOffEntry)(9012);
+    ($this->seedBatchItem)(9012, 'c/b 200', 9.5, txndetails: '830101');
+
+    $invoice = Document::factory()->create(['legacy_uid' => 113, 'customer_id' => $this->customer->id, 'type' => 'INV', 'total_value' => 100]);
+
+    $this->artisan('write-offs:reconcile-legacy')
+        ->expectsConfirmation('Apply these changes?', 'yes')
+        ->assertSuccessful();
+
+    expect((float) WriteOff::where('legacy_uid', 9012)->where('document_id', $invoice->id)->value('amount'))->toBe(9.5);
 });
 
 test('reports a write-off with no batch item instead of guessing', function () {

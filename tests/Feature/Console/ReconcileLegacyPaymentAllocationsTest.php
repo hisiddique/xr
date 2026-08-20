@@ -31,9 +31,9 @@ beforeEach(function () {
         ]);
     };
 
-    $this->seedBatchItem = function (int $cshuid, string $ref, float $paymt, ?int $posttype = null): void {
+    $this->seedBatchItem = function (int $cshuid, string $ref, float $paymt, ?int $posttype = null, ?string $txndetails = null): void {
         DB::connection('legacy')->table('AccountBatchItems')->insert([
-            'bhead' => 1, 'bline' => 1, 'cshuid' => $cshuid, 'txnabbr' => 'INV-', 'txnref' => $ref, 'paymt' => $paymt, 'posttype' => $posttype,
+            'bhead' => 1, 'bline' => 1, 'cshuid' => $cshuid, 'txnabbr' => 'INV-', 'txnref' => $ref, 'txndetails' => $txndetails, 'paymt' => $paymt, 'posttype' => $posttype,
         ]);
     };
 });
@@ -92,6 +92,35 @@ test('sums two batch items against the same invoice into one allocation row inst
 
     expect(PaymentAllocation::where('payment_id', $payment->id)->where('document_id', $document->id)->count())->toBe(1);
     expect((float) PaymentAllocation::where('document_id', $document->id)->sum('allocated_amount'))->toBe(100.0);
+});
+
+test('resolves a bulk batch-labeled payment via txndetails when txnref only holds the batch label', function () {
+    // Mirrors a real legacy "C/B 112" bulk deposit: txnref is the batch label shared by
+    // every line, and each line's actual invoice ref lives in txndetails instead.
+    ($this->seedInvoiceEntry)(130, '828586', 0.00);
+    ($this->seedInvoiceEntry)(131, '829087', 0.00);
+
+    $invoiceA = Document::factory()->create([
+        'legacy_uid' => 130, 'customer_id' => $this->customer->id, 'type' => 'INV', 'total_value' => 31.19,
+    ]);
+    $invoiceB = Document::factory()->create([
+        'legacy_uid' => 131, 'customer_id' => $this->customer->id, 'type' => 'INV', 'total_value' => 109.20,
+    ]);
+
+    $payment = Payment::factory()->create([
+        'payment_method_id' => $this->paymentMethod->id, 'legacy_uid' => 5030, 'customer_id' => $this->customer->id,
+        'amount' => 140.39, 'payment_date' => '2024-01-01',
+    ]);
+
+    ($this->seedBatchItem)($payment->legacy_uid, 'c/b 112', 31.19, txndetails: '828586');
+    ($this->seedBatchItem)($payment->legacy_uid, 'c/b 112', 109.20, txndetails: '829087');
+
+    $this->artisan('payments:reconcile-legacy-allocations')
+        ->expectsConfirmation('Apply these changes?', 'yes')
+        ->assertSuccessful();
+
+    expect((float) PaymentAllocation::where('document_id', $invoiceA->id)->sum('allocated_amount'))->toBe(31.19)
+        ->and((float) PaymentAllocation::where('document_id', $invoiceB->id)->sum('allocated_amount'))->toBe(109.20);
 });
 
 test('applies the entryvalue sign multiplier from AccountPostTypes to paymt', function () {

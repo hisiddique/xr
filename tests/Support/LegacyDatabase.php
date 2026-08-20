@@ -142,6 +142,7 @@ function createLegacyTables(array $tables): void
                 $table->unsignedBigInteger('cshuid')->nullable();
                 $table->string('txnabbr')->nullable();
                 $table->string('txnref')->nullable();
+                $table->string('txndetails')->nullable();
                 $table->decimal('paymt', 12, 2)->nullable();
                 $table->decimal('osvalue', 12, 2)->nullable();
                 $table->unsignedBigInteger('posttype')->nullable();

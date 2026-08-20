@@ -15,10 +15,16 @@ use Illuminate\Support\Facades\DB;
  * allocation table (`AccountBatchItems`) — one row per (payment, invoice) pairing,
  * carrying the exact amount that payment applied to that invoice. This is historical
  * fact, not a guess: `cshuid` identifies the payment (matches `payments.legacy_uid`,
- * the same `AccountEntries.uid` `PaymentMapper` reads), `txnref` identifies the
- * invoice (matches `Documents.ref` where `rtype='i'`), and `paymt` — scaled by that
+ * the same `AccountEntries.uid` `PaymentMapper` reads), and `paymt` — scaled by that
  * row's `AccountPostTypes.entryvalue` sign flag, the same way the legacy app's own
  * `sp_CustSupp_Transactions_Details` proc displays it — is the amount applied.
+ *
+ * The invoice is identified by `txnref` for a single-invoice payment, but for a bulk
+ * batch-labeled payment (e.g. "c/b 112", "bacs", "chq 56" — one lump sum covering
+ * several invoices) `txnref` instead holds the batch label and the real invoice ref
+ * moves into `txndetails`; both are tried. Confirmed against that same stored proc's
+ * "Our Ref" column (`txnabbr + txnref + ' / ' + txndetails`) matching what the legacy
+ * UI itself displays for these rows.
  *
  * Where that link can't be resolved (no batch-item row for a payment, a `txnref`
  * that doesn't map to exactly one invoice, a `cshuid` with no matching migrated
@@ -68,7 +74,7 @@ class LegacyPaymentReconciler
         DB::connection('legacy')->table('AccountBatchItems')
             ->whereNotNull('cshuid')
             ->where('cshuid', '!=', 0)
-            ->select(['cshuid', 'txnabbr', 'txnref', 'paymt', 'posttype', 'txndate'])
+            ->select(['cshuid', 'txnabbr', 'txnref', 'txndetails', 'paymt', 'posttype', 'txndate'])
             ->orderBy('cshuid')
             ->each(function ($row) use (
                 &$allocationRows, &$allocatedByPaymentLegacyUid, &$allocatedByDocumentId, &$orphanedCshuids,
@@ -91,7 +97,20 @@ class LegacyPaymentReconciler
                     return;
                 }
 
+                // Single-invoice payments carry the invoice ref directly in txnref. Bulk
+                // batch-labeled payments (e.g. "c/b 112", "bacs", "chq 56" — a lump sum
+                // covering several invoices) instead put a batch label in txnref and move
+                // the real invoice ref into txndetails, confirmed against
+                // sp_CustSupp_Transactions_Details' own "Our Ref" construction
+                // (txnabbr + txnref + ' / ' + txndetails). Try txnref first, then fall
+                // back to txndetails — never both at once, since only one of them is ever
+                // a real invoice ref for a given row.
                 $documentId = $documentIdByRef[trim((string) $row->txnref)] ?? null;
+
+                if ($documentId === null) {
+                    $details = trim((string) $row->txndetails);
+                    $documentId = $details !== '' ? ($documentIdByRef[$details] ?? null) : null;
+                }
 
                 if ($documentId === null) {
                     return;

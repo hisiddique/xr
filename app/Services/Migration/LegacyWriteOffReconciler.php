@@ -63,7 +63,7 @@ class LegacyWriteOffReconciler
 
         $batchItems = DB::connection('legacy')->table('AccountBatchItems')
             ->whereIn('cshuid', $writeOffEntries->keys())
-            ->select(['cshuid', 'txnabbr', 'txnref', 'paymt', 'posttype'])
+            ->select(['cshuid', 'txnabbr', 'txnref', 'txndetails', 'paymt', 'posttype'])
             ->get();
 
         $writeOffRows = [];
@@ -85,13 +85,24 @@ class LegacyWriteOffReconciler
                 continue;
             }
 
+            // Single-invoice write-offs carry the invoice ref directly in txnref. Bulk
+            // batch-labeled entries put a batch label in txnref instead and move the
+            // real invoice ref into txndetails — see LegacyPaymentReconciler's docblock.
             $ref = trim((string) $item->txnref);
             $matches = $documentsByRef->get($ref);
 
             if ($matches === null || $matches->count() !== 1) {
-                $ambiguousRefs[$ref] = ($ambiguousRefs[$ref] ?? 0) + ($matches?->count() ?? 0);
+                $details = trim((string) $item->txndetails);
+                $detailsMatches = $details !== '' ? $documentsByRef->get($details) : null;
 
-                continue;
+                if ($detailsMatches !== null && $detailsMatches->count() === 1) {
+                    $ref = $details;
+                    $matches = $detailsMatches;
+                } else {
+                    $ambiguousRefs[$ref] = ($ambiguousRefs[$ref] ?? 0) + ($matches?->count() ?? 0);
+
+                    continue;
+                }
             }
 
             $documentId = $invoiceLocalIdByLegacyUid[$matches->first()->uid] ?? null;
