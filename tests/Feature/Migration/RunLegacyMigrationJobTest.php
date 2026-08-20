@@ -109,11 +109,12 @@ test('reconciliation runs automatically when a run includes both documents and p
         $table->decimal('paymt', 12, 2)->nullable();
         $table->decimal('osvalue', 12, 2)->nullable();
         $table->unsignedBigInteger('posttype')->nullable();
+        $table->string('txndate')->nullable();
     });
 
     // Legacy's own record of this receipt (uid 902) being applied in full to invoice 900001.
     DB::connection('legacy')->table('AccountBatchItems')->insert([
-        'bhead' => 1, 'bline' => 1, 'cshuid' => 902, 'txnabbr' => 'INV-', 'txnref' => '900001', 'paymt' => 100, 'posttype' => null,
+        'bhead' => 1, 'bline' => 1, 'cshuid' => 902, 'txnabbr' => 'INV-', 'txnref' => '900001', 'paymt' => 100, 'posttype' => null, 'txndate' => '2024-01-05',
     ]);
 
     foreach (['Bank Transfer', 'Cheque', 'Cash', 'Card'] as $name) {

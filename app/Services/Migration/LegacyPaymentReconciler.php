@@ -5,6 +5,7 @@ namespace App\Services\Migration;
 use App\Models\Document;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
+use App\Services\Migration\Support\LegacyDate;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -40,7 +41,7 @@ class LegacyPaymentReconciler
      * @return array{
      *     to_settle: Collection<int, array{document_id: int, doc_number: ?string, target_settled: float}>,
      *     to_unsettle: Collection<int, int>,
-     *     allocation_rows: array<int, array{payment_id: int, document_id: int, allocated_amount: float, created_at: Carbon, updated_at: Carbon}>,
+     *     allocation_rows: array<int, array{payment_id: int, document_id: int, allocated_amount: float, created_at: string|Carbon, updated_at: string|Carbon}>,
      *     ambiguous_refs: array<string, int>,
      *     unallocated_payments: array{count: int, sample: array<int, array{legacy_uid: int, reference: ?string, amount: float}>},
      *     partially_allocated_payments: array{count: int, sample: array<int, array{legacy_uid: int, reference: ?string, amount: float, allocated: float}>},
@@ -67,13 +68,18 @@ class LegacyPaymentReconciler
         DB::connection('legacy')->table('AccountBatchItems')
             ->whereNotNull('cshuid')
             ->where('cshuid', '!=', 0)
-            ->select(['cshuid', 'txnabbr', 'txnref', 'paymt', 'posttype'])
+            ->select(['cshuid', 'txnabbr', 'txnref', 'paymt', 'posttype', 'txndate'])
             ->orderBy('cshuid')
             ->each(function ($row) use (
                 &$allocationRows, &$allocatedByPaymentLegacyUid, &$allocatedByDocumentId, &$orphanedCshuids,
                 $paymentIdByLegacyUid, $documentIdByRef, $entryvalueByPosttype,
             ) {
-                if (trim((string) $row->txnabbr) !== 'INV-') {
+                // CRN- rows are credit-note postings (a different reconciler's concern —
+                // see LegacyCreditNoteReconciler); every other tag (INV-, and payment-method
+                // tags like CSH-/CHQ- that never carry a real invoice ref) is let through,
+                // since txnref resolution below is what actually decides if a row applies
+                // to a migrated invoice — excluding by tag was stricter than necessary.
+                if (trim((string) $row->txnabbr) === 'CRN-') {
                     return;
                 }
 
@@ -111,12 +117,14 @@ class LegacyPaymentReconciler
                 if (isset($allocationRows[$key])) {
                     $allocationRows[$key]['allocated_amount'] = round($allocationRows[$key]['allocated_amount'] + $amount, 2);
                 } else {
+                    $postedAt = LegacyDate::parse($row->txndate) ?? now();
+
                     $allocationRows[$key] = [
                         'payment_id' => $paymentId,
                         'document_id' => $documentId,
                         'allocated_amount' => $amount,
-                        'created_at' => now(),
-                        'updated_at' => now(),
+                        'created_at' => $postedAt,
+                        'updated_at' => $postedAt,
                     ];
                 }
 

@@ -145,6 +145,7 @@ function createLegacyTables(array $tables): void
                 $table->decimal('paymt', 12, 2)->nullable();
                 $table->decimal('osvalue', 12, 2)->nullable();
                 $table->unsignedBigInteger('posttype')->nullable();
+                $table->string('txndate')->nullable();
             });
         },
     ];

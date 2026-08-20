@@ -72,7 +72,10 @@ class LegacyWriteOffReconciler
         $resolvedLegacyUids = [];
 
         foreach ($batchItems as $item) {
-            if (trim((string) $item->txnabbr) !== 'INV-') {
+            // CRN- rows are credit-note postings, not write-offs applying to an invoice;
+            // every other tag is let through since txnref resolution below is what
+            // actually decides if a row applies to a migrated invoice.
+            if (trim((string) $item->txnabbr) === 'CRN-') {
                 continue;
             }
 
@@ -135,8 +138,8 @@ class LegacyWriteOffReconciler
                     'reason' => 'Migrated from legacy — no reason was recorded there.',
                     'written_off_at' => $writtenOffAt,
                     'written_off_by' => $this->createdBy,
-                    'created_at' => now(),
-                    'updated_at' => now(),
+                    'created_at' => $writtenOffAt,
+                    'updated_at' => $writtenOffAt,
                 ];
             }
 

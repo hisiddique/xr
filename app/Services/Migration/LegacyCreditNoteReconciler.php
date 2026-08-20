@@ -51,7 +51,7 @@ class LegacyCreditNoteReconciler
         $creditNotes = Document::query()
             ->creditNotes()
             ->whereNotNull('legacy_uid')
-            ->get(['id', 'legacy_uid', 'doc_number', 'total_value', 'credited_invoice_id']);
+            ->get(['id', 'legacy_uid', 'doc_number', 'total_value', 'credited_invoice_id', 'doc_date']);
 
         $legacyRowsByUid = DB::connection('legacy')->table('Documents')
             ->where('rtype', 'r')
@@ -142,12 +142,14 @@ class LegacyCreditNoteReconciler
             $creditedInvoiceUpdates[] = ['document_id' => $creditNote->id, 'invoice_id' => $invoiceId];
         }
 
+        $postedAt = $creditNote->doc_date ?? now();
+
         $allocationRows[] = [
             'credit_note_id' => $creditNote->id,
             'invoice_id' => $invoiceId,
             'amount' => (float) $creditNote->total_value,
-            'created_at' => now(),
-            'updated_at' => now(),
+            'created_at' => $postedAt,
+            'updated_at' => $postedAt,
         ];
 
         return null;
