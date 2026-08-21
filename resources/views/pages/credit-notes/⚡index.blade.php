@@ -1,6 +1,7 @@
 <?php
 
 use App\DocumentStatus;
+use App\Jobs\SendDocumentEmailJob;
 use App\Livewire\Concerns\WithSorting;
 use App\Models\Document;
 use App\Traits\WithPerPage;
@@ -178,6 +179,13 @@ new #[Title('Credit Notes')] class extends Component
             ->get();
     }
 
+    /**
+     * Selections at or above this size are dispatched to the queue instead
+     * of sent inline, since shared hosting's PHP execution-time limit makes
+     * a run of synchronous SMTP sends risky past a handful of documents.
+     */
+    private const BULK_EMAIL_QUEUE_THRESHOLD = 5;
+
     public function bulkEmail(DocumentEmailService $service): void
     {
         if (empty($this->selectedIds)) {
@@ -188,6 +196,35 @@ new #[Title('Credit Notes')] class extends Component
             ->with('customer')
             ->whereIn('id', $this->selectedIds)
             ->get();
+
+        $this->selectedIds = [];
+        Flux::modal('bulk-email-credit-notes')->close();
+
+        if ($creditNotes->count() >= self::BULK_EMAIL_QUEUE_THRESHOLD) {
+            $queued = 0;
+            $skipped = 0;
+
+            foreach ($creditNotes as $creditNote) {
+                $email = $creditNote->customer?->email_1;
+
+                if (! $email) {
+                    $skipped++;
+
+                    continue;
+                }
+
+                SendDocumentEmailJob::dispatch($creditNote->id, [$email]);
+                $queued++;
+            }
+
+            $message = $skipped > 0
+                ? __(':n email(s) queued to send, :s skipped (no customer email).', ['n' => $queued, 's' => $skipped])
+                : __(':n email(s) queued to send.', ['n' => $queued]);
+
+            Flux::toast(variant: $queued > 0 ? 'success' : 'warning', text: $message);
+
+            return;
+        }
 
         $sent = 0;
         $skipped = 0;
@@ -209,10 +246,6 @@ new #[Title('Credit Notes')] class extends Component
                 $failed++;
             }
         }
-
-        $this->selectedIds = [];
-
-        Flux::modal('bulk-email-credit-notes')->close();
 
         $message = match (true) {
             $sent > 0 && ($skipped > 0 || $failed > 0) => __(':n sent, :s skipped, :f failed.', ['n' => $sent, 's' => $skipped, 'f' => $failed]),

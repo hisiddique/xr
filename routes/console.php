@@ -20,3 +20,8 @@ Schedule::command('queue:work --queue=migrations --stop-when-empty --max-time=50
 Schedule::command('queue:work --queue=exports --stop-when-empty --max-time=50 --tries=1')
     ->everyMinute()
     ->withoutOverlapping(2100);
+
+// Requires `* * * * * php artisan schedule:run` in crontab (no persistent worker here).
+Schedule::command('queue:work --queue=emails --stop-when-empty --max-time=50 --tries=1')
+    ->everyMinute()
+    ->withoutOverlapping(300);
