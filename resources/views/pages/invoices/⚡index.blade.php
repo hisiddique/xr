@@ -217,7 +217,7 @@ new #[Title('Invoices')] class extends Component
             }
 
             try {
-                $service->send($invoice, $email);
+                $service->send($invoice, [$email]);
                 $sent++;
             } catch (Throwable) {
                 $failed++;

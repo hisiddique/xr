@@ -257,7 +257,7 @@ new #[Title('Delivery Notes')] class extends Component
             }
 
             try {
-                $service->send($note, $email);
+                $service->send($note, [$email]);
                 $sent++;
             } catch (Throwable) {
                 $failed++;

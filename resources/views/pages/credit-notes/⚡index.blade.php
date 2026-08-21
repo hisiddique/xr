@@ -203,7 +203,7 @@ new #[Title('Credit Notes')] class extends Component
             }
 
             try {
-                $service->send($creditNote, $email);
+                $service->send($creditNote, [$email]);
                 $sent++;
             } catch (Throwable) {
                 $failed++;
