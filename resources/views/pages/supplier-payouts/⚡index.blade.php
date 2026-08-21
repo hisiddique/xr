@@ -100,7 +100,7 @@ new #[Title('Supplier Payouts')] class extends Component {
             ->when($this->amountMin !== '', fn ($q) => $q->where('amount', '>=', $this->amountMin))
             ->when($this->amountMax !== '', fn ($q) => $q->where('amount', '<=', $this->amountMax))
             ->tap(fn ($q) => $this->applySort($q))
-            ->when($this->sortColumn === '', fn ($q) => $q->orderByDesc('payout_date')->orderByDesc('reference'))
+            ->when($this->sortColumn === '', fn ($q) => $q->orderByDesc('reference'))
             ->paginate($this->perPage);
     }
 }; ?>
