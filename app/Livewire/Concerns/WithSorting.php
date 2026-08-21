@@ -31,9 +31,9 @@ trait WithSorting
 
         if ($this->sortColumn !== $column) {
             $this->sortColumn = $column;
-            $this->sortDirection = 'asc';
-        } elseif ($this->sortDirection === 'asc') {
             $this->sortDirection = 'desc';
+        } elseif ($this->sortDirection === 'desc') {
+            $this->sortDirection = 'asc';
         } else {
             $this->sortColumn = '';
             $this->sortDirection = 'asc';
@@ -52,14 +52,26 @@ trait WithSorting
 
         $direction = $this->sortDirection === 'desc' ? 'desc' : 'asc';
         $custom = $this->applyCustomSort($query, $this->sortColumn, $direction);
-        if ($custom instanceof Builder) {
-            return $custom;
+        $query = $custom instanceof Builder ? $custom : $query->orderBy($this->sortColumn, $direction);
+
+        $secondary = $this->secondarySortColumn();
+        if ($secondary !== null && $secondary !== $this->sortColumn) {
+            $query->orderBy($secondary, $direction);
         }
 
-        return $query->orderBy($this->sortColumn, $direction);
+        return $query;
     }
 
     protected function applyCustomSort(Builder $query, string $column, string $direction): ?Builder
+    {
+        return null;
+    }
+
+    /**
+     * Tiebreaker column (e.g. doc_number, reference) applied after the
+     * user's chosen sort column so rows sharing a date/amount stay stable.
+     */
+    protected function secondarySortColumn(): ?string
     {
         return null;
     }

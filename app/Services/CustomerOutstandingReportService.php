@@ -85,7 +85,7 @@ class CustomerOutstandingReportService
                             ->where('doc_number', 'like', $like));
                 });
             })
-            ->with(['invoices' => fn ($q) => $this->applyOutstandingFilters($q, $filters)->with('writeOffs.writtenOffBy')->orderBy('doc_date')])
+            ->with(['invoices' => fn ($q) => $this->applyOutstandingFilters($q, $filters)->with('writeOffs.writtenOffBy')->orderByDesc('doc_date')->orderByDesc('doc_number')])
             ->orderBy('company_name');
     }
 
@@ -141,7 +141,8 @@ class CustomerOutstandingReportService
             $invoicesByCustomer = Document::invoices()
                 ->whereIn('customer_id', $customersChunk->pluck('id'))
                 ->tap(fn ($q) => $this->applyOutstandingFilters($q, $filters))
-                ->orderBy('doc_date')
+                ->orderByDesc('doc_date')
+                ->orderByDesc('doc_number')
                 ->get()
                 ->groupBy('customer_id');
 

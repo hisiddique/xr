@@ -1,3 +1,25 @@
+// Truncate number inputs to 2 decimal places on every keystroke. Registered
+// on the capture phase so it runs before Livewire's own wire:model listener
+// reads the (still untrimmed) value off the element.
+document.addEventListener('input', (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement) || el.type !== 'number') return;
+
+    const match = el.value.match(/^-?\d*\.?\d{0,2}/);
+    if (match && match[0] !== el.value && match[0] !== '' && match[0] !== '-') {
+        el.value = match[0];
+    }
+}, true);
+
+// Prevent the mouse wheel from silently changing a focused number input's
+// value while the page scrolls underneath it.
+document.addEventListener('wheel', (e) => {
+    const el = document.activeElement;
+    if (el instanceof HTMLInputElement && el.type === 'number' && el === e.target) {
+        el.blur();
+    }
+}, { passive: true });
+
 // Print a document PDF directly via a hidden iframe so the browser's print
 // dialog targets the generated PDF. The optional onDone callback fires once the
 // print dialog is dismissed, so callers can navigate away without racing it.

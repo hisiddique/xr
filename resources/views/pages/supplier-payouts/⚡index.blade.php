@@ -16,6 +16,11 @@ new #[Title('Supplier Payouts')] class extends Component {
 
     protected array $sortable = ['reference', 'payout_date', 'amount'];
 
+    protected function secondarySortColumn(): ?string
+    {
+        return 'reference';
+    }
+
     #[Url]
     public string $search = '';
 
