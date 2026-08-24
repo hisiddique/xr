@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\NormalizesUnitCase;
 use App\Livewire\Concerns\ValidatesDocumentItems;
 use App\Models\Document;
 use App\Models\LookupUnit;
@@ -9,7 +10,7 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('Edit Credit Note')] class extends Component {
-    use ValidatesDocumentItems;
+    use NormalizesUnitCase, ValidatesDocumentItems;
     public Document $document;
 
     public string $doc_date = '';
@@ -36,16 +37,16 @@ new #[Title('Edit Credit Note')] class extends Component {
         $this->vatRegistered = (bool) $this->document->customer->vat_registered;
         $this->vatRate = (float) \App\Models\Setting::get('vat_rate', 20);
         $this->creditBalance = \App\Models\Document::availableCreditForCustomer($this->document->customer_id);
+        $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
         $this->items = $this->document->items->map(fn ($item) => [
             'id' => $item->id,
             'details' => $item->details,
             'is_note' => (bool) $item->is_note,
             'quantity' => (string) $item->quantity,
             'price' => (string) $item->price,
-            'per' => $item->per ?? '',
+            'per' => $this->normalizeUnitCase($this->units, $item->per) ?? '',
             'discount_percent' => (float) ($item->discount_percent ?? 0),
         ])->toArray();
-        $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
         $this->users = \App\Models\User::orderBy('name')->get(['id', 'name', 'status'])->toArray();
     }
 

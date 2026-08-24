@@ -15,7 +15,6 @@ class SupplierInvoiceItem extends Model
         'legacy_uid',
         'supplier_invoice_id',
         'product_code',
-        'invoice_no',
         'quantity',
         'unit_amount',
         'vat_applicable',

@@ -2,6 +2,7 @@
 
 use App\DocumentStatus;
 use App\DocumentType;
+use App\Livewire\Concerns\NormalizesUnitCase;
 use App\Livewire\Concerns\ValidatesDocumentItems;
 use App\Models\Customer;
 use App\Models\Document;
@@ -15,7 +16,7 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('New Credit Note')] class extends Component {
-    use ValidatesDocumentItems;
+    use NormalizesUnitCase, ValidatesDocumentItems;
     public ?int $customer_id = null;
     public string $customerName = '';
     public ?int $assigned_to = null;
@@ -78,7 +79,7 @@ new #[Title('New Credit Note')] class extends Component {
                 'is_note'          => false,
                 'quantity'         => (string) $item->quantity,
                 'price'            => (string) $item->price,
-                'per'              => $item->per ?? '',
+                'per'              => $this->normalizeUnitCase($this->units, $item->per) ?? '',
                 'discount_percent' => null,
             ])
             ->values()
@@ -109,8 +110,15 @@ new #[Title('New Credit Note')] class extends Component {
 
         return Document::invoices()
             ->where('customer_id', $this->customer_id)
-            ->orderByDesc('doc_date')
-            ->get(['id', 'doc_number'])
+            ->withSum('paymentAllocations', 'allocated_amount')
+            ->withSum('creditAllocationsReceived', 'amount')
+            ->get(['id', 'doc_number', 'total_value', 'doc_date'])
+            ->filter(fn ($inv) => (float) $inv->total_value
+                - (float) ($inv->payment_allocations_sum_allocated_amount ?? 0)
+                - (float) ($inv->credit_allocations_received_sum_amount ?? 0) > 0.001)
+            ->sortByDesc('doc_date')
+            ->values()
+            ->map(fn ($inv) => ['id' => $inv->id, 'doc_number' => $inv->doc_number])
             ->toArray();
     }
 

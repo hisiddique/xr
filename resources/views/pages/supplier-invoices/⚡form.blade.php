@@ -22,6 +22,7 @@ new #[Title('Supplier Invoice')] class extends Component {
 
     public ?int $supplier_id = null;
     public string $supplierName = '';
+    public string $supplier_ref_invoice_no = '';
     public string $invoice_date = '';
     public string $notes = '';
     public bool $addOverheadExpense = false;
@@ -43,6 +44,7 @@ new #[Title('Supplier Invoice')] class extends Component {
             $this->supplierInvoice->load(['supplier', 'items', 'overhead']);
             $this->supplier_id = $this->supplierInvoice->supplier_id;
             $this->supplierName = $this->supplierInvoice->supplier->typeahead_label;
+            $this->supplier_ref_invoice_no = $this->supplierInvoice->supplier_ref_invoice_no ?? '';
             $this->invoice_date = $this->supplierInvoice->invoice_date->format('Y-m-d');
             $this->notes = $this->supplierInvoice->notes ?? '';
             $this->existingAttachments = $this->supplierInvoice->attachments ?? [];
@@ -61,7 +63,6 @@ new #[Title('Supplier Invoice')] class extends Component {
 
             $this->items = $this->supplierInvoice->items->map(fn ($item) => [
                 'product_code' => $item->product_code ?? '',
-                'invoice_no' => $item->invoice_no ?? '',
                 'quantity' => (float) $item->quantity,
                 'unit_amount' => (float) $item->unit_amount,
                 'vat_applicable' => (bool) $item->vat_applicable,
@@ -69,7 +70,7 @@ new #[Title('Supplier Invoice')] class extends Component {
             $this->selectedDebitNoteIds = $this->supplierInvoice->debitNotes()->pluck('supplier_debit_notes.id')->toArray();
         } else {
             $this->invoice_date = now()->format('Y-m-d');
-            $this->items = [['product_code' => '', 'invoice_no' => '', 'quantity' => 1, 'unit_amount' => '', 'vat_applicable' => true]];
+            $this->items = [['product_code' => '', 'quantity' => 1, 'unit_amount' => '', 'vat_applicable' => true]];
         }
     }
 
@@ -168,6 +169,7 @@ new #[Title('Supplier Invoice')] class extends Component {
     {
         $this->validate([
             'supplier_id' => 'required|integer|exists:suppliers,id',
+            'supplier_ref_invoice_no' => 'nullable|string|max:100',
             'invoice_date' => 'required|date',
             'notes' => 'nullable|string|max:5000',
             'overhead_category_id' => [Rule::requiredIf(fn () => $this->addOverheadExpense), 'nullable', 'integer', 'exists:expense_categories,id'],
@@ -178,6 +180,7 @@ new #[Title('Supplier Invoice')] class extends Component {
 
         $data = [
             'supplier_id' => $this->supplier_id,
+            'supplier_ref_invoice_no' => $this->supplier_ref_invoice_no ?: null,
             'invoice_date' => $this->invoice_date,
             'notes' => $this->notes ?: null,
             'status' => 'posted',
@@ -198,7 +201,6 @@ new #[Title('Supplier Invoice')] class extends Component {
             $unit = (float) ($row['unit_amount'] ?? 0);
             $invoice->items()->create([
                 'product_code' => null,
-                'invoice_no' => ($row['invoice_no'] ?? null) ?: null,
                 'quantity' => $qty,
                 'unit_amount' => $unit,
                 'vat_applicable' => (bool) ($row['vat_applicable'] ?? false),
@@ -424,6 +426,9 @@ new #[Title('Supplier Invoice')] class extends Component {
 
                     <flux:input wire:model="invoice_date" type="date" :label="__('Invoice Date')" required />
 
+                    <flux:input wire:model="supplier_ref_invoice_no" :label="__('Supplier Invoice Number')" />
+                    @error('supplier_ref_invoice_no') <flux:error>{{ $message }}</flux:error> @enderror
+
                     @if($this->supplierCategory)
                         <flux:input
                             :value="$this->supplierCategory->label()"
@@ -536,10 +541,9 @@ new #[Title('Supplier Invoice')] class extends Component {
                         <table class="w-full text-sm">
                             <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                                 <tr>
-                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Supplier Invoice Number</th>
-                                    <th class="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Unit Net (£)</th>
-                                    <th class="w-24 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT</th>
-                                    <th class="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Line Gross (£)</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Unit Net (£)</th>
+                                    <th class="w-48 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT</th>
+                                    <th class="w-48 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Line Gross (£)</th>
                                     <th class="w-10 px-4 py-3"></th>
                                 </tr>
                             </thead>
@@ -548,27 +552,19 @@ new #[Title('Supplier Invoice')] class extends Component {
                                     <tr :data-row-idx="i">
                                         <td class="px-4 py-2.5">
                                             <input
-                                                type="text"
-                                                x-model="row.invoice_no"
-                                                data-row-details
-                                                placeholder="Invoice #"
-                                                class="w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
-                                            />
-                                        </td>
-                                        <td class="px-4 py-2.5 text-right">
-                                            <input
                                                 type="number"
                                                 x-model.number="row.unit_amount"
+                                                data-row-details
                                                 step="0.01"
                                                 min="0"
-                                                class="w-28 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-right font-mono text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                                class="w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 font-mono text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                             />
                                         </td>
                                         <td class="px-4 py-2.5">
                                             <select
                                                 x-model.boolean="row.vat_applicable"
                                                 x-on:focus="$el.showPicker?.()"
-                                                class="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                                class="w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                             >
                                                 <option :value="true">Yes (20%)</option>
                                                 <option :value="false">No</option>

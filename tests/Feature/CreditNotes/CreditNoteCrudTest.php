@@ -5,6 +5,10 @@ use App\DocumentType;
 use App\Models\Customer;
 use App\Models\Document;
 use App\Models\DocumentItem;
+use App\Models\LookupPaymentMethod;
+use App\Models\LookupUnit;
+use App\Models\Payment;
+use App\Models\PaymentAllocation;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\DocumentNumberGenerator;
@@ -115,6 +119,61 @@ test('credit note can be edited and notes + item changes are persisted', functio
     expect($cn->notes)->toBe('Defective goods returned')
         ->and($cn->items->count())->toBe(1)
         ->and($cn->items->first()->details)->toBe('New item');
+});
+
+test('against invoice select only offers outstanding invoices', function () {
+    $user = User::factory()->admin()->create(['email_verified_at' => now()]);
+    $customer = Customer::factory()->create(['trade_discount' => 0]);
+
+    $outstandingInvoice = Document::factory()->invoice()->for($customer)->create(['total_value' => 100]);
+    $paidInvoice = Document::factory()->invoice()->for($customer)->create(['total_value' => 100]);
+
+    $paymentMethod = LookupPaymentMethod::factory()->create();
+    $payment = Payment::factory()->create([
+        'customer_id' => $customer->id,
+        'payment_method_id' => $paymentMethod->id,
+        'amount' => 100,
+    ]);
+    PaymentAllocation::create([
+        'payment_id' => $payment->id,
+        'document_id' => $paidInvoice->id,
+        'allocated_amount' => 100,
+    ]);
+
+    $component = Livewire::actingAs($user)
+        ->test('pages::credit-notes.create')
+        ->set('customer_id', $customer->id);
+
+    $ids = collect($component->get('customerInvoices'))->pluck('id');
+
+    expect($ids)->toContain($outstandingInvoice->id)
+        ->and($ids)->not->toContain($paidInvoice->id);
+});
+
+test('invoice item suggestions normalize unit casing against the lookup unit list', function () {
+    $user = User::factory()->admin()->create(['email_verified_at' => now()]);
+    $customer = Customer::factory()->create(['trade_discount' => 0]);
+
+    LookupUnit::factory()->create(['name' => 'each']);
+
+    $invoice = Document::factory()->invoice()->for($customer)->create();
+    DocumentItem::factory()->create([
+        'document_id' => $invoice->id,
+        'is_note' => false,
+        'quantity' => 2,
+        'price' => 50,
+        'per' => 'Each',
+        'line_value' => 100,
+    ]);
+
+    $component = Livewire::actingAs($user)
+        ->test('pages::credit-notes.create')
+        ->set('customer_id', $customer->id)
+        ->set('credited_invoice_id', $invoice->id);
+
+    $suggestions = $component->get('invoiceItemSuggestions');
+
+    expect($suggestions[0]['per'])->toBe('each');
 });
 
 test('credit note scope is isolated from invoices and delivery notes', function () {

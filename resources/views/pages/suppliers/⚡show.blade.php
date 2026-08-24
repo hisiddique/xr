@@ -48,6 +48,27 @@ new #[Title('Supplier Details')] class extends Component {
             ->paginate(10, pageName: 'pay_page');
     }
 
+    #[Computed]
+    public function balanceStats(): array
+    {
+        $invoices = $this->supplier->supplierInvoices()
+            ->with(['items', 'payoutAllocations', 'debitNotes'])
+            ->get();
+
+        $totalInvoiceAmount = (float) $invoices->sum(fn ($inv) => $inv->grossTotal);
+        $totalPaid = (float) $invoices->sum(fn ($inv) => (float) $inv->payoutAllocations->sum('allocated_amount'));
+        $outstandingAmount = (float) $invoices->sum(fn ($inv) => $inv->outstandingAmount);
+        $invoicesPaidCount = $invoices->filter(fn ($inv) => $inv->outstandingAmount <= 0.001)->count();
+
+        return [
+            'balance' => $outstandingAmount,
+            'invoices_paid' => $invoicesPaidCount,
+            'invoices_outstanding' => $invoices->count() - $invoicesPaidCount,
+            'total_invoice_amount' => $totalInvoiceAmount,
+            'total_invoice_amount_paid' => $totalPaid,
+        ];
+    }
+
     #[On('supplier-deleted')]
     public function onDeleted(): void
     {
@@ -181,6 +202,52 @@ new #[Title('Supplier Details')] class extends Component {
                 @endif
             </x-ui.section-card>
         </div>
+
+        {{-- Balance --}}
+        <x-ui.section-card title="Balance">
+            <div class="flex items-center justify-between gap-4 border-b border-zinc-100 pb-3 dark:border-white/[0.06]">
+                <dt class="flex items-center gap-1 text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                    Outstanding Balance
+                    <flux:tooltip content="Gross invoice amount minus payouts allocated and debit notes applied, summed across all invoices.">
+                        <flux:icon.information-circle class="size-3.5 text-zinc-400 dark:text-zinc-500" />
+                    </flux:tooltip>
+                </dt>
+                <dd class="text-lg font-bold {{ $this->balanceStats['balance'] > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400' }}">
+                    £{{ number_format($this->balanceStats['balance'], 2) }}
+                </dd>
+            </div>
+
+            <div class="mt-3 grid grid-cols-2 gap-3">
+                <div class="rounded-xl bg-emerald-50 p-3 dark:bg-emerald-500/10">
+                    <div class="flex items-center gap-1.5">
+                        <flux:icon.check-circle class="size-3.5 text-emerald-500 dark:text-emerald-400" />
+                        <p class="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Invoices Paid</p>
+                    </div>
+                    <p class="mt-1.5 text-lg font-bold text-emerald-700 dark:text-emerald-400">{{ $this->balanceStats['invoices_paid'] }}</p>
+                </div>
+                <div class="rounded-xl bg-amber-50 p-3 dark:bg-amber-500/10">
+                    <div class="flex items-center gap-1.5">
+                        <flux:icon.clock class="size-3.5 text-amber-500 dark:text-amber-400" />
+                        <p class="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">Outstanding</p>
+                    </div>
+                    <p class="mt-1.5 text-lg font-bold text-amber-700 dark:text-amber-400">{{ $this->balanceStats['invoices_outstanding'] }}</p>
+                </div>
+                <div class="rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800/60">
+                    <div class="flex items-center gap-1.5">
+                        <flux:icon.receipt-percent class="size-3.5 text-zinc-400 dark:text-zinc-500" />
+                        <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Total Invoiced</p>
+                    </div>
+                    <p class="mt-1.5 text-lg font-bold text-zinc-900 dark:text-white">£{{ number_format($this->balanceStats['total_invoice_amount'], 2) }}</p>
+                </div>
+                <div class="rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800/60">
+                    <div class="flex items-center gap-1.5">
+                        <flux:icon.banknotes class="size-3.5 text-zinc-400 dark:text-zinc-500" />
+                        <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Amount Paid</p>
+                    </div>
+                    <p class="mt-1.5 text-lg font-bold text-zinc-900 dark:text-white">£{{ number_format($this->balanceStats['total_invoice_amount_paid'], 2) }}</p>
+                </div>
+            </div>
+        </x-ui.section-card>
     </div>
 
     {{-- Tabs --}}
@@ -233,7 +300,7 @@ new #[Title('Supplier Details')] class extends Component {
                             <tr class="border-b border-zinc-100 dark:border-white/[0.06]">
                                 <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Invoice No</th>
                                 <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Date</th>
-                                <th class="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Gross (£)</th>
+                                <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Gross (£)</th>
                                 <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Status</th>
                                 <th class="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Files</th>
                             </tr>
@@ -247,7 +314,7 @@ new #[Title('Supplier Details')] class extends Component {
                                         </a>
                                     </td>
                                     <td class="py-2.5 pr-4 text-zinc-600 dark:text-zinc-400">{{ $inv->invoice_date->format('d M Y') }}</td>
-                                    <td class="py-2.5 pr-4 text-right font-mono text-zinc-900 dark:text-white">£{{ number_format($inv->grossTotal, 2) }}</td>
+                                    <td class="py-2.5 pr-4 font-mono text-zinc-900 dark:text-white">£{{ number_format($inv->grossTotal, 2) }}</td>
                                     <td class="py-2.5 pr-4">
                                         <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $inv->status->ringColor() }}">
                                             {{ $inv->status->label() }}

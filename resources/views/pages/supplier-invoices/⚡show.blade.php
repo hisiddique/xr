@@ -93,6 +93,10 @@ new #[Title('Supplier Invoice')] class extends Component {
                     <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Invoice No</dt>
                     <dd class="text-sm font-mono text-zinc-900 dark:text-white text-right">{{ $supplierInvoice->supplier_invoice_no }}</dd>
                 </div>
+                <div class="flex justify-between gap-4 rounded-lg bg-yellow-100 px-2 py-1 -mx-2 dark:bg-yellow-500/20">
+                    <dt class="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Supplier Invoice Number</dt>
+                    <dd class="text-sm font-mono text-zinc-900 dark:text-white text-right">{{ $supplierInvoice->supplier_ref_invoice_no ?? '—' }}</dd>
+                </div>
                 <div class="flex justify-between gap-4">
                     <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Date</dt>
                     <dd class="text-sm text-zinc-900 dark:text-white text-right">{{ $supplierInvoice->invoice_date->format('d M Y') }}</dd>
@@ -141,9 +145,8 @@ new #[Title('Supplier Invoice')] class extends Component {
             <table class="w-full text-sm">
                 <thead>
                     <tr class="border-b border-zinc-100 dark:border-white/10">
-                        <th class="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Product Code / Ledger Narrative</th>
+                        <th class="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Unit Net (£)</th>
                         <th class="px-4 sm:px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">QTY</th>
-                        <th class="px-4 sm:px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Unit Net (£)</th>
                         <th class="px-4 sm:px-6 py-3 text-center text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">VAT</th>
                         <th class="px-4 sm:px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Line Gross (£)</th>
                     </tr>
@@ -151,9 +154,8 @@ new #[Title('Supplier Invoice')] class extends Component {
                 <tbody class="divide-y divide-zinc-50 dark:divide-white/5">
                     @forelse($supplierInvoice->items as $item)
                         <tr>
-                            <td class="px-4 sm:px-6 py-3 font-mono text-zinc-900 dark:text-white">{{ $item->product_code ?: '—' }}</td>
+                            <td class="px-4 sm:px-6 py-3 text-zinc-700 dark:text-zinc-300">{{ number_format((float) $item->unit_amount, 2) }}</td>
                             <td class="px-4 sm:px-6 py-3 text-right text-zinc-700 dark:text-zinc-300">{{ number_format((float) $item->quantity, 2) }}</td>
-                            <td class="px-4 sm:px-6 py-3 text-right text-zinc-700 dark:text-zinc-300">{{ number_format((float) $item->unit_amount, 2) }}</td>
                             <td class="px-4 sm:px-6 py-3 text-center">
                                 @if($item->vat_applicable)
                                     <span class="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-400">Yes (20%)</span>
@@ -165,7 +167,7 @@ new #[Title('Supplier Invoice')] class extends Component {
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="px-4 sm:px-6 py-6 text-center text-sm text-zinc-400">No line items.</td>
+                            <td colspan="4" class="px-4 sm:px-6 py-6 text-center text-sm text-zinc-400">No line items.</td>
                         </tr>
                     @endforelse
                 </tbody>

@@ -121,18 +121,19 @@ test('zero gross total invoice does not create an overhead even when checkbox is
         ->and(Overhead::count())->toBe(0);
 });
 
-test('invoice_no is saved per line item and displayed separately from the auto-generated supplier_invoice_no', function () {
+test('supplier_ref_invoice_no is saved on the header and displayed separately from the auto-generated supplier_invoice_no', function () {
     $supplier = Supplier::factory()->create();
 
     Livewire::test('pages::supplier-invoices.form')
         ->set('supplier_id', $supplier->id)
         ->set('invoice_date', '2026-01-15')
-        ->set('items', [['product_code' => '', 'invoice_no' => 'SUP-REF-999', 'quantity' => 1, 'unit_amount' => 50, 'vat_applicable' => false]])
+        ->set('supplier_ref_invoice_no', 'SUP-REF-999')
+        ->set('items', [['product_code' => '', 'quantity' => 1, 'unit_amount' => 50, 'vat_applicable' => false]])
         ->call('save');
 
     $invoice = SupplierInvoice::where('supplier_id', $supplier->id)->sole();
 
-    expect($invoice->items->first()->invoice_no)->toBe('SUP-REF-999')
+    expect($invoice->supplier_ref_invoice_no)->toBe('SUP-REF-999')
         ->and($invoice->supplier_invoice_no)->toBe('SUPINV-0001');
 });
 
@@ -142,7 +143,7 @@ test('product_code is forced null and quantity defaults to 1 on save since there
     Livewire::test('pages::supplier-invoices.form')
         ->set('supplier_id', $supplier->id)
         ->set('invoice_date', '2026-01-15')
-        ->set('items', [['product_code' => 'IGNORED-CODE', 'invoice_no' => 'INV-1', 'quantity' => 1, 'unit_amount' => 50, 'vat_applicable' => false]])
+        ->set('items', [['product_code' => 'IGNORED-CODE', 'quantity' => 1, 'unit_amount' => 50, 'vat_applicable' => false]])
         ->call('save');
 
     $invoice = SupplierInvoice::where('supplier_id', $supplier->id)->sole();

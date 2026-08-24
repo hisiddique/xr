@@ -18,6 +18,7 @@ class SupplierInvoice extends Model
     protected $fillable = [
         'legacy_uid',
         'supplier_invoice_no',
+        'supplier_ref_invoice_no',
         'overhead_id',
         'supplier_id',
         'invoice_date',
