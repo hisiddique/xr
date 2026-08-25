@@ -5,6 +5,7 @@ use App\Models\ExportJob;
 use App\Traits\WithPerPage;
 use Flux\Flux;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -192,7 +193,7 @@ new #[Title('Exports')] class extends Component
                                         <flux:checkbox wire:model.live="selected" value="{{ $export->id }}" />
                                     @endif
                                 </td>
-                                <td class="px-4 py-2 text-zinc-700 dark:text-zinc-300">Customer Outstanding Payments</td>
+                                <td class="px-4 py-2 text-zinc-700 dark:text-zinc-300">{{ Str::headline($export->type) }}</td>
                                 <td class="px-4 py-2 uppercase text-zinc-500 dark:text-zinc-400">{{ $export->format }}</td>
                                 <td class="px-4 py-2">
                                     <flux:badge
