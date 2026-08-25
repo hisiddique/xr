@@ -76,6 +76,10 @@ new #[Title('Payment')] class extends Component {
 
             if ($this->payment->source_type === PaymentSourceType::CreditNote) {
                 $this->selectedCreditNoteIds = $this->payment->creditAllocations()->pluck('credit_note_id')->unique()->values()->toArray();
+                // Notes may hold more than this payment currently consumes — seed the
+                // ceiling (ex. this payment's own claim), not the consumed figure, so
+                // the allocation table lets the user allocate up to what's really there.
+                $this->amount = number_format($this->selectedCreditNoteTotal, 2, '.', '');
             }
 
             if ($this->payment->source_type === PaymentSourceType::OverPayment) {
@@ -448,7 +452,7 @@ new #[Title('Payment')] class extends Component {
                         'created_by' => auth()->id(),
                     ]);
 
-                    $this->fundPayment($payment);
+                    $this->fundPayment($payment, $rows);
 
                     [$paymentAllocations, $scope] = $this->deriveAllocations($rows);
                     app(PaymentAllocator::class)->saveAllocations($payment, $paymentAllocations, $scope);
@@ -499,7 +503,7 @@ new #[Title('Payment')] class extends Component {
             DB::transaction(function () use ($updateData, $rows) {
                 $this->payment->update($updateData);
 
-                $this->fundPayment($this->payment);
+                $this->fundPayment($this->payment, $rows);
 
                 if (! empty($rows)) {
                     [$paymentAllocations, $scope] = $this->deriveAllocations($rows);
@@ -524,7 +528,7 @@ new #[Title('Payment')] class extends Component {
      * left over from a since-changed source type (e.g. a payment switched
      * from Over Payment back to Cash must release its old draws).
      */
-    private function fundPayment(Payment $payment): void
+    private function fundPayment(Payment $payment, array $rows = []): void
     {
         if ($this->source_type !== 'credit_note') {
             $payment->creditAllocations()->forceDelete();
@@ -534,7 +538,13 @@ new #[Title('Payment')] class extends Component {
         }
 
         if ($this->source_type === 'credit_note') {
-            app(PaymentAllocator::class)->fundFromCreditNotes($payment, $this->selectedCreditNoteIds);
+            [$paymentAllocations] = $this->deriveAllocations($rows);
+            // Never shrink below what a later over-payment has already drawn from
+            // this payment — only the amount beyond that is free to tighten down
+            // to the invoices actually allocated.
+            $committedDraws = $payment->exists ? (float) $payment->drawsMade()->sum('amount') : 0.0;
+            $amountNeeded = round(array_sum($paymentAllocations) + $committedDraws, 2);
+            app(PaymentAllocator::class)->fundFromCreditNotes($payment, $this->selectedCreditNoteIds, $amountNeeded);
         } elseif ($this->source_type === 'over_payment') {
             app(PaymentAllocator::class)->fundFromOverPayments(
                 $payment,
@@ -916,7 +926,7 @@ new #[Title('Payment')] class extends Component {
                                                             x-model="row.amount"
                                                             data-payment-alloc-input
                                                             @blur="row.amount = Math.min(parseFloat(row.amount)||0, row.max_allocatable)"
-                                                            @focus="focusRow(row)"
+                                                            @focus="focusRow(row); $nextTick(() => $el.select())"
                                                             class="w-28 rounded-lg border border-zinc-300 px-2 py-1 text-right font-mono text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
                                                         />
                                                     </td>

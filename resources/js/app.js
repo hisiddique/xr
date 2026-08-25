@@ -939,6 +939,82 @@ document.addEventListener('alpine:init', () => {
     // ─── Legacy tableNav alias (backward compatibility) ─────────────
     window.Alpine.data('tableNav', () => Alpine.data('zoneNav')('table'));
 
+    // ─── Ledger Table (Transaction History row expand/keyboard nav) ──
+    // Self-contained: does not use Alpine.store('hotkeys') or zoneNav.
+    window.Alpine.data('ledgerTable', () => ({
+        selectedIndex: -1,
+        openKey: null,
+        openLinkedRef: null,
+
+        get rows() {
+            return Array.from(this.$el.querySelectorAll('tr[data-row-index]'));
+        },
+
+        onKeydown(e) {
+            const key = e.key;
+            if (key === 'ArrowDown') {
+                e.preventDefault();
+                this.move(1);
+            } else if (key === 'ArrowUp') {
+                e.preventDefault();
+                this.move(-1);
+            } else if (key === 'Enter') {
+                e.preventDefault();
+                this.toggleSelected();
+            } else if (key === 'Escape') {
+                e.preventDefault();
+                this.handleEscape();
+            }
+        },
+
+        move(delta) {
+            const rows = this.rows;
+            if (rows.length === 0) return;
+            let next = this.selectedIndex + delta;
+            if (next < 0) next = 0;
+            if (next >= rows.length) next = rows.length - 1;
+            this.selectedIndex = next;
+            const row = rows[next];
+            if (row) {
+                row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+        },
+
+        toggleSelected() {
+            const rows = this.rows;
+            const row = rows[this.selectedIndex];
+            if (!row) return;
+            this.toggle(this.selectedIndex, row.dataset.rowKey);
+        },
+
+        selectRow(index, key) {
+            this.selectedIndex = index;
+            this.toggle(index, key, { forceSelect: true });
+        },
+
+        toggle(index, key, { forceSelect = false } = {}) {
+            if (!forceSelect) {
+                this.selectedIndex = index;
+            }
+            if (this.openKey === key) {
+                this.openKey = null;
+            } else {
+                this.openKey = key;
+            }
+            this.openLinkedRef = null;
+        },
+
+        handleEscape() {
+            if (this.openLinkedRef !== null) {
+                this.openLinkedRef = null;
+            } else if (this.openKey !== null) {
+                this.openKey = null;
+            } else {
+                this.selectedIndex = -1;
+            }
+        },
+    }));
+
     // ─── Line-Item Form Component (DN/Invoice create/edit) ─────────
     window.Alpine.data('lineItemForm', (initialRows = [], units = [], fallback = '/', defaults = {}) => ({
         rows: initialRows,
@@ -1933,15 +2009,19 @@ document.addEventListener('alpine:init', () => {
         },
         handleKey(e) {
             if (!e.target.hasAttribute('data-payment-alloc-input')) return;
-            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter') return;
             e.preventDefault();
+            // formNav's own Enter handler skips select() on type=number inputs
+            // globally (elsewhere intentional); stop it reaching this input so
+            // allocation rows always highlight their value on Enter too.
+            e.stopPropagation();
             const inputs = this._allocInputs();
             const idx = inputs.indexOf(e.target);
-            const next = inputs[idx + (e.key === 'ArrowDown' ? 1 : -1)];
-            if (next) {
-                next.focus();
-                if (typeof next.select === 'function') next.select();
-            }
+            const next = inputs[idx + (e.key === 'ArrowUp' ? -1 : 1)];
+            // .focus() alone is enough — the input's own @focus handler runs
+            // focusRow() + a nextTick-deferred select(), so calling select()
+            // here too would race Alpine's reactive value write and lose.
+            if (next) next.focus();
         },
     }));
 
