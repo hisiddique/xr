@@ -6,6 +6,7 @@ use App\Http\Controllers\CustomerStatementController;
 use App\Http\Controllers\DocumentPdfController;
 use App\Http\Controllers\ExportDownloadController;
 use App\Http\Controllers\SupplierInvoiceAttachmentController;
+use App\Http\Controllers\SupplierPurchasingExportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -77,6 +78,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Reports
     Route::livewire('reports/overheads', 'pages::reports.overheads')->name('reports.overheads');
     Route::livewire('reports/supplier-purchasing', 'pages::reports.supplier-purchasing')->name('reports.supplier-purchasing');
+    Route::get('reports/supplier-purchasing/export/{format}', [SupplierPurchasingExportController::class, 'export'])
+        ->where('format', 'csv|xlsx|pdf')
+        ->name('reports.supplier-purchasing.export');
     Route::livewire('reports/customer-outstanding-payments', 'pages::reports.customer-outstanding-payments')->name('reports.customer-outstanding-payments');
     Route::get('reports/customer-outstanding-payments/export/{format}', [CustomerOutstandingExportController::class, 'export'])
         ->where('format', 'csv|xlsx|pdf')
