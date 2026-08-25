@@ -36,7 +36,7 @@
                 <th class="amount">Net</th>
                 <th class="amount">VAT</th>
                 <th class="amount">Gross</th>
-                <th>Paid Status</th>
+                <th>Status</th>
             </tr>
         </thead>
         <tbody>

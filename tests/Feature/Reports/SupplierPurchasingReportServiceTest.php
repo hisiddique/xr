@@ -255,7 +255,7 @@ test('writeCsvToPath and writeXlsxToPath produce rows aligned under the 9 export
         $records = Reader::createFromPath($csvPath)->getRecords();
         $rows = iterator_to_array($records, false);
 
-        expect($rows[0])->toBe(['Supplier', 'Reference', 'Date', 'Supplier Invoice No', 'Invoice', 'Net', 'VAT', 'Gross', 'Paid Status']);
+        expect($rows[0])->toBe(['Supplier', 'Reference', 'Date', 'Supplier Invoice No', 'Invoice', 'Net', 'VAT', 'Gross', 'Status']);
         expect(count($rows[1]))->toBe(9);
         expect($rows[1][0])->toBe('Aligned Co');
         expect($rows[1][1])->toBe('REF-1');
@@ -277,7 +277,7 @@ test('writeCsvToPath and writeXlsxToPath produce rows aligned under the 9 export
         }
         $reader->close();
 
-        expect($xlsxRows[0])->toBe(['Supplier', 'Reference', 'Date', 'Supplier Invoice No', 'Invoice', 'Net', 'VAT', 'Gross', 'Paid Status']);
+        expect($xlsxRows[0])->toBe(['Supplier', 'Reference', 'Date', 'Supplier Invoice No', 'Invoice', 'Net', 'VAT', 'Gross', 'Status']);
         expect(count($xlsxRows[1]))->toBe(9);
         expect($xlsxRows[1][0])->toBe('Aligned Co');
         expect($xlsxRows[1][3])->toBe($invoice->supplier_invoice_no);

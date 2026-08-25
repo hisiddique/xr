@@ -17,7 +17,7 @@ use Symfony\Component\HttpFoundation\Response;
 class SupplierPurchasingReportService
 {
     /** @var array<int, string> */
-    protected const EXPORT_HEADINGS = ['Supplier', 'Reference', 'Date', 'Supplier Invoice No', 'Invoice', 'Net', 'VAT', 'Gross', 'Paid Status'];
+    protected const EXPORT_HEADINGS = ['Supplier', 'Reference', 'Date', 'Supplier Invoice No', 'Invoice', 'Net', 'VAT', 'Gross', 'Status'];
 
     protected const EXPORT_CHUNK_SIZE = 200;
 

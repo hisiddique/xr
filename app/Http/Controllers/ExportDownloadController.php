@@ -15,7 +15,7 @@ class ExportDownloadController extends Controller
 
         return Storage::disk('local')->download(
             $exportJob->download_path,
-            'customer-outstanding-payments.'.$exportJob->format,
+            basename($exportJob->download_path),
         );
     }
 }
