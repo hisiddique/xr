@@ -72,7 +72,7 @@ new #[Title('New Credit Note')] class extends Component {
         }
 
         return $invoice->items
-            ->filter(fn ($item) => ! $item->is_note)
+            ->filter(fn ($item) => ! $item->is_note && trim((string) $item->details) !== '')
             ->map(fn ($item) => [
                 'id'               => null,
                 'details'          => $item->details,
