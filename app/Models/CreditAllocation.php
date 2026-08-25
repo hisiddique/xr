@@ -19,11 +19,11 @@ class CreditAllocation extends Model
 
     public function creditNote(): BelongsTo
     {
-        return $this->belongsTo(Document::class, 'credit_note_id');
+        return $this->belongsTo(Document::class, 'credit_note_id')->withTrashed();
     }
 
     public function invoice(): BelongsTo
     {
-        return $this->belongsTo(Document::class, 'invoice_id');
+        return $this->belongsTo(Document::class, 'invoice_id')->withTrashed();
     }
 }

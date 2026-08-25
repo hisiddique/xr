@@ -3,6 +3,7 @@
 use App\Livewire\Concerns\WithSorting;
 use App\Models\Customer;
 use App\Models\Document;
+use App\Models\Payment;
 use App\Services\CreditTermDueDateCalculator;
 use App\Traits\WithPerPage;
 use Carbon\Carbon;
@@ -113,9 +114,27 @@ new #[Title('Customer Details')] class extends Component {
     }
 
     #[Computed]
+    public function ledgerPaymentsMap(): array
+    {
+        return $this->buildTransactionLedgerRows['payments'];
+    }
+
+    #[Computed]
+    public function ledgerCreditNotesMap(): array
+    {
+        return $this->buildTransactionLedgerRows['credit_notes'];
+    }
+
+    #[Computed]
+    public function ledgerInvoicesMap(): array
+    {
+        return $this->buildTransactionLedgerRows['invoices'];
+    }
+
+    #[Computed]
     public function transactionLedger(): LengthAwarePaginator
     {
-        $rows = $this->buildTransactionLedgerRows();
+        $rows = $this->buildTransactionLedgerRows['rows'];
 
         if ($this->ledgerSearch !== '') {
             $term = mb_strtolower($this->ledgerSearch);
@@ -164,17 +183,21 @@ new #[Title('Customer Details')] class extends Component {
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * @return array{rows: array<int, array<string, mixed>>, payments: array<int, array<string, mixed>>, credit_notes: array<int, array<string, mixed>>, invoices: array<int, array<string, mixed>>}
      */
-    protected function buildTransactionLedgerRows(): array
+    #[Computed]
+    public function buildTransactionLedgerRows(): array
     {
+        $rows = [];
+        $paymentDetailsByRef = [];
+        $creditNoteDetailsByRef = [];
+        $invoiceDetailsByRef = [];
+
         $invoices = $this->customer->invoices()
             ->with(['paymentAllocations.payment.paymentMethod', 'creditAllocationsReceived.creditNote'])
             ->withSum('paymentAllocations as allocated_total', 'allocated_amount')
             ->withSum('creditAllocationsReceived as credited_total', 'amount')
             ->get();
-
-        $rows = [];
 
         foreach ($invoices as $invoice) {
             $allocatedTotal = (float) ($invoice->allocated_total ?? 0);
@@ -197,34 +220,67 @@ new #[Title('Customer Details')] class extends Component {
                 $status = 'outstanding';
             }
 
-            $details = null;
+            $allocations = [];
 
-            if ($allocatedTotal + $creditedTotal > 0.005) {
-                $allocations = [];
+            foreach ($invoice->paymentAllocations as $paymentAllocation) {
+                $payment = $paymentAllocation->payment;
 
-                foreach ($invoice->paymentAllocations as $paymentAllocation) {
-                    $allocations[] = [
-                        'method' => $paymentAllocation->payment->paymentMethod?->name ?? 'Payment',
-                        'ref' => $paymentAllocation->payment->reference,
-                        'amount' => (float) $paymentAllocation->allocated_amount,
-                    ];
-                }
-
-                foreach ($invoice->creditAllocationsReceived as $creditAllocation) {
-                    $allocations[] = [
-                        'method' => 'Credit Note',
-                        'ref' => $creditAllocation->creditNote->doc_number,
-                        'amount' => (float) $creditAllocation->amount,
-                    ];
-                }
-
-                $details = [
-                    'allocations' => $allocations,
-                    'total' => (float) $invoice->total_value,
-                    'paid' => $allocatedTotal + $creditedTotal,
-                    'outstanding' => $balance,
+                $allocations[] = [
+                    'kind' => 'payment',
+                    'ref' => $payment->reference,
+                    'label' => $payment->paymentMethod?->name ?? 'Payment',
+                    'date' => $payment->payment_date,
+                    'amount' => (float) $paymentAllocation->allocated_amount,
+                    'route' => route('payments.show', $payment),
+                    'payment_id' => $payment->id,
+                    'credit_note_id' => null,
                 ];
             }
+
+            foreach ($invoice->creditAllocationsReceived as $creditAllocation) {
+                $creditNote = $creditAllocation->creditNote;
+
+                if ($creditNote === null) {
+                    continue;
+                }
+
+                $allocations[] = [
+                    'kind' => 'credit',
+                    'ref' => $creditNote->doc_number,
+                    'label' => 'Credit Note',
+                    'date' => $creditNote->doc_date,
+                    'amount' => (float) $creditAllocation->amount,
+                    'route' => route('credit-notes.show', $creditNote),
+                    'payment_id' => null,
+                    'credit_note_id' => $creditNote->id,
+                ];
+            }
+
+            usort($allocations, fn (array $a, array $b) => $b['date'] <=> $a['date']);
+
+            $paidDate = $balance <= 0.005 && $allocations !== []
+                ? collect($allocations)->pluck('date')->max()
+                : null;
+
+            $details = [
+                'kind' => 'invoice',
+                'total' => (float) $invoice->total_value,
+                'paid' => $allocatedTotal + $creditedTotal,
+                'outstanding' => $balance,
+                'due_date' => $dueDate,
+                'paid_date' => $paidDate,
+                'allocations' => $allocations,
+            ];
+
+            $invoiceDetailsByRef[$invoice->id] = [
+                'ref_no' => $invoice->doc_number,
+                'date' => $invoice->doc_date,
+                'order_ref' => $invoice->order_no,
+                'total' => (float) $invoice->total_value,
+                'outstanding' => $balance,
+                'status' => $status,
+                'due_date' => $dueDate,
+            ];
 
             $rows[] = [
                 'date' => $invoice->doc_date,
@@ -232,42 +288,190 @@ new #[Title('Customer Details')] class extends Component {
                 'ref_no' => $invoice->doc_number,
                 'order_ref' => $invoice->order_no,
                 'amount' => (float) $invoice->total_value,
+                'outstanding' => $balance,
                 'route' => route('invoices.show', $invoice),
                 'status' => $status,
                 'details' => $details,
             ];
         }
 
-        foreach ($this->customer->creditNotes()->get() as $creditNote) {
+        $creditNotes = $this->customer->creditNotes()
+            ->with(['assignee', 'creditedInvoice', 'creditAllocations.invoice'])
+            ->withSum('creditAllocations as applied_total', 'amount')
+            ->get();
+
+        foreach ($creditNotes as $creditNote) {
+            $total = (float) $creditNote->total_value;
+            $appliedTotal = (float) ($creditNote->applied_total ?? 0);
+            $unappliedBalance = $total - $appliedTotal;
+
+            if ($appliedTotal >= $total - 0.005) {
+                $status = 'applied';
+            } elseif ($appliedTotal <= 0.005) {
+                $status = 'unapplied';
+            } else {
+                $status = 'partial';
+            }
+
+            $appliedTo = [];
+
+            foreach ($creditNote->creditAllocations as $creditAllocation) {
+                $invoice = $creditAllocation->invoice;
+
+                if ($invoice === null) {
+                    continue;
+                }
+
+                $appliedTo[] = [
+                    'ref' => $invoice->doc_number,
+                    'route' => route('invoices.show', $invoice),
+                    'date' => $invoice->doc_date,
+                    'amount' => (float) $creditAllocation->amount,
+                    'invoice_id' => $invoice->id,
+                ];
+            }
+
+            $details = [
+                'kind' => 'credit_note',
+                'total' => $total,
+                'applied_total' => $appliedTotal,
+                'outstanding' => $unappliedBalance,
+                'raised_against' => $creditNote->creditedInvoice?->doc_number,
+                'raised_against_route' => $creditNote->creditedInvoice
+                    ? route('invoices.show', $creditNote->creditedInvoice)
+                    : null,
+                'raised_against_id' => $creditNote->creditedInvoice?->id,
+                'applied_to' => $appliedTo,
+            ];
+
+            $creditNoteDetailsByRef[$creditNote->id] = [
+                'ref_no' => $creditNote->doc_number,
+                'date' => $creditNote->doc_date,
+                'total' => $total,
+                'applied_total' => $appliedTotal,
+                'outstanding' => $unappliedBalance,
+                'status' => $status,
+            ];
+
             $rows[] = [
                 'date' => $creditNote->doc_date,
                 'type' => 'credit_note',
                 'ref_no' => $creditNote->doc_number,
                 'order_ref' => $creditNote->order_no,
-                'amount' => -(float) $creditNote->total_value,
+                'amount' => -$total,
+                'outstanding' => -$unappliedBalance,
                 'route' => route('credit-notes.show', $creditNote),
-                'status' => null,
-                'details' => null,
+                'status' => $status,
+                'details' => $details,
             ];
         }
 
-        foreach ($this->customer->payments()->with('paymentMethod')->get() as $payment) {
+        $payments = $this->customer->payments()
+            ->with(['paymentMethod', 'allocations.document'])
+            ->withSum('allocations as allocations_sum_allocated_amount', 'allocated_amount')
+            ->withSum('drawsMade as draws_made_sum_amount', 'amount')
+            ->get();
+
+        foreach ($payments as $payment) {
+            $details = $this->buildPaymentDetails($payment);
+            $paymentDetailsByRef[$payment->id] = $details;
+
+            $unallocated = $details['unallocated'];
+            $status = $details['status'];
+
             $rows[] = [
                 'date' => $payment->payment_date,
                 'type' => 'payment',
                 'ref_no' => $payment->reference,
                 'order_ref' => null,
                 'amount' => -(float) $payment->amount,
+                'outstanding' => -$unallocated,
                 'route' => route('payments.show', $payment),
-                'status' => null,
-                'details' => null,
+                'status' => $status,
+                'details' => $details,
                 'method_label' => $payment->paymentMethod?->name ?? 'Payment',
             ];
         }
 
+        $missingPaymentIds = [];
+
+        foreach ($rows as $row) {
+            if ($row['type'] !== 'invoice') {
+                continue;
+            }
+
+            foreach ($row['details']['allocations'] as $allocation) {
+                if ($allocation['kind'] !== 'payment' || $allocation['payment_id'] === null) {
+                    continue;
+                }
+
+                if (! isset($paymentDetailsByRef[$allocation['payment_id']])) {
+                    $missingPaymentIds[] = $allocation['payment_id'];
+                }
+            }
+        }
+
+        if ($missingPaymentIds !== []) {
+            $backfilledPayments = Payment::withTrashed()
+                ->with(['paymentMethod', 'allocations.document'])
+                ->withSum('allocations as allocations_sum_allocated_amount', 'allocated_amount')
+                ->withSum('drawsMade as draws_made_sum_amount', 'amount')
+                ->whereIn('id', array_unique($missingPaymentIds))
+                ->get();
+
+            foreach ($backfilledPayments as $payment) {
+                $paymentDetailsByRef[$payment->id] = $this->buildPaymentDetails($payment);
+            }
+        }
+
         usort($rows, fn (array $a, array $b) => $b['date'] <=> $a['date']);
 
-        return $rows;
+        return ['rows' => $rows, 'payments' => $paymentDetailsByRef, 'credit_notes' => $creditNoteDetailsByRef, 'invoices' => $invoiceDetailsByRef];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function buildPaymentDetails(Payment $payment): array
+    {
+        $allocatedSum = (float) ($payment->allocations_sum_allocated_amount ?? 0);
+        $drawsSum = (float) ($payment->draws_made_sum_amount ?? 0);
+        $unallocated = max(0, (float) $payment->amount - $allocatedSum - $drawsSum);
+
+        if ($unallocated <= 0.005 && $allocatedSum > 0.005) {
+            $status = 'applied';
+        } elseif ($unallocated <= 0.005) {
+            // Fully consumed by draws to other payments, not by invoice allocations.
+            $status = 'drawn';
+        } elseif ($unallocated >= (float) $payment->amount - 0.005) {
+            $status = 'unapplied';
+        } else {
+            $status = 'partial';
+        }
+
+        $allocations = [];
+
+        foreach ($payment->allocations as $allocation) {
+            $invoice = $allocation->document;
+
+            $allocations[] = [
+                'ref' => $invoice->doc_number,
+                'route' => route('invoices.show', $invoice),
+                'date' => $invoice->doc_date,
+                'amount' => (float) $allocation->allocated_amount,
+                'invoice_id' => $invoice->id,
+            ];
+        }
+
+        return [
+            'kind' => 'payment',
+            'method' => $payment->paymentMethod?->name ?? 'Payment',
+            'total' => (float) $payment->amount,
+            'allocated' => $allocatedSum,
+            'unallocated' => $unallocated,
+            'status' => $status,
+            'allocations' => $allocations,
+        ];
     }
 
     public function updatedActiveTab(): void
@@ -602,7 +806,12 @@ new #[Title('Customer Details')] class extends Component {
                     :description="$ledgerSearch !== '' ? 'Try adjusting your search.' : 'Invoices, credit notes, and payments for this customer will appear here.'"
                 />
             @else
-                <div class="overflow-x-auto">
+                <div
+                    x-data="ledgerTable()"
+                    x-on:keydown="onKeydown($event)"
+                    tabindex="0"
+                    class="overflow-x-auto rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30"
+                >
                     <table class="w-full text-sm">
                         <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                             <tr>
@@ -610,21 +819,53 @@ new #[Title('Customer Details')] class extends Component {
                                 <x-ui.sortable-header column="type" :state="$this->sortStateFor('type')">Type</x-ui.sortable-header>
                                 <x-ui.sortable-header column="ref_no" :state="$this->sortStateFor('ref_no')">Invoice / Ref No.</x-ui.sortable-header>
                                 <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Order Reference</th>
+                                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Status</th>
                                 <x-ui.sortable-header column="amount" align="right" :state="$this->sortStateFor('amount')">Amount (incl. VAT)</x-ui.sortable-header>
+                                <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Outstanding Amount</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                             @foreach($this->transactionLedger as $row)
                                 @php
+                                    $rowKey = $row['type'].':'.$row['ref_no'];
                                     $statusClasses = match ($row['status']) {
                                         'overdue' => 'text-rose-600 bg-rose-50 border-rose-200 dark:text-rose-400 dark:bg-rose-500/10 dark:border-rose-500/20',
                                         'overdue_partial' => 'text-orange-600 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-500/10 dark:border-orange-500/20',
-                                        'paid' => 'text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20',
+                                        'paid', 'applied' => 'text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20',
                                         'partial' => 'text-amber-600 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-500/10 dark:border-amber-500/20',
+                                        'unapplied' => 'text-rose-600 bg-rose-50 border-rose-200 dark:text-rose-400 dark:bg-rose-500/10 dark:border-rose-500/20',
+                                        'drawn' => 'text-sky-600 bg-sky-50 border-sky-200 dark:text-sky-400 dark:bg-sky-500/10 dark:border-sky-500/20',
                                         default => 'text-zinc-600 bg-zinc-100 border-zinc-200 dark:text-zinc-300 dark:bg-zinc-800 dark:border-zinc-700',
                                     };
+                                    $statusLabel = match ($row['status']) {
+                                        'overdue' => 'Overdue',
+                                        'overdue_partial' => 'Overdue & Partial',
+                                        'paid' => 'Paid',
+                                        'partial' => 'Partial',
+                                        'applied' => 'Applied',
+                                        'unapplied' => 'Unapplied',
+                                        'drawn' => 'Transferred',
+                                        default => 'Outstanding',
+                                    };
+                                    $rowBgClasses = match ($row['status']) {
+                                        'overdue' => 'bg-rose-50/40 dark:bg-rose-500/5',
+                                        'overdue_partial' => 'bg-orange-50/40 dark:bg-orange-500/5',
+                                        'paid', 'applied' => 'bg-emerald-50/40 dark:bg-emerald-500/5',
+                                        'partial' => 'bg-amber-50/40 dark:bg-amber-500/5',
+                                        'unapplied' => 'bg-rose-50/20 dark:bg-rose-500/[0.03]',
+                                        'drawn' => 'bg-sky-50/40 dark:bg-sky-500/5',
+                                        default => '',
+                                    };
                                 @endphp
-                                <tr class="transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5">
+                                <tr
+                                    data-row-index="{{ $loop->index }}"
+                                    data-row-key="{{ $rowKey }}"
+                                    wire:key="ledger-row-{{ $row['type'] }}-{{ $row['ref_no'] }}"
+                                    :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': selectedIndex === {{ $loop->index }} }"
+                                    x-on:click="if ($event.target.closest('a,button')) return; selectRow({{ $loop->index }}, '{{ $rowKey }}')"
+                                    :aria-expanded="(openKey === '{{ $rowKey }}').toString()"
+                                    class="cursor-pointer transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5 {{ $rowBgClasses }}"
+                                >
                                     <td class="px-4 py-2 text-zinc-500 dark:text-zinc-400">{{ $row['date']->format('d M Y') }}</td>
                                     <td class="px-4 py-2">
                                         @if($row['type'] === 'payment')
@@ -643,33 +884,29 @@ new #[Title('Customer Details')] class extends Component {
                                         </a>
                                     </td>
                                     <td class="px-4 py-2 text-zinc-500 dark:text-zinc-400">{{ $row['order_ref'] ?: '—' }}</td>
+                                    <td class="px-4 py-2">
+                                        <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium {{ $statusClasses }}">
+                                            {{ $statusLabel }}
+                                        </span>
+                                    </td>
                                     <td class="px-4 py-2 text-right font-mono tabular-nums {{ $row['amount'] < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-900 dark:text-white' }}">
                                         {{ $row['amount'] < 0 ? '-' : '+' }}£{{ number_format(abs($row['amount']), 2) }}
                                     </td>
+                                    <td class="px-4 py-2 text-right font-mono tabular-nums {{ abs($row['outstanding']) <= 0.005 ? 'text-emerald-600 dark:text-emerald-400' : ($row['outstanding'] < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-900 dark:text-white') }}">
+                                        £{{ number_format(abs($row['outstanding']), 2) }}
+                                    </td>
                                 </tr>
-                                @if($row['details'])
-                                    <tr>
-                                        <td colspan="5" class="px-4 pb-3">
-                                            <details class="border-l-4 border-indigo-400 dark:border-indigo-500 bg-zinc-50 dark:bg-zinc-800/50 rounded-r-md p-3 text-xs">
-                                                <summary class="cursor-pointer font-medium text-zinc-600 dark:text-zinc-300">🔍 View Allocation Details</summary>
-                                                <div class="mt-2 space-y-1">
-                                                    @if($row['details']['outstanding'] > 0.005)
-                                                        <p class="text-zinc-500 dark:text-zinc-400">
-                                                            Total: £{{ number_format($row['details']['total'], 2) }}
-                                                            &middot; Paid: £{{ number_format($row['details']['paid'], 2) }}
-                                                            &middot; Outstanding: £{{ number_format($row['details']['outstanding'], 2) }}
-                                                        </p>
-                                                    @endif
-                                                    @foreach($row['details']['allocations'] as $allocation)
-                                                        <p class="text-zinc-600 dark:text-zinc-300">
-                                                            Method: {{ $allocation['method'] }} | Ref: {{ $allocation['ref'] }} | Allocated: £{{ number_format($allocation['amount'], 2) }}
-                                                        </p>
-                                                    @endforeach
-                                                </div>
-                                            </details>
-                                        </td>
-                                    </tr>
-                                @endif
+                                <tr wire:key="ledger-detail-{{ $row['type'] }}-{{ $row['ref_no'] }}" x-show="openKey === '{{ $rowKey }}'" x-cloak>
+                                    <td colspan="7" class="px-4 pb-3">
+                                        <div class="border-l-4 border-indigo-400 dark:border-indigo-500 bg-white dark:bg-zinc-900 rounded-r-md shadow-sm p-4">
+                                            <div class="mb-3 flex items-center justify-between gap-2">
+                                                <h4 class="text-sm font-semibold text-zinc-900 dark:text-white">Transaction Details</h4>
+                                                <flux:button size="xs" variant="ghost" icon="x-mark" type="button" x-on:click="openKey = null" />
+                                            </div>
+                                            <x-ui.ledger-detail :row="$row" :payments="$this->ledgerPaymentsMap" :credit-notes="$this->ledgerCreditNotesMap" :invoices="$this->ledgerInvoicesMap" />
+                                        </div>
+                                    </td>
+                                </tr>
                             @endforeach
                         </tbody>
                     </table>
@@ -699,6 +936,14 @@ new #[Title('Customer Details')] class extends Component {
                     <div class="flex items-start gap-2">
                         <span class="mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border text-zinc-600 bg-zinc-100 border-zinc-200 dark:text-zinc-300 dark:bg-zinc-800 dark:border-zinc-700">Outstanding</span>
                         <p class="text-xs text-zinc-500 dark:text-zinc-400">Open invoice, not yet due</p>
+                    </div>
+                    <div class="flex items-start gap-2">
+                        <span class="mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20">Applied</span>
+                        <p class="text-xs text-zinc-500 dark:text-zinc-400">Credit / Payment linked to invoice(s)</p>
+                    </div>
+                    <div class="flex items-start gap-2">
+                        <span class="mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border text-rose-600 bg-rose-50 border-rose-200 dark:text-rose-400 dark:bg-rose-500/10 dark:border-rose-500/20">Unapplied</span>
+                        <p class="text-xs text-zinc-500 dark:text-zinc-400">Credit / Payment on account (unallocated)</p>
                     </div>
                 </div>
             @endif

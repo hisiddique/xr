@@ -106,24 +106,29 @@ class PaymentAllocator
      *
      * Each selected note is consumed in full — its entire *remaining* value
      * (total_value minus whatever's already been drawn against it, including
-     * legacy pre-selection draws) is locked to this payment in one invoice-less
-     * CreditAllocation row, and it can never be selected again. Any of that
-     * remainder left unallocated to invoices becomes ordinary unallocated
-     * balance on this payment (see Payment::remainingBalance()), reusable
-     * later as an over-payment source.
+     * legacy pre-selection draws) is consumed only up to `$amountNeeded` —
+     * drawn oldest-first across the selected notes. Whatever a note doesn't
+     * need to give up stays on the note, untouched and available for other
+     * payments; it never becomes this payment's own spendable over-payment
+     * balance. `$amountNeeded` must already include anything already drawn
+     * away from this payment by a later over-payment (see
+     * Payment::drawsMade()) so a re-save never shrinks the payment below
+     * history that already depends on it.
      *
      * @param  int[]  $creditNoteIds
      */
-    public function fundFromCreditNotes(Payment $payment, array $creditNoteIds): void
+    public function fundFromCreditNotes(Payment $payment, array $creditNoteIds, float $amountNeeded): void
     {
-        DB::transaction(function () use ($payment, $creditNoteIds) {
+        DB::transaction(function () use ($payment, $creditNoteIds, $amountNeeded) {
             $creditNoteIds = array_values(array_unique($creditNoteIds));
+            $remainingNeeded = round(max(0, $amountNeeded), 2);
 
             $creditNotes = Document::whereIn('id', $creditNoteIds)
                 ->where('type', DocumentType::CreditNote)
                 ->where('customer_id', $payment->customer_id)
                 ->withSum(['creditAllocations' => fn ($query) => $query
                     ->where(fn ($q) => $q->whereNull('payment_id')->orWhere('payment_id', '!=', $payment->id))], 'amount')
+                ->orderBy('doc_date', 'asc')
                 ->lockForUpdate()
                 ->get();
 
@@ -135,22 +140,33 @@ class PaymentAllocator
 
             $total = 0.0;
             foreach ($creditNotes as $creditNote) {
-                $remaining = round((float) $creditNote->total_value - (float) ($creditNote->credit_allocations_sum_amount ?? 0), 2);
-
-                if ($remaining <= 0.001) {
-                    throw new \InvalidArgumentException("Credit note {$creditNote->doc_number} has already been used.");
+                if ($remainingNeeded <= 0.001) {
+                    break;
                 }
+
+                $available = round((float) $creditNote->total_value - (float) ($creditNote->credit_allocations_sum_amount ?? 0), 2);
+
+                if ($available <= 0.001) {
+                    continue;
+                }
+
+                $consume = round(min($available, $remainingNeeded), 2);
 
                 CreditAllocation::create([
                     'payment_id' => $payment->id,
                     'credit_note_id' => $creditNote->id,
                     'invoice_id' => null,
-                    'amount' => $remaining,
+                    'amount' => $consume,
                 ]);
-                $total += $remaining;
+                $total += $consume;
+                $remainingNeeded -= $consume;
             }
 
-            $payment->amount = $total;
+            if ($remainingNeeded > 0.001) {
+                throw new \InvalidArgumentException('Selected credit notes do not cover the amount needed.');
+            }
+
+            $payment->amount = round($total, 2);
             $payment->save();
         });
     }
