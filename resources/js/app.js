@@ -648,7 +648,7 @@ document.addEventListener('alpine:init', () => {
                 case 8:
                     if (this.contextActions.f8) this.contextActions.f8();
                     break;
-                case 9: Livewire.navigate('/dashboard'); break;
+                case 9: window.dispatchEvent(new CustomEvent('fkey-add-note')); break;
                 case 10: Livewire.navigate('/settings/profile'); break;
                 case 11:
                     if (this.isAdmin) Livewire.navigate('/settings/crm');
@@ -1361,7 +1361,6 @@ document.addEventListener('alpine:init', () => {
             if (e.key === 'Insert' && !inItems)                  { stop(); this.add(); return; }
 
             if (inItems) {
-                if (e.key === 'Enter' && e.shiftKey)  { stop(); this.addNote(); return; }
                 if (e.key === 'Enter' && !ctrl)       { stop(); this.advanceFromItem(e.target); return; }
                 if (ctrl && e.key === 'Backspace')                   { stop(); this.removeFocused(e.target); return; }
                 if (ctrl && e.key === 'Delete')                      { stop(); this.removeFocused(e.target); return; }

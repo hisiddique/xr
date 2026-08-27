@@ -122,6 +122,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
         x-data="lineItemForm(@js($items), @js($this->units), '{{ route('delivery-notes.show', $document) }}')"
         x-on:submit.prevent="submit()"
         x-on:keydown="handleKey($event)"
+        x-on:fkey-add-note.window="addNote()"
         x-on:exit-confirm-discard.window="cancel()"
         x-on:exit-confirm-save.window="submit()"
         class="flex min-w-0 flex-1 flex-col gap-4"
@@ -169,7 +170,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
                     <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Items</h2>
                 </div>
                 <div class="flex items-center gap-2">
-                    <flux:button type="button" variant="ghost" icon="chat-bubble-left" size="sm" x-on:click="addNote()">Add Note <x-ui.kbd-hint keys="Shift+↵" /></flux:button>
+                    <flux:button type="button" variant="ghost" icon="chat-bubble-left" size="sm" x-on:click="addNote()">Add Note <x-ui.kbd-hint keys="F9" /></flux:button>
                     <flux:button type="button" variant="ghost" icon="plus" size="sm" x-on:click="add()">Add Item</flux:button>
                 </div>
             </div>

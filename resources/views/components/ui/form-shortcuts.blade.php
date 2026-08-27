@@ -13,7 +13,7 @@
                 ['keys' => ['Insert'],          'desc' => 'Insert line above'],
                 ['keys' => ['Ctrl', 'Insert'],  'desc' => 'Insert line below'],
                 ['keys' => ['Ctrl', 'Del'],     'desc' => 'Delete current line'],
-                ['keys' => ['Shift', '↵'],      'desc' => 'Add note row'],
+                ['keys' => ['F9'],             'desc' => 'Add note row'],
             ],
         ],
         [
