@@ -51,7 +51,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                 > 0.001
             ')
             ->orderByDesc('invoice_date')
-            ->get(['id', 'supplier_invoice_no'])
+            ->get(['id', 'supplier_invoice_no', 'supplier_ref_invoice_no'])
             ->toArray();
     }
 
@@ -214,7 +214,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                             <flux:select wire:model="supplier_invoice_id" class="mt-1.5" :disabled="! $supplier_id" x-on:focus="$el.showPicker?.()">
                                 <flux:select.option value="">— None —</flux:select.option>
                                 @foreach($this->supplierInvoices as $inv)
-                                    <flux:select.option :value="$inv['id']">{{ $inv['supplier_invoice_no'] }}</flux:select.option>
+                                    <flux:select.option :value="$inv['id']">{{ $inv['supplier_invoice_no'] }}@if(! empty($inv['supplier_ref_invoice_no'])) ({{ $inv['supplier_ref_invoice_no'] }})@endif</flux:select.option>
                                 @endforeach
                             </flux:select>
                             @error('supplier_invoice_id') <flux:error>{{ $message }}</flux:error> @enderror

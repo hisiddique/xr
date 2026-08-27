@@ -72,7 +72,7 @@ new class extends Component {
                                 @endif
                             </td>
                             <td class="px-4 py-3 font-mono text-xs text-zinc-700 dark:text-zinc-300">
-                                {{ $allocation->supplierInvoice?->supplier_invoice_no ?? '—' }}
+                                {{ $allocation->supplierInvoice?->supplier_invoice_no ?? '—' }}@if($allocation->supplierInvoice?->supplier_ref_invoice_no) <span class="text-zinc-400 dark:text-zinc-500">({{ $allocation->supplierInvoice->supplier_ref_invoice_no }})</span>@endif
                             </td>
                             <td class="px-4 py-3 text-right font-mono text-sm font-semibold text-zinc-900 dark:text-white">
                                 £{{ number_format($allocation->allocated_amount, 2) }}

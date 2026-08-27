@@ -206,6 +206,7 @@ new #[Title('Supplier Invoices')] class extends Component {
                         <tr>
                             <x-ui.sortable-header column="supplier_invoice_no" :state="$this->sortStateFor('supplier_invoice_no')">#</x-ui.sortable-header>
                             <th class="px-4 py-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Supplier</th>
+                            <th class="px-4 py-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Supplier Invoice No.</th>
                             <x-ui.sortable-header column="invoice_date" :state="$this->sortStateFor('invoice_date')">Date</x-ui.sortable-header>
                             <x-ui.sortable-header column="net_total" align="right" :state="$this->sortStateFor('net_total')">Net (£)</x-ui.sortable-header>
                             <x-ui.sortable-header column="vat_total" align="right" :state="$this->sortStateFor('vat_total')">VAT (£)</x-ui.sortable-header>
@@ -233,6 +234,9 @@ new #[Title('Supplier Invoices')] class extends Component {
                                 </td>
                                 <td class="px-4 py-2 font-medium text-zinc-900 dark:text-white">
                                     {{ $invoice->supplier?->company_name ?? '—' }}
+                                </td>
+                                <td class="px-4 py-2 font-mono text-zinc-600 dark:text-zinc-400">
+                                    {{ $invoice->supplier_ref_invoice_no ?: '—' }}
                                 </td>
                                 <td class="px-4 py-2 text-zinc-600 dark:text-zinc-400">
                                     {{ $invoice->invoice_date->format('d M Y') }}

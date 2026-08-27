@@ -311,7 +311,7 @@ new #[Title('Supplier Details')] class extends Component {
                                     <td class="py-2.5 pr-4">
                                         <a href="{{ route('supplier-invoices.show', $inv) }}" wire:navigate class="font-mono text-indigo-600 hover:underline dark:text-indigo-400">
                                             {{ $inv->supplier_invoice_no }}
-                                        </a>
+                                        </a>@if($inv->supplier_ref_invoice_no) <span class="font-mono text-zinc-400 dark:text-zinc-500">({{ $inv->supplier_ref_invoice_no }})</span>@endif
                                     </td>
                                     <td class="py-2.5 pr-4 text-zinc-600 dark:text-zinc-400">{{ $inv->invoice_date->format('d M Y') }}</td>
                                     <td class="py-2.5 pr-4 font-mono text-zinc-900 dark:text-white">£{{ number_format($inv->grossTotal, 2) }}</td>
@@ -360,7 +360,11 @@ new #[Title('Supplier Details')] class extends Component {
                                     </td>
                                     <td class="py-2.5 pr-4 text-zinc-600 dark:text-zinc-400">{{ $note->doc_date->format('d M Y') }}</td>
                                     <td class="py-2.5 pr-4 font-mono text-zinc-600 dark:text-zinc-400">
-                                        {{ $note->supplier_invoice_id ? ($note->supplierInvoice?->supplier_invoice_no ?? '—') : '—' }}
+                                        @if($note->supplier_invoice_id && $note->supplierInvoice)
+                                            {{ $note->supplierInvoice->supplier_invoice_no }}@if($note->supplierInvoice->supplier_ref_invoice_no) ({{ $note->supplierInvoice->supplier_ref_invoice_no }})@endif
+                                        @else
+                                            —
+                                        @endif
                                     </td>
                                     <td class="py-2.5 pr-4 text-right font-mono text-zinc-900 dark:text-white">£{{ number_format((float) $note->total, 2) }}</td>
                                     <td class="py-2.5 pr-4">

@@ -106,6 +106,7 @@ new class extends Component {
                     $rows[] = [
                         'id' => $invoice->id,
                         'reference' => $invoice->supplier_invoice_no,
+                        'supplier_ref' => $invoice->supplier_ref_invoice_no,
                         'invoice_date' => $invoice->invoice_date->format('d M Y'),
                         'original_amount' => $grossTotal,
                         'debit_note_ref' => $firstDn?->reference,
@@ -123,6 +124,7 @@ new class extends Component {
                     $rows[] = [
                         'id' => null,
                         'reference' => null,
+                        'supplier_ref' => null,
                         'debit_note_ref' => $dn->reference,
                         'debit_note_id' => $dn->id,
                         'original_amount' => (float) $dn->total,
@@ -151,6 +153,7 @@ new class extends Component {
                 return [
                     'id' => $invoice->id,
                     'reference' => $invoice->supplier_invoice_no,
+                    'supplier_ref' => $invoice->supplier_ref_invoice_no,
                     'invoice_date' => $invoice->invoice_date->format('d M Y'),
                     'original_amount' => $grossTotal,
                     'debit_note_ref' => $debitNote?->reference,
@@ -313,7 +316,9 @@ new class extends Component {
                                 <tr>
                                     <td class="px-4 py-3 font-mono text-xs font-semibold text-zinc-900 dark:text-white">
                                         <template x-if="row.reference">
-                                            <span x-text="row.reference"></span>
+                                            <span>
+                                                <span x-text="row.reference"></span><template x-if="row.supplier_ref"><span class="ml-1 font-normal text-zinc-400 dark:text-zinc-500" x-text="'(' + row.supplier_ref + ')'"></span></template>
+                                            </span>
                                         </template>
                                         <template x-if="!row.reference">
                                             <span class="text-zinc-400 dark:text-zinc-600">—</span>

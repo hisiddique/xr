@@ -192,7 +192,11 @@ new #[Title('Supplier Debit Notes')] class extends Component {
                                     {{ $note->doc_date->format('d M Y') }}
                                 </td>
                                 <td class="px-4 py-2 font-mono text-zinc-600 dark:text-zinc-400">
-                                    {{ $note->supplier_invoice_id ? ($note->supplierInvoice?->supplier_invoice_no ?? '—') : '—' }}
+                                    @if($note->supplier_invoice_id && $note->supplierInvoice)
+                                        {{ $note->supplierInvoice->supplier_invoice_no }}@if($note->supplierInvoice->supplier_ref_invoice_no) ({{ $note->supplierInvoice->supplier_ref_invoice_no }})@endif
+                                    @else
+                                        —
+                                    @endif
                                 </td>
                                 <td class="px-4 py-2 text-right font-mono text-zinc-900 dark:text-white">
                                     {{ number_format((float) $note->total, 2) }}

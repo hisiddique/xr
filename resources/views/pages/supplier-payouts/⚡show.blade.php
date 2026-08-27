@@ -95,7 +95,7 @@ new #[Title('Supplier Payout')] class extends Component {
                             <tbody>
                                 @foreach($payout->allocations as $allocation)
                                     <tr class="border-b border-zinc-100 dark:border-zinc-800">
-                                        <td class="py-3 pr-4 font-mono text-zinc-900 dark:text-white">{{ $allocation->supplierInvoice?->supplier_invoice_no ?? '—' }}</td>
+                                        <td class="py-3 pr-4 font-mono text-zinc-900 dark:text-white">{{ $allocation->supplierInvoice?->supplier_invoice_no ?? '—' }}@if($allocation->supplierInvoice?->supplier_ref_invoice_no) <span class="text-zinc-400 dark:text-zinc-500">({{ $allocation->supplierInvoice->supplier_ref_invoice_no }})</span>@endif</td>
                                         <td class="py-3 pr-4">
                                             @if($allocation->supplierDebitNote)
                                                 <flux:badge color="red" size="sm">{{ $allocation->supplierDebitNote->reference }}</flux:badge>

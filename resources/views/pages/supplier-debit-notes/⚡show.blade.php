@@ -122,7 +122,7 @@ new #[Title('Supplier Debit Note')] class extends Component {
                         @if($debitNote->supplierInvoice)
                             <a href="{{ route('supplier-invoices.show', $debitNote->supplierInvoice) }}" wire:navigate class="text-red-600 hover:underline dark:text-red-400">
                                 {{ $debitNote->supplierInvoice->supplier_invoice_no }}
-                            </a>
+                            </a>@if($debitNote->supplierInvoice->supplier_ref_invoice_no) <span class="text-zinc-400 dark:text-zinc-500">({{ $debitNote->supplierInvoice->supplier_ref_invoice_no }})</span>@endif
                         @else
                             <span class="text-zinc-400">—</span>
                         @endif
@@ -247,7 +247,7 @@ new #[Title('Supplier Debit Note')] class extends Component {
                                 <td class="px-4 py-3 sm:px-6">
                                     <a href="{{ route('supplier-invoices.show', $invoice) }}" wire:navigate class="font-mono text-red-600 hover:underline dark:text-red-400">
                                         {{ $invoice->supplier_invoice_no }}
-                                    </a>
+                                    </a>@if($invoice->supplier_ref_invoice_no) <span class="font-mono text-zinc-400 dark:text-zinc-500">({{ $invoice->supplier_ref_invoice_no }})</span>@endif
                                 </td>
                                 <td class="px-4 py-3 text-right font-mono text-zinc-900 sm:px-6 dark:text-white">{{ number_format((float) $invoice->pivot->applied_amount, 2) }}</td>
                                 <td class="px-4 py-3 text-right text-zinc-500 sm:px-6 dark:text-zinc-400">
