@@ -1989,9 +1989,11 @@ document.addEventListener('alpine:init', () => {
             this.loadingMore = true;
             this.$wire.loadMoreInvoices().finally(() => { this.loadingMore = false; });
         },
-        // Suggests a default amount when an empty row gains focus — a one-shot
-        // nudge, not a live auto-allocate: it never overwrites a value the
-        // user already typed.
+        // Previews a suggested amount when an empty row gains focus. The preview
+        // is not committed: @blur reverts it unless the user pressed Enter,
+        // which (via handleKey) is the only action that persists it.
+        _previewRowId: null,
+        _previewPrev: null,
         focusRow(row) {
             if (parseFloat(row.amount)) return;
             const budgetExcludingRow = this.paymentAmount - this.rows.reduce(
@@ -1999,8 +2001,21 @@ document.addEventListener('alpine:init', () => {
             );
             const suggested = Math.min(Math.max(budgetExcludingRow, 0), parseFloat(row.max_allocatable) || 0);
             if (suggested > 0) {
+                this._previewRowId = row.id;
+                this._previewPrev = row.amount;
                 row.amount = Math.round(suggested * 100) / 100;
             }
+        },
+        commitPreview() {
+            this._previewRowId = null;
+            this._previewPrev = null;
+        },
+        revertPreviewIfPending(row) {
+            if (this._previewRowId !== row.id) return false;
+            row.amount = this._previewPrev;
+            this._previewRowId = null;
+            this._previewPrev = null;
+            return true;
         },
         _allocInputs() {
             return Array.from(this.$el.querySelectorAll('[data-payment-alloc-input]'))
@@ -2014,6 +2029,9 @@ document.addEventListener('alpine:init', () => {
             // globally (elsewhere intentional); stop it reaching this input so
             // allocation rows always highlight their value on Enter too.
             e.stopPropagation();
+            // Enter is the only action that commits a focus preview; Arrow
+            // navigation leaves it for the pending blur to revert.
+            if (e.key === 'Enter') { this.commitPreview(); }
             const inputs = this._allocInputs();
             const idx = inputs.indexOf(e.target);
             const next = inputs[idx + (e.key === 'ArrowUp' ? -1 : 1)];

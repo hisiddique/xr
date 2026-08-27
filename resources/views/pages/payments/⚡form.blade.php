@@ -925,7 +925,7 @@ new #[Title('Payment')] class extends Component {
                                                             :max="row.max_allocatable"
                                                             x-model="row.amount"
                                                             data-payment-alloc-input
-                                                            @blur="row.amount = Math.min(parseFloat(row.amount)||0, row.max_allocatable)"
+                                                            @blur="revertPreviewIfPending(row) || (row.amount = Math.min(parseFloat(row.amount)||0, row.max_allocatable))"
                                                             @focus="focusRow(row); $nextTick(() => $el.select())"
                                                             class="w-28 rounded-lg border border-zinc-300 px-2 py-1 text-right font-mono text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
                                                         />
