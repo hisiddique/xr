@@ -17,7 +17,7 @@ use Symfony\Component\HttpFoundation\Response;
 class SupplierPurchasingReportService
 {
     /** @var array<int, string> */
-    protected const EXPORT_HEADINGS = ['Supplier', 'Reference', 'Date', 'Supplier Invoice No', 'Invoice', 'Net', 'VAT', 'Gross', 'Status'];
+    protected const EXPORT_HEADINGS = ['Supplier', 'Reference', 'Date', 'Supplier Invoice No', 'Invoice', 'Net', 'VAT', 'Gross', 'Debit Note', 'Deductions', 'Net Payable', 'Status'];
 
     protected const EXPORT_CHUNK_SIZE = 200;
 
@@ -91,17 +91,25 @@ class SupplierPurchasingReportService
      * materializing the full filtered result set like buildExportData() does.
      *
      * @param  array<string, mixed>  $filters
-     * @return array{invoiceCount: int, totalNet: float, totalVat: float, totalGross: float}
+     * @return array{invoiceCount: int, totalNet: float, totalVat: float, totalGross: float, totalDeductions: float, totalNetPayable: float}
      */
     public function summary(array $filters): array
     {
         $vatRate = (float) Setting::get('vat_rate', 20);
 
+        $deductExpr = '(select coalesce(sum(sidn.applied_amount),0) from supplier_invoice_debit_notes sidn where sidn.supplier_invoice_id = supplier_invoices.id)';
+
+        // Net payable is clamped per invoice (an over-large debit note never
+        // pushes one invoice negative and eats into another), so the aggregate
+        // must sum the per-row clamp — not clamp the aggregate — to stay equal
+        // to the supplier subtotals shown above it.
+        $netPayableExpr = 'CASE WHEN ('.self::GROSS_EXPR.' - '.$deductExpr.') > 0 THEN ('.self::GROSS_EXPR.' - '.$deductExpr.') ELSE 0 END';
+
         $row = SupplierInvoice::query()
             ->tap(fn ($q) => $this->applyFilters($q, $filters))
             ->selectRaw(
-                'count(*) as cnt, coalesce(sum('.self::NET_EXPR.'),0) as net, coalesce(sum('.self::VAT_EXPR.'),0) as vat, coalesce(sum('.self::GROSS_EXPR.'),0) as gross',
-                [$vatRate, $vatRate]
+                'count(*) as cnt, coalesce(sum('.self::NET_EXPR.'),0) as net, coalesce(sum('.self::VAT_EXPR.'),0) as vat, coalesce(sum('.self::GROSS_EXPR.'),0) as gross, coalesce(sum('.$deductExpr.'),0) as deductions, coalesce(sum('.$netPayableExpr.'),0) as net_payable',
+                [$vatRate, $vatRate, $vatRate, $vatRate]
             )
             ->first();
 
@@ -110,6 +118,8 @@ class SupplierPurchasingReportService
             'totalNet' => (float) $row->net,
             'totalVat' => (float) $row->vat,
             'totalGross' => (float) $row->gross,
+            'totalDeductions' => (float) $row->deductions,
+            'totalNetPayable' => round((float) $row->net_payable, 2),
         ];
     }
 
@@ -188,14 +198,25 @@ class SupplierPurchasingReportService
 
     public function paidStatus(SupplierInvoice $invoice): string
     {
-        $outstanding = $this->outstandingAmount($invoice);
-        $gross = (float) $invoice->grossTotal;
+        return $invoice->paymentStatus()->value;
+    }
 
-        return match (true) {
-            $outstanding <= 0.001 => 'paid',
-            $outstanding >= $gross - 0.001 => 'unpaid',
-            default => 'partial',
-        };
+    public function deductionsTotal(SupplierInvoice $invoice): float
+    {
+        return round((float) $invoice->debitNotes->sum(fn ($dn) => (float) $dn->pivot->applied_amount), 2);
+    }
+
+    public function netPayable(SupplierInvoice $invoice): float
+    {
+        return round(max(0, (float) $invoice->grossTotal - $this->deductionsTotal($invoice)), 2);
+    }
+
+    /**
+     * Comma-joined references of the debit notes applied to this invoice.
+     */
+    public function debitNoteRefs(SupplierInvoice $invoice): string
+    {
+        return $invoice->debitNotes->pluck('reference')->filter()->implode(', ');
     }
 
     /**
@@ -205,7 +226,7 @@ class SupplierPurchasingReportService
      * of total dataset size.
      *
      * @param  array<string, mixed>  $filters
-     * @return \Generator<int, array{company_name: string, reference: string, invoices: array<int, array{invoice_date: ?string, supplier_invoice_no: string, supplier_ref_invoice_no: string, net: float, vat: float, gross: float, paid_status: string}>}>
+     * @return \Generator<int, array{company_name: string, reference: string, invoices: array<int, array{invoice_date: ?string, supplier_invoice_no: string, supplier_ref_invoice_no: string, net: float, vat: float, gross: float, debit_note_ref: string, deductions: float, net_payable: float, paid_status: string}>}>
      */
     public function exportChunks(array $filters): \Generator
     {
@@ -252,6 +273,9 @@ class SupplierPurchasingReportService
                         'net' => $invoice->netTotal,
                         'vat' => $invoice->vatTotal,
                         'gross' => $invoice->grossTotal,
+                        'debit_note_ref' => $this->debitNoteRefs($invoice),
+                        'deductions' => $this->deductionsTotal($invoice),
+                        'net_payable' => $this->netPayable($invoice),
                         'paid_status' => $this->paidStatus($invoice),
                     ])->all();
 
@@ -276,7 +300,7 @@ class SupplierPurchasingReportService
      * should call exportChunks() directly to stay memory-bounded.
      *
      * @param  array<string, mixed>  $filters
-     * @return array<int, array{company_name: string, reference: string, invoices: array<int, array{invoice_date: ?string, supplier_invoice_no: string, supplier_ref_invoice_no: string, net: float, vat: float, gross: float, paid_status: string}>}>
+     * @return array<int, array{company_name: string, reference: string, invoices: array<int, array{invoice_date: ?string, supplier_invoice_no: string, supplier_ref_invoice_no: string, net: float, vat: float, gross: float, debit_note_ref: string, deductions: float, net_payable: float, paid_status: string}>}>
      */
     public function buildExportData(array $filters): array
     {
@@ -284,7 +308,7 @@ class SupplierPurchasingReportService
     }
 
     /**
-     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{invoice_date: ?string, supplier_invoice_no: string, supplier_ref_invoice_no: string, net: float, vat: float, gross: float, paid_status: string}>}>  $data
+     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{invoice_date: ?string, supplier_invoice_no: string, supplier_ref_invoice_no: string, net: float, vat: float, gross: float, debit_note_ref: string, deductions: float, net_payable: float, paid_status: string}>}>  $data
      * @return array{invoiceCount: int, totalNet: float, totalVat: float, totalGross: float}
      */
     public function exportSummary(array $data): array
@@ -310,7 +334,7 @@ class SupplierPurchasingReportService
     }
 
     /**
-     * @param  array{company_name: string, reference: string, invoices: array<int, array{invoice_date: ?string, supplier_invoice_no: string, supplier_ref_invoice_no: string, net: float, vat: float, gross: float, paid_status: string}>}  $supplier
+     * @param  array{company_name: string, reference: string, invoices: array<int, array{invoice_date: ?string, supplier_invoice_no: string, supplier_ref_invoice_no: string, net: float, vat: float, gross: float, debit_note_ref: string, deductions: float, net_payable: float, paid_status: string}>}  $supplier
      * @return array<int, array{0: array<int, string>, 1: bool}>
      */
     protected function supplierRows(array $supplier): array
@@ -319,8 +343,13 @@ class SupplierPurchasingReportService
         $net = 0.0;
         $vat = 0.0;
         $gross = 0.0;
+        $deductions = 0.0;
+        $netPayable = 0.0;
 
         foreach ($supplier['invoices'] as $invoice) {
+            $invoiceDeductions = (float) ($invoice['deductions'] ?? 0);
+            $invoiceNetPayable = (float) ($invoice['net_payable'] ?? $invoice['gross']);
+
             $rows[] = [[
                 $supplier['company_name'],
                 $supplier['reference'],
@@ -330,12 +359,17 @@ class SupplierPurchasingReportService
                 number_format($invoice['net'], 2, '.', ''),
                 number_format($invoice['vat'], 2, '.', ''),
                 number_format($invoice['gross'], 2, '.', ''),
+                $invoice['debit_note_ref'] ?? '',
+                $invoiceDeductions > 0 ? '-'.number_format($invoiceDeductions, 2, '.', '') : '0.00',
+                number_format($invoiceNetPayable, 2, '.', ''),
                 ucfirst($invoice['paid_status']),
             ], false];
 
             $net += $invoice['net'];
             $vat += $invoice['vat'];
             $gross += $invoice['gross'];
+            $deductions += $invoiceDeductions;
+            $netPayable += $invoiceNetPayable;
         }
 
         $rows[] = [[
@@ -343,6 +377,9 @@ class SupplierPurchasingReportService
             number_format($net, 2, '.', ''),
             number_format($vat, 2, '.', ''),
             number_format($gross, 2, '.', ''),
+            '',
+            $deductions > 0 ? '-'.number_format($deductions, 2, '.', '') : '0.00',
+            number_format($netPayable, 2, '.', ''),
             '',
         ], true];
 
@@ -419,7 +456,7 @@ class SupplierPurchasingReportService
     }
 
     /**
-     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{invoice_date: ?string, supplier_invoice_no: string, supplier_ref_invoice_no: string, net: float, vat: float, gross: float, paid_status: string}>}>  $data
+     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{invoice_date: ?string, supplier_invoice_no: string, supplier_ref_invoice_no: string, net: float, vat: float, gross: float, debit_note_ref: string, deductions: float, net_payable: float, paid_status: string}>}>  $data
      */
     public function invoiceRowCount(array $data): int
     {
@@ -427,7 +464,7 @@ class SupplierPurchasingReportService
     }
 
     /**
-     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{invoice_date: ?string, supplier_invoice_no: string, supplier_ref_invoice_no: string, net: float, vat: float, gross: float, paid_status: string}>}>  $data
+     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{invoice_date: ?string, supplier_invoice_no: string, supplier_ref_invoice_no: string, net: float, vat: float, gross: float, debit_note_ref: string, deductions: float, net_payable: float, paid_status: string}>}>  $data
      */
     public function pdfBinary(array $data): string
     {
@@ -437,7 +474,7 @@ class SupplierPurchasingReportService
     }
 
     /**
-     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{invoice_date: ?string, supplier_invoice_no: string, supplier_ref_invoice_no: string, net: float, vat: float, gross: float, paid_status: string}>}>  $data
+     * @param  array<int, array{company_name: string, reference: string, invoices: array<int, array{invoice_date: ?string, supplier_invoice_no: string, supplier_ref_invoice_no: string, net: float, vat: float, gross: float, debit_note_ref: string, deductions: float, net_payable: float, paid_status: string}>}>  $data
      */
     public function streamPdf(array $data, bool $inline = false): Response
     {

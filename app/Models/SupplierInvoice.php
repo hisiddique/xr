@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\SupplierInvoicePaymentStatus;
 use App\SupplierInvoiceStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -106,6 +107,23 @@ class SupplierInvoice extends Model
         $deducted = (float) $this->debitNotes->sum(fn ($dn) => (float) $dn->pivot->applied_amount);
 
         return max(0, $this->grossTotal - $paid - $deducted);
+    }
+
+    public function paymentStatus(): SupplierInvoicePaymentStatus
+    {
+        $outstanding = round($this->outstandingAmount, 2);
+        $gross = round($this->grossTotal, 2);
+
+        return match (true) {
+            $outstanding <= 0 => SupplierInvoicePaymentStatus::Paid,
+            $outstanding >= $gross => SupplierInvoicePaymentStatus::Unpaid,
+            default => SupplierInvoicePaymentStatus::Partial,
+        };
+    }
+
+    public function isPaid(): bool
+    {
+        return $this->paymentStatus() === SupplierInvoicePaymentStatus::Paid;
     }
 
     public function getNetTotalAttribute(): float

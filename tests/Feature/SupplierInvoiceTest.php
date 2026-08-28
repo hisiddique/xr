@@ -4,11 +4,14 @@ use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\Models\SupplierInvoiceItem;
+use App\Models\SupplierPayout;
+use App\Models\SupplierPayoutAllocation;
 use App\Models\User;
 use App\SupplierInvoiceStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
 
@@ -79,6 +82,98 @@ test('vatTotal applies only to vat_applicable lines', function () {
     expect(round($invoice->vatTotal, 2))->toBe(24.0);
     expect(round($invoice->netTotal, 2))->toBe(170.0);
     expect($invoice->grossTotal)->toBe(194.0);
+});
+
+// ── Payment status ───────────────────────────────────────────
+test('isPaid is false until allocations and deductions cover the gross total', function () {
+    $invoice = SupplierInvoice::factory()
+        ->has(SupplierInvoiceItem::factory()->state(['quantity' => 1, 'unit_amount' => 100, 'vat_applicable' => false, 'line_total' => 100]), 'items')
+        ->create(['created_by' => $this->user->id]);
+
+    $reload = fn () => $invoice->fresh(['items', 'payoutAllocations', 'debitNotes']);
+
+    expect($reload()->isPaid())->toBeFalse();
+
+    $payout = SupplierPayout::create([
+        'supplier_id' => $invoice->supplier_id,
+        'amount' => 100,
+        'payout_date' => now(),
+        'created_by' => $this->user->id,
+    ]);
+
+    SupplierPayoutAllocation::create([
+        'supplier_payout_id' => $payout->id,
+        'supplier_invoice_id' => $invoice->id,
+        'allocated_amount' => 60,
+        'deduction_amount' => 0,
+    ]);
+
+    expect($reload()->isPaid())->toBeFalse();
+
+    SupplierPayoutAllocation::create([
+        'supplier_payout_id' => $payout->id,
+        'supplier_invoice_id' => $invoice->id,
+        'allocated_amount' => 40,
+        'deduction_amount' => 0,
+    ]);
+
+    expect($reload()->isPaid())->toBeTrue();
+});
+
+test('index renders Paid and Unpaid status badges', function () {
+    SupplierInvoice::factory()
+        ->has(SupplierInvoiceItem::factory()->state(['quantity' => 1, 'unit_amount' => 100, 'vat_applicable' => false, 'line_total' => 100]), 'items')
+        ->create(['created_by' => $this->user->id]);
+
+    $paid = SupplierInvoice::factory()
+        ->has(SupplierInvoiceItem::factory()->state(['quantity' => 1, 'unit_amount' => 50, 'vat_applicable' => false, 'line_total' => 50]), 'items')
+        ->create(['created_by' => $this->user->id]);
+
+    $payout = SupplierPayout::create([
+        'supplier_id' => $paid->supplier_id,
+        'amount' => 50,
+        'payout_date' => now(),
+        'created_by' => $this->user->id,
+    ]);
+    SupplierPayoutAllocation::create([
+        'supplier_payout_id' => $payout->id,
+        'supplier_invoice_id' => $paid->id,
+        'allocated_amount' => 50,
+        'deduction_amount' => 0,
+    ]);
+
+    Livewire::test('pages::supplier-invoices.index')
+        ->assertSee('Unpaid')
+        ->assertSee('Paid');
+});
+
+test('index can sort by paid_status', function () {
+    $paid = SupplierInvoice::factory()
+        ->has(SupplierInvoiceItem::factory()->state(['quantity' => 1, 'unit_amount' => 50, 'vat_applicable' => false, 'line_total' => 50]), 'items')
+        ->create(['created_by' => $this->user->id]);
+
+    $payout = SupplierPayout::create([
+        'supplier_id' => $paid->supplier_id,
+        'amount' => 50,
+        'payout_date' => now(),
+        'created_by' => $this->user->id,
+    ]);
+    SupplierPayoutAllocation::create([
+        'supplier_payout_id' => $payout->id,
+        'supplier_invoice_id' => $paid->id,
+        'allocated_amount' => 50,
+        'deduction_amount' => 0,
+    ]);
+
+    $unpaid = SupplierInvoice::factory()
+        ->has(SupplierInvoiceItem::factory()->state(['quantity' => 1, 'unit_amount' => 100, 'vat_applicable' => false, 'line_total' => 100]), 'items')
+        ->create(['created_by' => $this->user->id]);
+
+    Livewire::test('pages::supplier-invoices.index')
+        ->call('sortBy', 'paid_status')
+        ->assertSeeInOrder([$unpaid->supplier_invoice_no, $paid->supplier_invoice_no])
+        ->call('sortBy', 'paid_status')
+        ->assertSeeInOrder([$paid->supplier_invoice_no, $unpaid->supplier_invoice_no]);
 });
 
 // ── Status enum ───────────────────────────────────────────────

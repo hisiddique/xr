@@ -11,7 +11,7 @@ new #[Title('Supplier Invoice')] class extends Component {
 
     public function mount(): void
     {
-        $this->supplierInvoice->load(['supplier', 'items', 'creator', 'debitNotes']);
+        $this->supplierInvoice->load(['supplier', 'items', 'creator', 'debitNotes', 'payoutAllocations']);
     }
 
     #[On('supplier-invoice-deleted')]
@@ -63,9 +63,7 @@ new #[Title('Supplier Invoice')] class extends Component {
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-3">
                         <h1 class="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-white">{{ $supplierInvoice->supplier_invoice_no }}</h1>
-                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset {{ $supplierInvoice->status->ringColor() }}">
-                            {{ $supplierInvoice->status->label() }}
-                        </span>
+                        <x-ui.payment-status-badge :status="$supplierInvoice->paymentStatus()" />
                     </div>
                     <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
                         {{ $supplierInvoice->supplier->company_name }} &middot; {{ $supplierInvoice->invoice_date->format('d M Y') }}
@@ -121,9 +119,7 @@ new #[Title('Supplier Invoice')] class extends Component {
                 <div class="flex justify-between gap-4">
                     <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Status</dt>
                     <dd>
-                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset {{ $supplierInvoice->status->ringColor() }}">
-                            {{ $supplierInvoice->status->label() }}
-                        </span>
+                        <x-ui.payment-status-badge :status="$supplierInvoice->paymentStatus()" />
                     </dd>
                 </div>
                 <div class="flex justify-between gap-4">

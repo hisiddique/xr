@@ -205,9 +205,19 @@ new #[Title('Supplier Purchasing Report')] class extends Component
         return app(SupplierPurchasingReportService::class)->outstandingAmount($invoice);
     }
 
-    public function paidStatusOf(SupplierInvoice $invoice): string
+    public function deductionsOf(SupplierInvoice $invoice): float
     {
-        return app(SupplierPurchasingReportService::class)->paidStatus($invoice);
+        return app(SupplierPurchasingReportService::class)->deductionsTotal($invoice);
+    }
+
+    public function netPayableOf(SupplierInvoice $invoice): float
+    {
+        return app(SupplierPurchasingReportService::class)->netPayable($invoice);
+    }
+
+    public function debitNoteRefsOf(SupplierInvoice $invoice): string
+    {
+        return app(SupplierPurchasingReportService::class)->debitNoteRefs($invoice);
     }
 
     #[Computed]
@@ -263,7 +273,7 @@ new #[Title('Supplier Purchasing Report')] class extends Component
 
     <x-ui.page-header
         title="Supplier Purchasing Report"
-        subtitle="Posted supplier invoices grouped by supplier, with net/VAT/gross totals and payment status."
+        subtitle="Posted supplier invoices grouped by supplier, with net/VAT/gross totals, debit-note deductions, and payment status."
     />
 
     {{-- Stat cards --}}
@@ -393,6 +403,9 @@ new #[Title('Supplier Purchasing Report')] class extends Component
                     'net' => ['label' => 'Net', 'align' => 'text-right'],
                     'vat' => ['label' => 'VAT', 'align' => 'text-right'],
                     'gross' => ['label' => 'Gross', 'align' => 'text-right'],
+                    '__debit_note' => ['label' => 'Debit Note', 'align' => 'text-left'],
+                    '__deductions' => ['label' => 'Deductions', 'align' => 'text-right'],
+                    '__net_payable' => ['label' => 'Net Payable', 'align' => 'text-right'],
                     '__status' => ['label' => 'Status', 'align' => 'text-center'],
                 ];
                 $sortableColumns = ['company_name', 'invoice_date', 'supplier_invoice_no', 'net', 'vat', 'gross'];
@@ -427,11 +440,13 @@ new #[Title('Supplier Purchasing Report')] class extends Component
                             $supplierNet = $supplier->supplierInvoices->sum(fn ($invoice) => $invoice->netTotal);
                             $supplierVat = $supplier->supplierInvoices->sum(fn ($invoice) => $invoice->vatTotal);
                             $supplierGross = $supplier->supplierInvoices->sum(fn ($invoice) => $invoice->grossTotal);
+                            $supplierDeductions = $supplier->supplierInvoices->sum(fn ($invoice) => $this->deductionsOf($invoice));
+                            $supplierNetPayable = $supplier->supplierInvoices->sum(fn ($invoice) => $this->netPayableOf($invoice));
                             $invoiceCount = $supplier->supplierInvoices->count();
                         @endphp
                         <tbody x-data="{ open: true }" wire:key="supplier-group-{{ $supplier->id }}">
                                 <tr class="bg-zinc-100 dark:bg-zinc-800/60">
-                                    <td colspan="8" class="px-2 py-1.5">
+                                    <td colspan="11" class="px-2 py-1.5">
                                         <div class="flex items-center gap-2">
                                             <button
                                                 type="button"
@@ -453,12 +468,9 @@ new #[Title('Supplier Purchasing Report')] class extends Component
                                 </tr>
                                 @foreach($supplier->supplierInvoices as $invoice)
                                     @php
-                                        $status = $this->paidStatusOf($invoice);
-                                        $statusColor = match ($status) {
-                                            'paid' => 'green',
-                                            'partial' => 'amber',
-                                            default => 'red',
-                                        };
+                                        $deductions = $this->deductionsOf($invoice);
+                                        $debitRefs = $this->debitNoteRefsOf($invoice);
+                                        $netPayable = $this->netPayableOf($invoice);
                                     @endphp
                                     <tr
                                         x-show="open"
@@ -476,8 +488,11 @@ new #[Title('Supplier Purchasing Report')] class extends Component
                                         <td class="px-2 py-1 text-right font-mono tabular-nums text-zinc-900 dark:text-white">£{{ number_format($invoice->netTotal, 2) }}</td>
                                         <td class="px-2 py-1 text-right font-mono tabular-nums text-zinc-900 dark:text-white">£{{ number_format($invoice->vatTotal, 2) }}</td>
                                         <td class="px-2 py-1 text-right font-mono tabular-nums font-medium text-zinc-900 dark:text-white">£{{ number_format($invoice->grossTotal, 2) }}</td>
+                                        <td class="px-2 py-1 font-mono text-xs text-zinc-500 dark:text-zinc-400">{{ $debitRefs !== '' ? $debitRefs : '—' }}</td>
+                                        <td class="px-2 py-1 text-right font-mono tabular-nums {{ $deductions > 0 ? 'text-red-600 dark:text-red-400' : 'text-zinc-400 dark:text-zinc-600' }}">{{ $deductions > 0 ? '−£'.number_format($deductions, 2) : '—' }}</td>
+                                        <td class="px-2 py-1 text-right font-mono tabular-nums font-medium text-zinc-900 dark:text-white">£{{ number_format($netPayable, 2) }}</td>
                                         <td class="px-2 py-1 text-center">
-                                            <flux:badge color="{{ $statusColor }}" size="sm">{{ ucfirst($status) }}</flux:badge>
+                                            <x-ui.payment-status-badge :status="$invoice->paymentStatus()" />
                                         </td>
                                     </tr>
                                 @endforeach
@@ -486,6 +501,9 @@ new #[Title('Supplier Purchasing Report')] class extends Component
                                     <td class="px-2 py-1 text-right font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400">£{{ number_format($supplierNet, 2) }}</td>
                                     <td class="px-2 py-1 text-right font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400">£{{ number_format($supplierVat, 2) }}</td>
                                     <td class="px-2 py-1 text-right font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400">£{{ number_format($supplierGross, 2) }}</td>
+                                    <td class="px-2 py-1"></td>
+                                    <td class="px-2 py-1 text-right font-mono tabular-nums font-bold {{ $supplierDeductions > 0 ? 'text-red-600 dark:text-red-400' : 'text-zinc-400 dark:text-zinc-600' }}">{{ $supplierDeductions > 0 ? '−£'.number_format($supplierDeductions, 2) : '—' }}</td>
+                                    <td class="px-2 py-1 text-right font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400">£{{ number_format($supplierNetPayable, 2) }}</td>
                                     <td class="px-2 py-1"></td>
                                 </tr>
                         </tbody>
@@ -496,6 +514,9 @@ new #[Title('Supplier Purchasing Report')] class extends Component
                             <td class="px-2 py-2 text-right font-mono tabular-nums font-bold text-zinc-900 dark:text-white">£{{ number_format($this->summary['totalNet'], 2) }}</td>
                             <td class="px-2 py-2 text-right font-mono tabular-nums font-bold text-zinc-900 dark:text-white">£{{ number_format($this->summary['totalVat'], 2) }}</td>
                             <td class="px-2 py-2 text-right font-mono tabular-nums font-bold text-zinc-900 dark:text-white">£{{ number_format($this->summary['totalGross'], 2) }}</td>
+                            <td class="px-2 py-2"></td>
+                            <td class="px-2 py-2 text-right font-mono tabular-nums font-bold {{ $this->summary['totalDeductions'] > 0 ? 'text-red-600 dark:text-red-400' : 'text-zinc-900 dark:text-white' }}">{{ $this->summary['totalDeductions'] > 0 ? '−£'.number_format($this->summary['totalDeductions'], 2) : '£0.00' }}</td>
+                            <td class="px-2 py-2 text-right font-mono tabular-nums font-bold text-zinc-900 dark:text-white">£{{ number_format($this->summary['totalNetPayable'], 2) }}</td>
                             <td class="px-2 py-2"></td>
                         </tr>
                     </tfoot>

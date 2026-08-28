@@ -36,6 +36,9 @@
                 <th class="amount">Net</th>
                 <th class="amount">VAT</th>
                 <th class="amount">Gross</th>
+                <th>Debit Note</th>
+                <th class="amount">Deductions</th>
+                <th class="amount">Net Payable</th>
                 <th>Status</th>
             </tr>
         </thead>
@@ -50,6 +53,9 @@
                         <td class="amount">£{{ number_format($invoice['net'], 2) }}</td>
                         <td class="amount">£{{ number_format($invoice['vat'], 2) }}</td>
                         <td class="amount">£{{ number_format($invoice['gross'], 2) }}</td>
+                        <td>{{ $invoice['debit_note_ref'] !== '' ? $invoice['debit_note_ref'] : '—' }}</td>
+                        <td class="amount">{{ $invoice['deductions'] > 0 ? '−£'.number_format($invoice['deductions'], 2) : '—' }}</td>
+                        <td class="amount">£{{ number_format($invoice['net_payable'], 2) }}</td>
                         <td>
                             @if($invoice['paid_status'] === 'paid')
                                 <span style="color: #059669;">{{ ucfirst($invoice['paid_status']) }}</span>
@@ -69,6 +75,10 @@
                     <td class="amount">£{{ number_format(array_sum(array_column($supplier['invoices'], 'net')), 2) }}</td>
                     <td class="amount">£{{ number_format(array_sum(array_column($supplier['invoices'], 'vat')), 2) }}</td>
                     <td class="amount">£{{ number_format(array_sum(array_column($supplier['invoices'], 'gross')), 2) }}</td>
+                    <td></td>
+                    @php $subtotalDeductions = array_sum(array_column($supplier['invoices'], 'deductions')); @endphp
+                    <td class="amount">{{ $subtotalDeductions > 0 ? '−£'.number_format($subtotalDeductions, 2) : '—' }}</td>
+                    <td class="amount">£{{ number_format(array_sum(array_column($supplier['invoices'], 'net_payable')), 2) }}</td>
                     <td></td>
                 </tr>
             @endforeach

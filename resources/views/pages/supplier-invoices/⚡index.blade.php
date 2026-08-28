@@ -18,7 +18,7 @@ new #[Title('Supplier Invoices')] class extends Component {
     use WithSorting;
     use WithPerPage;
 
-    protected array $sortable = ['supplier_invoice_no', 'invoice_date', 'created_at', 'gross_total', 'vat_total', 'net_total'];
+    protected array $sortable = ['supplier_invoice_no', 'invoice_date', 'created_at', 'gross_total', 'vat_total', 'net_total', 'paid_status'];
 
     #[Url]
     public string $search = '';
@@ -97,10 +97,16 @@ new #[Title('Supplier Invoices')] class extends Component {
             [$netRate]
         )->whereColumn('supplier_invoice_id', 'supplier_invoices.id');
 
+        $outstandingExpr =
+            '(SELECT COALESCE(SUM(line_total), 0) FROM supplier_invoice_items WHERE supplier_invoice_id = supplier_invoices.id)'
+            .' - (SELECT COALESCE(SUM(allocated_amount), 0) FROM supplier_payout_allocations WHERE supplier_invoice_id = supplier_invoices.id AND deleted_at IS NULL)'
+            .' - (SELECT COALESCE(SUM(applied_amount), 0) FROM supplier_invoice_debit_notes WHERE supplier_invoice_id = supplier_invoices.id)';
+
         return match ($column) {
             'gross_total' => $query->orderBy($grossSub, $direction),
             'vat_total' => $query->orderBy($vatSub, $direction),
             'net_total' => $query->orderBy($netSub, $direction),
+            'paid_status' => $query->orderByRaw("({$outstandingExpr}) {$direction}"),
             default => null,
         };
     }
@@ -120,7 +126,7 @@ new #[Title('Supplier Invoices')] class extends Component {
     #[Computed]
     public function supplierInvoices()
     {
-        return SupplierInvoice::with(['supplier', 'items'])
+        return SupplierInvoice::with(['supplier', 'items', 'payoutAllocations', 'debitNotes'])
             ->when($this->search, function ($q) {
                 $q->where('supplier_invoice_no', 'like', "%{$this->search}%")
                     ->orWhereHas('supplier', fn ($q) => $q->where('company_name', 'like', "%{$this->search}%"));
@@ -211,6 +217,7 @@ new #[Title('Supplier Invoices')] class extends Component {
                             <x-ui.sortable-header column="net_total" align="right" :state="$this->sortStateFor('net_total')">Net (£)</x-ui.sortable-header>
                             <x-ui.sortable-header column="vat_total" align="right" :state="$this->sortStateFor('vat_total')">VAT (£)</x-ui.sortable-header>
                             <x-ui.sortable-header column="gross_total" align="right" :state="$this->sortStateFor('gross_total')">Gross (£)</x-ui.sortable-header>
+                            <x-ui.sortable-header column="paid_status" align="center" :state="$this->sortStateFor('paid_status')">Status</x-ui.sortable-header>
                             <th class="px-4 py-1"></th>
                         </tr>
                     </thead>
@@ -249,6 +256,9 @@ new #[Title('Supplier Invoices')] class extends Component {
                                 </td>
                                 <td class="px-4 py-2 text-right font-mono text-zinc-900 dark:text-white">
                                     {{ number_format($invoice->grossTotal, 2) }}
+                                </td>
+                                <td class="px-4 py-2 text-center">
+                                    <x-ui.payment-status-badge :status="$invoice->paymentStatus()" />
                                 </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">

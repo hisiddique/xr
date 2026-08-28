@@ -120,6 +120,9 @@ test('pdf export exceeding the row cap is rejected without creating a job', func
                     'net' => 1.0,
                     'vat' => 0.0,
                     'gross' => 1.0,
+                    'debit_note_ref' => '',
+                    'deductions' => 0.0,
+                    'net_payable' => 1.0,
                     'paid_status' => 'unpaid',
                 ]),
             ]];

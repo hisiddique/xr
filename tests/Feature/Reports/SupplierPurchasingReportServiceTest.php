@@ -232,18 +232,54 @@ test('buildExportData returns the documented shape', function () {
     expect($results[0]['reference'])->toBe((string) $supplier->reference);
 
     $invoiceRow = $results[0]['invoices'][0];
-    expect($invoiceRow)->toHaveKeys(['invoice_date', 'supplier_invoice_no', 'supplier_ref_invoice_no', 'net', 'vat', 'gross', 'paid_status']);
+    expect($invoiceRow)->toHaveKeys(['invoice_date', 'supplier_invoice_no', 'supplier_ref_invoice_no', 'net', 'vat', 'gross', 'debit_note_ref', 'deductions', 'net_payable', 'paid_status']);
     expect($invoiceRow['supplier_invoice_no'])->toBe($invoice->supplier_invoice_no);
     expect($invoiceRow['supplier_ref_invoice_no'])->toBe('SREF-1');
     expect($invoiceRow['net'])->toBe(50.0);
     expect($invoiceRow['vat'])->toBe(10.0);
     expect($invoiceRow['gross'])->toBe(60.0);
+    expect($invoiceRow['debit_note_ref'])->toBe('');
+    expect($invoiceRow['deductions'])->toBe(0.0);
+    expect($invoiceRow['net_payable'])->toBe(60.0);
     expect($invoiceRow['paid_status'])->toBe('unpaid');
 });
 
-test('writeCsvToPath and writeXlsxToPath produce rows aligned under the 9 export headings', function () {
+test('buildExportData surfaces applied debit-note deductions and net payable', function () {
+    $supplier = Supplier::factory()->create();
+    $invoice = makeSupplierPurchasingTestInvoice($supplier, 100, vatApplicable: true); // gross 120
+
+    $debitNote = SupplierDebitNote::create([
+        'supplier_id' => $supplier->id,
+        'doc_date' => now(),
+        'subtotal' => 20,
+        'vat_amount' => 0,
+        'total' => 20,
+        'status' => SupplierDebitNoteStatus::Committed,
+    ]);
+    $invoice->debitNotes()->attach($debitNote->id, ['applied_amount' => 20, 'applied_at' => now()]);
+
+    $service = app(SupplierPurchasingReportService::class);
+    $row = $service->buildExportData([])[0]['invoices'][0];
+
+    expect($row['debit_note_ref'])->toBe($debitNote->reference);
+    expect($row['deductions'])->toBe(20.0);
+    expect($row['gross'])->toBe(120.0);
+    expect($row['net_payable'])->toBe(100.0);
+});
+
+test('writeCsvToPath and writeXlsxToPath produce rows aligned under the export headings', function () {
     $supplier = Supplier::factory()->create(['company_name' => 'Aligned Co', 'reference' => 'REF-1']);
     $invoice = makeSupplierPurchasingTestInvoice($supplier, 50, vatApplicable: true);
+
+    $debitNote = SupplierDebitNote::create([
+        'supplier_id' => $supplier->id,
+        'doc_date' => now(),
+        'subtotal' => 15,
+        'vat_amount' => 0,
+        'total' => 15,
+        'status' => SupplierDebitNoteStatus::Committed,
+    ]);
+    $invoice->debitNotes()->attach($debitNote->id, ['applied_amount' => 15, 'applied_at' => now()]);
 
     $service = app(SupplierPurchasingReportService::class);
 
@@ -255,16 +291,22 @@ test('writeCsvToPath and writeXlsxToPath produce rows aligned under the 9 export
         $records = Reader::createFromPath($csvPath)->getRecords();
         $rows = iterator_to_array($records, false);
 
-        expect($rows[0])->toBe(['Supplier', 'Reference', 'Date', 'Supplier Invoice No', 'Invoice', 'Net', 'VAT', 'Gross', 'Status']);
-        expect(count($rows[1]))->toBe(9);
+        expect($rows[0])->toBe(['Supplier', 'Reference', 'Date', 'Supplier Invoice No', 'Invoice', 'Net', 'VAT', 'Gross', 'Debit Note', 'Deductions', 'Net Payable', 'Status']);
+        expect(count($rows[1]))->toBe(12);
         expect($rows[1][0])->toBe('Aligned Co');
         expect($rows[1][1])->toBe('REF-1');
         expect($rows[1][3])->toBe($invoice->supplier_invoice_no);
         expect($rows[1][5])->toBe('50.00');
         expect($rows[1][6])->toBe('10.00');
         expect($rows[1][7])->toBe('60.00');
-        expect(count($rows[2]))->toBe(9);
+        expect($rows[1][8])->toBe($debitNote->reference);
+        expect($rows[1][9])->toBe('-15.00');
+        expect($rows[1][10])->toBe('45.00');
+        expect($rows[1][11])->toBe('Partial');
+        expect(count($rows[2]))->toBe(12);
         expect($rows[2][7])->toBe('60.00');
+        expect($rows[2][9])->toBe('-15.00');
+        expect($rows[2][10])->toBe('45.00');
 
         $service->writeXlsxToPath($xlsxPath, $service->exportChunks([]));
         $reader = new OpenSpout\Reader\XLSX\Reader;
@@ -277,22 +319,34 @@ test('writeCsvToPath and writeXlsxToPath produce rows aligned under the 9 export
         }
         $reader->close();
 
-        expect($xlsxRows[0])->toBe(['Supplier', 'Reference', 'Date', 'Supplier Invoice No', 'Invoice', 'Net', 'VAT', 'Gross', 'Status']);
-        expect(count($xlsxRows[1]))->toBe(9);
+        expect($xlsxRows[0])->toBe(['Supplier', 'Reference', 'Date', 'Supplier Invoice No', 'Invoice', 'Net', 'VAT', 'Gross', 'Debit Note', 'Deductions', 'Net Payable', 'Status']);
+        expect(count($xlsxRows[1]))->toBe(12);
         expect($xlsxRows[1][0])->toBe('Aligned Co');
         expect($xlsxRows[1][3])->toBe($invoice->supplier_invoice_no);
         expect($xlsxRows[1][7])->toBe('60.00');
+        expect($xlsxRows[1][9])->toBe('-15.00');
+        expect($xlsxRows[1][10])->toBe('45.00');
     } finally {
         @unlink($csvPath);
         @unlink($xlsxPath);
     }
 });
 
-test('summary aggregates invoiceCount, totalNet, totalVat and totalGross across filtered posted invoices', function () {
+test('summary aggregates invoiceCount, totals, deductions and net payable across filtered posted invoices', function () {
     $supplier = Supplier::factory()->create();
-    makeSupplierPurchasingTestInvoice($supplier, 100, vatApplicable: true);
+    $withDebit = makeSupplierPurchasingTestInvoice($supplier, 100, vatApplicable: true);
     makeSupplierPurchasingTestInvoice($supplier, 50, vatApplicable: false);
     makeSupplierPurchasingTestInvoice($supplier, 999, status: 'draft');
+
+    $debitNote = SupplierDebitNote::create([
+        'supplier_id' => $supplier->id,
+        'doc_date' => now(),
+        'subtotal' => 30,
+        'vat_amount' => 0,
+        'total' => 30,
+        'status' => SupplierDebitNoteStatus::Committed,
+    ]);
+    $withDebit->debitNotes()->attach($debitNote->id, ['applied_amount' => 30, 'applied_at' => now()]);
 
     $service = app(SupplierPurchasingReportService::class);
     $summary = $service->summary([]);
@@ -301,4 +355,30 @@ test('summary aggregates invoiceCount, totalNet, totalVat and totalGross across 
     expect($summary['totalNet'])->toBe(150.0);
     expect($summary['totalVat'])->toBe(20.0);
     expect($summary['totalGross'])->toBe(170.0);
+    expect($summary['totalDeductions'])->toBe(30.0);
+    expect($summary['totalNetPayable'])->toBe(140.0);
+});
+
+test('summary totalNetPayable clamps per invoice so it equals the sum of row net payables', function () {
+    $supplier = Supplier::factory()->create();
+    $overDeducted = makeSupplierPurchasingTestInvoice($supplier, 100); // gross 100, no vat
+    makeSupplierPurchasingTestInvoice($supplier, 100); // gross 100
+
+    // Debit note larger than the invoice gross — excess must not bleed into the other invoice.
+    $debitNote = SupplierDebitNote::create([
+        'supplier_id' => $supplier->id,
+        'doc_date' => now(),
+        'subtotal' => 150,
+        'vat_amount' => 0,
+        'total' => 150,
+        'status' => SupplierDebitNoteStatus::Committed,
+    ]);
+    $overDeducted->debitNotes()->attach($debitNote->id, ['applied_amount' => 150, 'applied_at' => now()]);
+
+    $service = app(SupplierPurchasingReportService::class);
+
+    $rowNetPayableSum = array_sum(array_column($service->buildExportData([])[0]['invoices'], 'net_payable'));
+
+    expect($service->summary([])['totalNetPayable'])->toBe($rowNetPayableSum)
+        ->and($rowNetPayableSum)->toBe(100.0); // 0 (clamped) + 100, not max(0, 200 - 150) = 50
 });
