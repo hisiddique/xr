@@ -89,6 +89,7 @@ new #[Title('Supplier Debit Notes')] class extends Component {
             ->when($this->search, fn ($q) => $q->where(fn ($q2) =>
                 $q2->where('reference', 'like', '%'.$this->search.'%')
                    ->orWhereHas('supplier', fn ($s) => $s->where('company_name', 'like', '%'.$this->search.'%'))
+                   ->orWhereHas('supplierInvoice', fn ($i) => $i->where('supplier_ref_invoice_no', 'like', '%'.$this->search.'%'))
             ))
             ->when($this->dateFrom, fn ($q) => $q->whereDate('doc_date', '>=', $this->dateFrom))
             ->when($this->dateTo, fn ($q) => $q->whereDate('doc_date', '<=', $this->dateTo))
@@ -121,7 +122,7 @@ new #[Title('Supplier Debit Notes')] class extends Component {
                     data-search-input
                     autocomplete="off"
                     icon="magnifying-glass"
-                    :placeholder="__('Search by reference or supplier…')"
+                    :placeholder="__('Search by reference, supplier or invoice ref…')"
                     clearable
                 />
             </div>

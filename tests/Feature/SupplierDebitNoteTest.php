@@ -159,6 +159,43 @@ test('deleting a debit note from the index page does not error', function () {
     expect(SupplierDebitNote::find($note->id))->toBeNull();
 });
 
+test('index search matches the linked supplier invoice ref no', function () {
+    $supplier = Supplier::factory()->create();
+
+    $matchingInvoice = SupplierInvoice::factory()->create([
+        'supplier_id' => $supplier->id,
+        'supplier_ref_invoice_no' => 'REF-XYZ-999',
+    ]);
+    $otherInvoice = SupplierInvoice::factory()->create([
+        'supplier_id' => $supplier->id,
+        'supplier_ref_invoice_no' => 'REF-ABC-111',
+    ]);
+
+    $matchingNote = SupplierDebitNote::create([
+        'supplier_id' => $supplier->id,
+        'supplier_invoice_id' => $matchingInvoice->id,
+        'doc_date' => now(),
+        'status' => SupplierDebitNoteStatus::Committed,
+        'subtotal' => 100,
+        'total' => 100,
+        'created_by' => $this->user->id,
+    ]);
+    $otherNote = SupplierDebitNote::create([
+        'supplier_id' => $supplier->id,
+        'supplier_invoice_id' => $otherInvoice->id,
+        'doc_date' => now(),
+        'status' => SupplierDebitNoteStatus::Committed,
+        'subtotal' => 100,
+        'total' => 100,
+        'created_by' => $this->user->id,
+    ]);
+
+    Livewire::test('pages::supplier-debit-notes.index')
+        ->set('search', 'REF-XYZ-999')
+        ->assertSee($matchingNote->reference)
+        ->assertDontSee($otherNote->reference);
+});
+
 test('deleting a debit note from the show page does not error', function () {
     $supplier = Supplier::factory()->create();
 
