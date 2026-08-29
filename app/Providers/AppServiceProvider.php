@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Database\Connectors\DblibSqlServerConnector;
+use App\Models\Role;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Connection;
@@ -56,6 +57,14 @@ class AppServiceProvider extends ServiceProvider
     protected function configureGates(): void
     {
         Gate::define('admin', fn (User $user): bool => $user->isAdmin());
+
+        Gate::before(function (User $user, string $ability): ?bool {
+            return $user->hasRole('sysadmin') ? true : null;
+        });
+
+        foreach (Role::allPermissionKeys() as $key) {
+            Gate::define($key, fn (User $user): bool => $user->hasPermission($key));
+        }
     }
 
     protected function configureDefaults(): void

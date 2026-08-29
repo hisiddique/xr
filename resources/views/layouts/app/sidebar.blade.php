@@ -124,6 +124,7 @@
                                     <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-auto rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F9</kbd>
                                 </a>
                             </li>
+                            @can('customer-index')
                             <li>
                                 <a
                                     href="{{ route('customers.index') }}"
@@ -139,6 +140,8 @@
                                     <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-auto rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F4</kbd>
                                 </a>
                             </li>
+                            @endcan
+                            @can('supplier-index')
                             <li>
                                 <a
                                     href="{{ route('suppliers.index') }}"
@@ -153,6 +156,8 @@
                                     <span class="flex-1">Suppliers</span>
                                 </a>
                             </li>
+                            @endcan
+                            @can('deliverynote-index')
                             <li>
                                 <a
                                     href="{{ route('delivery-notes.index') }}"
@@ -168,6 +173,8 @@
                                     <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-auto rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F5</kbd>
                                 </a>
                             </li>
+                            @endcan
+                            @can('invoice-index')
                             <li>
                                 <a
                                     href="{{ route('invoices.index') }}"
@@ -183,6 +190,8 @@
                                     <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-auto rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F6</kbd>
                                 </a>
                             </li>
+                            @endcan
+                            @can('payment-index')
                             <li>
                                 <a
                                     href="{{ route('payments.index') }}"
@@ -198,6 +207,7 @@
                                     <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-auto rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F7</kbd>
                                 </a>
                             </li>
+                            @endcan
                         </ul>
                     </div>
 
@@ -206,6 +216,7 @@
                         <div>
                             <p class="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Admin</p>
                             <ul class="space-y-0.5">
+                                @canany(['referencedata-titles', 'referencedata-creditTerms', 'referencedata-creditLimits', 'referencedata-units', 'referencedata-paymentMethods'])
                                 <li x-data="{ open: {{ request()->routeIs('reference-data.*') ? 'true' : 'false' }} }">
                                     <button
                                         type="button"
@@ -227,6 +238,7 @@
                                         </svg>
                                     </button>
                                     <ul x-show="open" x-collapse class="mt-0.5 space-y-0.5">
+                                        @can('referencedata-titles')
                                         <li>
                                             <a
                                                 href="{{ route('reference-data.titles') }}"
@@ -240,6 +252,8 @@
                                                 Titles
                                             </a>
                                         </li>
+                                        @endcan
+                                        @can('referencedata-creditTerms')
                                         <li>
                                             <a
                                                 href="{{ route('reference-data.credit-terms') }}"
@@ -253,6 +267,8 @@
                                                 Credit Terms
                                             </a>
                                         </li>
+                                        @endcan
+                                        @can('referencedata-creditLimits')
                                         <li>
                                             <a
                                                 href="{{ route('reference-data.credit-limits') }}"
@@ -266,6 +282,8 @@
                                                 Credit Limits
                                             </a>
                                         </li>
+                                        @endcan
+                                        @can('referencedata-units')
                                         <li>
                                             <a
                                                 href="{{ route('reference-data.units') }}"
@@ -279,6 +297,8 @@
                                                 Units
                                             </a>
                                         </li>
+                                        @endcan
+                                        @can('referencedata-paymentMethods')
                                         <li>
                                             <a
                                                 href="{{ route('reference-data.payment-methods') }}"
@@ -292,8 +312,11 @@
                                                 Payment Methods
                                             </a>
                                         </li>
+                                        @endcan
                                     </ul>
                                 </li>
+                                @endcanany
+                                @can('user-index')
                                 <li>
                                     <a
                                         href="{{ route('users.index') }}"
@@ -308,6 +331,8 @@
                                         <span class="flex-1">Users</span>
                                     </a>
                                 </li>
+                                @endcan
+                                @can('settings-crm')
                                 <li>
                                     <a
                                         href="{{ route('settings.crm') }}"
@@ -323,6 +348,7 @@
                                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-auto rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F11</kbd>
                                     </a>
                                 </li>
+                                @endcan
                             </ul>
                         </div>
                     @endif

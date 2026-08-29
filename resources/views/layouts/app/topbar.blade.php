@@ -30,6 +30,7 @@
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 font-mono text-[10px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F9</kbd>
                     </a>
 
+                    @canany(['customer-index', 'supplier-index'])
                     <flux:dropdown>
                         <button
                             type="button"
@@ -45,11 +46,17 @@
                             </svg>
                         </button>
                         <flux:menu>
+                            @can('customer-index')
                             <flux:menu.item :href="route('customers.index')" icon="user-group" wire:navigate>Customers</flux:menu.item>
+                            @endcan
+                            @can('supplier-index')
                             <flux:menu.item :href="route('suppliers.index')" icon="building-office" wire:navigate>Suppliers</flux:menu.item>
+                            @endcan
                         </flux:menu>
                     </flux:dropdown>
+                    @endcanany
 
+                    @can('deliverynote-index')
                     <a
                         href="{{ route('delivery-notes.index') }}"
                         wire:navigate
@@ -62,7 +69,9 @@
                         Delivery Notes
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 font-mono text-[10px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F5</kbd>
                     </a>
+                    @endcan
 
+                    @can('export-index')
                     <a
                         href="{{ route('exports.index') }}"
                         wire:navigate
@@ -74,7 +83,9 @@
                     >
                         Exports
                     </a>
+                    @endcan
 
+                    @canany(['invoice-index', 'creditnote-index', 'payment-index', 'documentsearch-index', 'supplierinvoice-index', 'supplierdebitnote-index', 'supplierpayout-index', 'overhead-index'])
                     <flux:dropdown>
                         <button
                             type="button"
@@ -90,31 +101,53 @@
                             </svg>
                         </button>
                         <flux:menu>
+                            @canany(['invoice-index', 'creditnote-index', 'payment-index', 'documentsearch-index'])
                             <div class="flex items-center gap-1.5 px-2 pb-1.5 pt-2 text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
                                 <flux:icon.user-group variant="micro" />
                                 Customers
                             </div>
+                            @endcanany
+                            @can('invoice-index')
                             <flux:menu.item :href="route('invoices.index')" icon="document-text" wire:navigate>Invoices</flux:menu.item>
+                            @endcan
+                            @can('creditnote-index')
                             <flux:menu.item :href="route('credit-notes.index')" icon="receipt-refund" wire:navigate>Credit Notes</flux:menu.item>
+                            @endcan
+                            @can('payment-index')
                             <flux:menu.item :href="route('payments.index')" icon="credit-card" wire:navigate>Payments</flux:menu.item>
+                            @endcan
+                            @can('documentsearch-index')
                             <flux:menu.item :href="route('document-search.index')" icon="magnifying-glass" wire:navigate>Document Search</flux:menu.item>
+                            @endcan
 
+                            @canany(['supplierinvoice-index', 'supplierdebitnote-index', 'supplierpayout-index'])
                             <div class="mt-1.5 flex items-center gap-1.5 border-t border-zinc-200/70 px-2 pb-1.5 pt-2.5 text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:border-white/10 dark:text-emerald-400">
                                 <flux:icon.building-office variant="micro" />
                                 Suppliers
                             </div>
+                            @endcanany
+                            @can('supplierinvoice-index')
                             <flux:menu.item :href="route('supplier-invoices.index')" icon="receipt-percent" wire:navigate>Supplier Invoices</flux:menu.item>
+                            @endcan
+                            @can('supplierdebitnote-index')
                             <flux:menu.item :href="route('supplier-debit-notes.index')" icon="minus-circle" wire:navigate>Supplier Debit Notes</flux:menu.item>
+                            @endcan
+                            @can('supplierpayout-index')
                             <flux:menu.item :href="route('supplier-payouts.index')" icon="banknotes" wire:navigate>Supplier Payouts</flux:menu.item>
+                            @endcan
 
+                            @can('overhead-index')
                             <div class="mt-1.5 flex items-center gap-1.5 border-t border-zinc-200/70 px-2 pb-1.5 pt-2.5 text-xs font-semibold uppercase tracking-wide text-amber-600 dark:border-white/10 dark:text-amber-400">
                                 <flux:icon.wallet variant="micro" />
                                 Expenses
                             </div>
                             <flux:menu.item :href="route('overheads.index')" icon="arrow-trending-up" wire:navigate>Overheads</flux:menu.item>
+                            @endcan
                         </flux:menu>
                     </flux:dropdown>
+                    @endcanany
 
+                    @canany(['report-supplierPurchasing', 'report-overheads', 'report-customerOutstandingPayments'])
                     <flux:dropdown>
                         <button
                             type="button"
@@ -130,29 +163,37 @@
                             </svg>
                         </button>
                         <flux:menu>
+                            @can('report-supplierPurchasing')
                             <flux:menu.item :href="route('reports.supplier-purchasing')" wire:navigate>
                                 <x-slot:icon>
                                     <flux:icon icon="chart-bar" variant="mini" class="me-2 text-emerald-600 dark:text-emerald-400" />
                                 </x-slot:icon>
                                 Supplier Purchasing
                             </flux:menu.item>
+                            @endcan
+                            @can('report-overheads')
                             <flux:menu.item :href="route('reports.overheads')" wire:navigate>
                                 <x-slot:icon>
                                     <flux:icon icon="chart-pie" variant="mini" class="me-2 text-amber-600 dark:text-amber-400" />
                                 </x-slot:icon>
                                 Overhead Report
                             </flux:menu.item>
+                            @endcan
+                            @can('report-customerOutstandingPayments')
                             <flux:menu.item :href="route('reports.customer-outstanding-payments')" wire:navigate>
                                 <x-slot:icon>
                                     <flux:icon icon="banknotes" variant="mini" class="me-2 text-indigo-600 dark:text-indigo-400" />
                                 </x-slot:icon>
                                 Customer Outstanding
                             </flux:menu.item>
+                            @endcan
                         </flux:menu>
                     </flux:dropdown>
+                    @endcanany
 
                     @if(auth()->user()?->isAdmin())
                         {{-- Reference Data dropdown --}}
+                        @canany(['referencedata-titles', 'referencedata-creditTerms', 'referencedata-creditLimits', 'referencedata-units', 'referencedata-paymentMethods', 'referencedata-expenseCategories', 'referencedata-customerCategories', 'referencedata-revenueTypes'])
                         <flux:dropdown>
                             <button
                                 type="button"
@@ -168,18 +209,38 @@
                                 </svg>
                             </button>
                             <flux:menu>
+                                @can('referencedata-titles')
                                 <flux:menu.item :href="route('reference-data.titles')" icon="tag" wire:navigate>Titles</flux:menu.item>
+                                @endcan
+                                @can('referencedata-creditTerms')
                                 <flux:menu.item :href="route('reference-data.credit-terms')" icon="calendar-days" wire:navigate>Credit Terms</flux:menu.item>
+                                @endcan
+                                @can('referencedata-creditLimits')
                                 <flux:menu.item :href="route('reference-data.credit-limits')" icon="shield-check" wire:navigate>Credit Limits</flux:menu.item>
+                                @endcan
+                                @can('referencedata-units')
                                 <flux:menu.item :href="route('reference-data.units')" icon="scale" wire:navigate>Units</flux:menu.item>
+                                @endcan
+                                @can('referencedata-paymentMethods')
                                 <flux:menu.item :href="route('reference-data.payment-methods')" icon="wallet" wire:navigate>Payment Methods</flux:menu.item>
+                                @endcan
+                                @can('referencedata-expenseCategories')
                                 <flux:menu.item :href="route('reference-data.expense-categories')" icon="rectangle-stack" wire:navigate>Expense Categories</flux:menu.item>
+                                @endcan
+                                @can('referencedata-customerCategories')
                                 <flux:menu.item :href="route('reference-data.customer-categories')" icon="tag" wire:navigate>Customer Categories</flux:menu.item>
+                                @endcan
+                                @can('referencedata-revenueTypes')
                                 <flux:menu.item :href="route('reference-data.revenue-types')" icon="banknotes" wire:navigate>Revenue Types</flux:menu.item>
+                                @endcan
+                                @can('settings-legacyMigration')
                                 <flux:menu.item :href="route('settings.legacy-migration')" icon="circle-stack" wire:navigate>Legacy Migration</flux:menu.item>
+                                @endcan
                             </flux:menu>
                         </flux:dropdown>
+                        @endcanany
 
+                        @can('user-index')
                         <a
                             href="{{ route('users.index') }}"
                             wire:navigate
@@ -191,7 +252,9 @@
                         >
                             Users
                         </a>
+                        @endcan
 
+                        @can('settings-crm')
                         <a
                             href="{{ route('settings.crm') }}"
                             wire:navigate
@@ -204,6 +267,7 @@
                             Settings
                             <kbd x-show="$store.hotkeys.showLabels" x-cloak class="rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 font-mono text-[10px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F11</kbd>
                         </a>
+                        @endcan
                     @endif
                 </nav>
 
@@ -336,6 +400,7 @@
                                 Dashboard
                             </a>
                         </li>
+                        @can('customer-index')
                         <li>
                             <a
                                 href="{{ route('customers.index') }}"
@@ -350,6 +415,8 @@
                                 Customers
                             </a>
                         </li>
+                        @endcan
+                        @can('supplier-index')
                         <li>
                             <a
                                 href="{{ route('suppliers.index') }}"
@@ -364,6 +431,8 @@
                                 Suppliers
                             </a>
                         </li>
+                        @endcan
+                        @can('deliverynote-index')
                         <li>
                             <a
                                 href="{{ route('delivery-notes.index') }}"
@@ -378,6 +447,8 @@
                                 Delivery Notes
                             </a>
                         </li>
+                        @endcan
+                        @can('export-index')
                         <li>
                             <a
                                 href="{{ route('exports.index') }}"
@@ -392,6 +463,8 @@
                                 Exports
                             </a>
                         </li>
+                        @endcan
+                        @can('report-overheads')
                         <li>
                             <a
                                 href="{{ route('reports.overheads') }}"
@@ -406,6 +479,8 @@
                                 Overhead Report
                             </a>
                         </li>
+                        @endcan
+                        @can('report-supplierPurchasing')
                         <li>
                             <a
                                 href="{{ route('reports.supplier-purchasing') }}"
@@ -420,6 +495,8 @@
                                 Supplier Purchasing
                             </a>
                         </li>
+                        @endcan
+                        @can('report-customerOutstandingPayments')
                         <li>
                             <a
                                 href="{{ route('reports.customer-outstanding-payments') }}"
@@ -434,6 +511,8 @@
                                 Customer Outstanding
                             </a>
                         </li>
+                        @endcan
+                        @can('overhead-index')
                         <li>
                             <a
                                 href="{{ route('overheads.index') }}"
@@ -448,6 +527,8 @@
                                 Overheads
                             </a>
                         </li>
+                        @endcan
+                        @can('invoice-index')
                         <li>
                             <a
                                 href="{{ route('invoices.index') }}"
@@ -462,6 +543,8 @@
                                 Invoices
                             </a>
                         </li>
+                        @endcan
+                        @can('creditnote-index')
                         <li>
                             <a
                                 href="{{ route('credit-notes.index') }}"
@@ -476,6 +559,8 @@
                                 Credit Notes
                             </a>
                         </li>
+                        @endcan
+                        @can('payment-index')
                         <li>
                             <a
                                 href="{{ route('payments.index') }}"
@@ -490,6 +575,8 @@
                                 Payments
                             </a>
                         </li>
+                        @endcan
+                        @can('documentsearch-index')
                         <li>
                             <a
                                 href="{{ route('document-search.index') }}"
@@ -504,6 +591,8 @@
                                 Document Search
                             </a>
                         </li>
+                        @endcan
+                        @can('supplierinvoice-index')
                         <li>
                             <a
                                 href="{{ route('supplier-invoices.index') }}"
@@ -518,6 +607,8 @@
                                 Supplier Invoices
                             </a>
                         </li>
+                        @endcan
+                        @can('supplierdebitnote-index')
                         <li>
                             <a
                                 href="{{ route('supplier-debit-notes.index') }}"
@@ -532,6 +623,8 @@
                                 Supplier Debit Notes
                             </a>
                         </li>
+                        @endcan
+                        @can('supplierpayout-index')
                         <li>
                             <a
                                 href="{{ route('supplier-payouts.index') }}"
@@ -546,11 +639,13 @@
                                 Supplier Payouts
                             </a>
                         </li>
+                        @endcan
 
                         @if(auth()->user()?->isAdmin())
                             <li class="pt-2">
                                 <p class="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Admin</p>
                             </li>
+                            @can('referencedata-titles')
                             <li>
                                 <a
                                     href="{{ route('reference-data.titles') }}"
@@ -565,6 +660,8 @@
                                     Titles
                                 </a>
                             </li>
+                            @endcan
+                            @can('referencedata-creditTerms')
                             <li>
                                 <a
                                     href="{{ route('reference-data.credit-terms') }}"
@@ -579,6 +676,8 @@
                                     Credit Terms
                                 </a>
                             </li>
+                            @endcan
+                            @can('referencedata-creditLimits')
                             <li>
                                 <a
                                     href="{{ route('reference-data.credit-limits') }}"
@@ -593,6 +692,8 @@
                                     Credit Limits
                                 </a>
                             </li>
+                            @endcan
+                            @can('referencedata-units')
                             <li>
                                 <a
                                     href="{{ route('reference-data.units') }}"
@@ -607,6 +708,8 @@
                                     Units
                                 </a>
                             </li>
+                            @endcan
+                            @can('referencedata-paymentMethods')
                             <li>
                                 <a
                                     href="{{ route('reference-data.payment-methods') }}"
@@ -621,6 +724,8 @@
                                     Payment Methods
                                 </a>
                             </li>
+                            @endcan
+                            @can('referencedata-expenseCategories')
                             <li>
                                 <a
                                     href="{{ route('reference-data.expense-categories') }}"
@@ -635,6 +740,8 @@
                                     Expense Categories
                                 </a>
                             </li>
+                            @endcan
+                            @can('referencedata-customerCategories')
                             <li>
                                 <a
                                     href="{{ route('reference-data.customer-categories') }}"
@@ -649,6 +756,8 @@
                                     Customer Categories
                                 </a>
                             </li>
+                            @endcan
+                            @can('referencedata-revenueTypes')
                             <li>
                                 <a
                                     href="{{ route('reference-data.revenue-types') }}"
@@ -663,6 +772,8 @@
                                     Revenue Types
                                 </a>
                             </li>
+                            @endcan
+                            @can('settings-legacyMigration')
                             <li>
                                 <a
                                     href="{{ route('settings.legacy-migration') }}"
@@ -677,6 +788,8 @@
                                     Legacy Migration
                                 </a>
                             </li>
+                            @endcan
+                            @can('user-index')
                             <li>
                                 <a
                                     href="{{ route('users.index') }}"
@@ -691,6 +804,8 @@
                                     Users
                                 </a>
                             </li>
+                            @endcan
+                            @can('settings-crm')
                             <li>
                                 <a
                                     href="{{ route('settings.crm') }}"
@@ -705,6 +820,7 @@
                                     Settings
                                 </a>
                             </li>
+                            @endcan
                         @endif
                     </ul>
                 </nav>

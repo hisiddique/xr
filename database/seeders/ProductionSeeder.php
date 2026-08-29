@@ -40,6 +40,7 @@ class ProductionSeeder extends Seeder
         );
 
         $this->call([
+            RolePermissionSeeder::class,
             SettingSeeder::class,
             LookupTitleSeeder::class,
             LookupCreditTermSeeder::class,

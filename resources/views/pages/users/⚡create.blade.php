@@ -1,10 +1,12 @@
 <?php
 
+use App\Models\Role;
 use App\Models\User;
 use App\UserRole;
 use Flux\Flux;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
@@ -19,6 +21,16 @@ new #[Title('New User')] class extends Component {
 
     public string $role = 'staff';
 
+    public array $roleIds = [];
+
+    #[Computed]
+    public function assignableRoles()
+    {
+        return Role::orderByDesc('is_system')->orderBy('name')->get()
+            ->reject(fn ($r) => $r->slug === 'sysadmin' && ! auth()->user()->hasRole('sysadmin'))
+            ->values();
+    }
+
     public function save(): void
     {
         $this->validate([
@@ -26,14 +38,18 @@ new #[Title('New User')] class extends Component {
             'email' => 'required|email|max:255|unique:users,email',
             'password' => ['required', 'confirmed', Password::defaults()],
             'role' => ['required', 'in:admin,staff'],
+            'roleIds' => 'array',
+            'roleIds.*' => 'integer|exists:roles,id',
         ]);
 
-        User::create([
+        $user = User::create([
             'name' => $this->name,
             'email' => strtolower($this->email),
             'password' => Hash::make($this->password),
             'role' => UserRole::from($this->role),
         ]);
+
+        $user->roles()->sync($this->roleIds);
 
         Flux::toast(variant: 'success', text: __('User :name created.', ['name' => $this->name]));
 
@@ -71,6 +87,22 @@ new #[Title('New User')] class extends Component {
                         <flux:select.option value="admin">{{ __('Admin') }}</flux:select.option>
                     </flux:select>
                     <flux:error name="role" />
+                </div>
+
+                <div>
+                    <flux:label>{{ __('Assigned Roles') }}</flux:label>
+                    <div class="mt-1.5 flex flex-col gap-1.5 rounded-lg border border-zinc-200/70 p-3 dark:border-white/10">
+                        @foreach($this->assignableRoles as $assignable)
+                            <label class="flex items-center gap-2 text-sm">
+                                <flux:checkbox wire:model="roleIds" value="{{ $assignable->id }}" />
+                                <span class="text-zinc-800 dark:text-zinc-200">{{ $assignable->name }}</span>
+                                @if($assignable->is_system)
+                                    <flux:badge size="sm" color="zinc">System</flux:badge>
+                                @endif
+                            </label>
+                        @endforeach
+                    </div>
+                    <flux:error name="roleIds" />
                 </div>
             </div>
         </div>

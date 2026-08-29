@@ -48,6 +48,11 @@ new #[Title('Users')] class extends Component {
         subtitle="Manage admin and staff accounts."
     >
         <x-slot:action>
+            @can('role-index')
+                <flux:button variant="ghost" icon="shield-check" :href="route('roles.index')" wire:navigate>
+                    Roles
+                </flux:button>
+            @endcan
             <flux:button variant="primary" icon="plus" :href="route('users.create')" wire:navigate>
                 New User
             </flux:button>

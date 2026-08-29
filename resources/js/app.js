@@ -315,7 +315,7 @@ document.addEventListener('alpine:init', () => {
             // ── '+' creates new on scoped list & show pages ──
             if (key === '+') {
                 const path = window.location.pathname;
-                const scopes = ['/customers', '/suppliers', '/delivery-notes', '/credit-notes', '/overheads', '/users', '/supplier-invoices', '/supplier-debit-notes'];
+                const scopes = ['/customers', '/suppliers', '/delivery-notes', '/credit-notes', '/overheads', '/users', '/roles', '/supplier-invoices', '/supplier-debit-notes'];
                 const scope = scopes.find((s) => path === s || new RegExp(`^${s}/\\d+$`).test(path));
                 if (scope) {
                     e.preventDefault();
@@ -1897,6 +1897,85 @@ document.addEventListener('alpine:init', () => {
             e.preventDefault();
             if (tag === 'SELECT' && e.target.hasAttribute('data-form-defer-advance')) return;
             this._advanceFocus(e.target);
+        },
+    }));
+
+    // ─── Role Permission Matrix Component ──────────────────────────
+    // Drives a permission checkbox grid (group → module → permission key).
+    // Toggles mutate a local Set only; one $wire sync + save on submit.
+    // Apply via `x-data="roleMatrix(@js($config))" x-on:submit.prevent="submit()"`.
+    window.Alpine.data('roleMatrix', (config = {}) => ({
+        catalog: config.catalog || [],
+        locked: !!config.locked,
+        selectedSet: new Set(),
+
+        init() {
+            this.selectedSet = new Set(config.selected || []);
+        },
+
+        isChecked(key) {
+            return this.selectedSet.has(key);
+        },
+
+        toggle(key) {
+            if (this.locked) return;
+            if (this.selectedSet.has(key)) {
+                this.selectedSet.delete(key);
+            } else {
+                this.selectedSet.add(key);
+            }
+            this.selectedSet = new Set(this.selectedSet);
+        },
+
+        _stateOf(keys) {
+            const inSet = keys.filter((k) => this.selectedSet.has(k)).length;
+            if (inSet === 0) return 'none';
+            if (inSet === keys.length) return 'all';
+            return 'some';
+        },
+
+        _setKeys(keys, add) {
+            keys.forEach((k) => {
+                if (add) {
+                    this.selectedSet.add(k);
+                } else {
+                    this.selectedSet.delete(k);
+                }
+            });
+            this.selectedSet = new Set(this.selectedSet);
+        },
+
+        moduleState(mod) {
+            return this._stateOf(mod.keys || []);
+        },
+
+        toggleModule(mod) {
+            if (this.locked) return;
+            const keys = mod.keys || [];
+            this._setKeys(keys, this._stateOf(keys) !== 'all');
+        },
+
+        _groupKeys(group) {
+            return (group.modules || []).flatMap((mod) => mod.keys || []);
+        },
+
+        groupState(group) {
+            return this._stateOf(this._groupKeys(group));
+        },
+
+        toggleGroup(group) {
+            if (this.locked) return;
+            const keys = this._groupKeys(group);
+            this._setKeys(keys, this._stateOf(keys) !== 'all');
+        },
+
+        count() {
+            return this.selectedSet.size;
+        },
+
+        submit() {
+            this.$wire.set('permissions', Array.from(this.selectedSet), false);
+            this.$wire.save();
         },
     }));
 
