@@ -27,6 +27,7 @@ class Payment extends Model
         'is_exhausted',
         'payment_date',
         'notes',
+        'reconciliation_batch',
         'receipt_path',
         'created_by',
         'created_at',
