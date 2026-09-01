@@ -23,6 +23,18 @@ new #[Title('Suppliers')] class extends Component {
         $this->resetPage();
     }
 
+    #[Url]
+    public array $filters = [
+        'reference' => '',
+        'company' => '',
+        'vat' => '',
+    ];
+
+    public function updatedFilters(): void
+    {
+        $this->resetPage();
+    }
+
     public int $perPage = 25;
 
     public function updatedPerPage(): void
@@ -31,12 +43,23 @@ new #[Title('Suppliers')] class extends Component {
     }
 
     #[Computed]
+    public function hasActiveFilter(): bool
+    {
+        return $this->search !== ''
+            || collect($this->filters)->filter(fn ($v) => $v !== '')->isNotEmpty();
+    }
+
+    #[Computed]
     public function suppliers()
     {
         $query = Supplier::query()
-            ->when($this->search, fn ($q) => $q->where('company_name', 'like', "%{$this->search}%")
-                ->orWhere('reference', 'like', "%{$this->search}%")
-            );
+            ->when($this->search, fn ($q) => $q->where(function ($sub) {
+                $sub->where('company_name', 'like', "%{$this->search}%")
+                    ->orWhere('reference', 'like', "%{$this->search}%");
+            }))
+            ->when($this->filters['reference'], fn ($q, $v) => $q->where('reference', 'like', "%{$v}%"))
+            ->when($this->filters['company'], fn ($q, $v) => $q->where('company_name', 'like', "%{$v}%"))
+            ->when($this->filters['vat'] !== '', fn ($q) => $q->where('vat_applied', (bool) $this->filters['vat']));
 
         return $this->sortColumn === ''
             ? $this->applySort($query)->latest('id')->paginate($this->perPage)
@@ -51,9 +74,11 @@ new #[Title('Suppliers')] class extends Component {
         subtitle="Manage your supplier accounts."
     >
         <x-slot:action>
+            @can('supplier-create')
             <flux:button variant="primary" icon="plus" :href="route('suppliers.create')" wire:navigate>
                 New Supplier
             </flux:button>
+            @endcan
         </x-slot:action>
     </x-ui.page-header>
 
@@ -78,19 +103,19 @@ new #[Title('Suppliers')] class extends Component {
     {{-- Table card --}}
     <div class="overflow-x-clip rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
 
-        @if($this->suppliers->isEmpty())
+        @if($this->suppliers->isEmpty() && ! $this->hasActiveFilter)
             <x-ui.empty-state
                 icon="building-office"
                 title="No suppliers found"
-                :description="$search ? 'Try a different search term.' : 'Get started by creating your first supplier.'"
+                description="Get started by creating your first supplier."
             >
-                @unless($search)
-                    <x-slot:action>
-                        <flux:button variant="primary" :href="route('suppliers.create')" wire:navigate>
-                            New Supplier
-                        </flux:button>
-                    </x-slot:action>
-                @endunless
+                <x-slot:action>
+                    @can('supplier-create')
+                    <flux:button variant="primary" :href="route('suppliers.create')" wire:navigate>
+                        New Supplier
+                    </flux:button>
+                    @endcan
+                </x-slot:action>
             </x-ui.empty-state>
         @else
             <div x-data="zoneNav('table')" data-zone="table" tabindex="-1" class="outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30">
@@ -103,14 +128,38 @@ new #[Title('Suppliers')] class extends Component {
                             <th class="px-4 py-1 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT Applied</th>
                             <th class="px-4 py-1"></th>
                         </tr>
+                        <tr>
+                            <th class="px-4 py-1"><x-ui.column-filter model="filters.reference" :placeholder="__('Filter…')" /></th>
+                            <th class="px-4 py-1"><x-ui.column-filter model="filters.company" :placeholder="__('Filter…')" /></th>
+                            <th class="px-4 py-1"></th>
+                            <th class="px-4 py-1">
+                                <x-ui.column-filter-select model="filters.vat">
+                                    <flux:select.option value="">{{ __('All') }}</flux:select.option>
+                                    <flux:select.option value="1">{{ __('Applied') }}</flux:select.option>
+                                    <flux:select.option value="0">{{ __('Not applied') }}</flux:select.option>
+                                </x-ui.column-filter-select>
+                            </th>
+                            <th class="px-4 py-1"></th>
+                        </tr>
                     </thead>
                     <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
+                        @if($this->suppliers->isEmpty())
+                        <tr>
+                            <td colspan="5">
+                                <x-ui.empty-state
+                                    icon="building-office"
+                                    title="No suppliers found"
+                                    description="Try a different search term."
+                                />
+                            </td>
+                        </tr>
+                        @endif
                         @foreach($this->suppliers as $supplier)
                             <tr
                                 data-row-index="{{ $loop->index }}"
-                                data-view-url="{{ route('suppliers.show', $supplier) }}"
-                                data-edit-url="{{ route('suppliers.edit', $supplier) }}"
-                                data-delete-modal="delete-supplier-{{ $supplier->id }}"
+                                @can('supplier-show') data-view-url="{{ route('suppliers.show', $supplier) }}" @endcan
+                                @can('supplier-edit') data-edit-url="{{ route('suppliers.edit', $supplier) }}" @endcan
+                                @can('supplier-delete') data-delete-modal="delete-supplier-{{ $supplier->id }}" @endcan
                                 @class([
                                     'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
                                     'sticky bottom-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_-1px_0_0_theme(--color-zinc-100)] dark:shadow-[0_-1px_0_0_theme(--color-white/0.06)]' => false && $loop->last, // sticky first/last row disabled
@@ -128,9 +177,15 @@ new #[Title('Suppliers')] class extends Component {
                                 <td class="px-4 py-2">
                                     <div class="flex items-center gap-3">
                                         <x-ui.avatar :name="$supplier->company_name" size="sm" />
+                                        @can('supplier-show')
                                         <a href="{{ route('suppliers.show', $supplier) }}" wire:navigate class="font-semibold text-zinc-900 hover:text-indigo-600 dark:text-white dark:hover:text-indigo-400 transition-colors">
                                             <x-ui.highlight :text="$supplier->company_name" :term="$search" />
                                         </a>
+                                        @else
+                                        <span class="font-semibold text-zinc-900 dark:text-white">
+                                            <x-ui.highlight :text="$supplier->company_name" :term="$search" />
+                                        </span>
+                                        @endcan
                                     </div>
                                 </td>
                                 <td class="px-4 py-2 text-zinc-600 dark:text-zinc-400">
@@ -178,9 +233,15 @@ new #[Title('Suppliers')] class extends Component {
                                             <flux:icon.banknotes class="h-3.5 w-3.5" />
                                             Payouts
                                         </a>
+                                        @can('supplier-show')
                                         <flux:button size="xs" variant="ghost" icon="eye" :href="route('suppliers.show', $supplier)" wire:navigate data-row-action="view" />
+                                        @endcan
+                                        @can('supplier-edit')
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('suppliers.edit', $supplier)" wire:navigate data-row-action="edit" />
+                                        @endcan
+                                        @can('supplier-delete')
                                         <livewire:pages::suppliers.delete-modal :supplier="$supplier" :key="'delete-'.$supplier->id" />
+                                        @endcan
                                     </div>
                                 </td>
                             </tr>
@@ -190,7 +251,9 @@ new #[Title('Suppliers')] class extends Component {
             </div>
 
             {{-- Footer: pagination --}}
-            <flux:pagination :paginator="$this->suppliers" class="px-6" />
+            @unless($this->suppliers->isEmpty())
+                <flux:pagination :paginator="$this->suppliers" class="px-6" />
+            @endunless
         @endif
     </div>
 

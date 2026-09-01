@@ -92,3 +92,46 @@ test('customer list can be searched by company name', function () {
     $component->assertSeeText('Alpha Corp')
         ->assertDontSeeText('Beta Ltd');
 });
+
+test('column filters narrow the customer list per column', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+    Customer::factory()->create(['company_name' => 'Northwind Trading', 'email_1' => 'ap@northwind.test']);
+    Customer::factory()->create(['company_name' => 'Northwind Logistics', 'email_1' => 'ap@nwlogistics.test']);
+
+    Livewire::actingAs($user)
+        ->test('pages::customers.index')
+        ->set('filters.company', 'Northwind')
+        ->assertSeeText('Northwind Trading')
+        ->assertSeeText('Northwind Logistics')
+        ->set('filters.email', 'nwlogistics')
+        ->assertDontSeeText('Northwind Trading')
+        ->assertSeeText('Northwind Logistics');
+});
+
+test('global search is ANDed with column filters, not ORed', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+    Customer::factory()->create(['company_name' => 'Acme Foods', 'reference' => 'REF-1000']);
+    Customer::factory()->create(['company_name' => 'Zenith Parts', 'reference' => 'REF-2000']);
+
+    Livewire::actingAs($user)
+        ->test('pages::customers.index')
+        ->set('search', 'Acme')
+        ->set('filters.reference', 'REF-2000')
+        ->assertDontSeeText('Acme Foods')
+        ->assertDontSeeText('Zenith Parts');
+});
+
+test('vat column filter narrows customers by registration status', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+    Customer::factory()->create(['company_name' => 'Registered Co', 'vat_registered' => true]);
+    Customer::factory()->create(['company_name' => 'Unregistered Co', 'vat_registered' => false]);
+
+    Livewire::actingAs($user)
+        ->test('pages::customers.index')
+        ->set('filters.vat', '1')
+        ->assertSeeText('Registered Co')
+        ->assertDontSeeText('Unregistered Co')
+        ->set('filters.vat', '0')
+        ->assertSeeText('Unregistered Co')
+        ->assertDontSeeText('Registered Co');
+});

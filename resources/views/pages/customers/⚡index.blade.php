@@ -23,6 +23,26 @@ new #[Title('Customers')] class extends Component {
         $this->resetPage();
     }
 
+    #[Url]
+    public array $filters = [
+        'reference' => '',
+        'company' => '',
+        'contact' => '',
+        'email' => '',
+        'vat' => '',
+    ];
+
+    public function updatedFilters(): void
+    {
+        $this->resetPage();
+    }
+
+    #[Computed]
+    public function hasActiveFilter(): bool
+    {
+        return $this->search !== '' || collect($this->filters)->filter(fn ($v) => $v !== '')->isNotEmpty();
+    }
+
     public int $perPage = 25;
 
     public function updatedPerPage(): void
@@ -34,10 +54,20 @@ new #[Title('Customers')] class extends Component {
     public function customers()
     {
         $query = Customer::query()
-            ->when($this->search, fn ($q) => $q->where('company_name', 'like', "%{$this->search}%")
-                ->orWhere('reference', 'like', "%{$this->search}%")
-                ->orWhere('email_1', 'like', "%{$this->search}%")
-            );
+            ->when($this->search, fn ($q) => $q->where(function ($sub) {
+                $sub->where('company_name', 'like', "%{$this->search}%")
+                    ->orWhere('reference', 'like', "%{$this->search}%")
+                    ->orWhere('email_1', 'like', "%{$this->search}%");
+            }))
+            ->when($this->filters['reference'], fn ($q, $v) => $q->where('reference', 'like', "%{$v}%"))
+            ->when($this->filters['company'], fn ($q, $v) => $q->where('company_name', 'like', "%{$v}%"))
+            ->when($this->filters['email'], fn ($q, $v) => $q->where('email_1', 'like', "%{$v}%"))
+            ->when($this->filters['contact'], fn ($q, $v) => $q->where(function ($sub) use ($v) {
+                $sub->where('first_name', 'like', "%{$v}%")
+                    ->orWhere('last_name', 'like', "%{$v}%")
+                    ->orWhereHas('title', fn ($t) => $t->where('name', 'like', "%{$v}%"));
+            }))
+            ->when($this->filters['vat'] !== '', fn ($q) => $q->where('vat_registered', (bool) $this->filters['vat']));
 
         return $this->sortColumn === ''
             ? $this->applySort($query)->latest('id')->paginate($this->perPage)
@@ -52,9 +82,11 @@ new #[Title('Customers')] class extends Component {
         subtitle="Manage companies and their trading terms."
     >
         <x-slot:action>
+            @can('customer-create')
             <flux:button variant="primary" icon="plus" :href="route('customers.create')" wire:navigate>
                 New Customer
             </flux:button>
+            @endcan
         </x-slot:action>
     </x-ui.page-header>
 
@@ -79,17 +111,19 @@ new #[Title('Customers')] class extends Component {
     {{-- Table card --}}
     <div class="overflow-x-clip rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
 
-        @if($this->customers->isEmpty())
+        @if($this->customers->isEmpty() && ! $this->hasActiveFilter)
             <x-ui.empty-state
                 icon="users"
                 title="No customers found"
-                :description="$search ? 'Try a different search term.' : 'Get started by creating your first customer.'"
+                description="Get started by creating your first customer."
             >
-                @unless($search)
+                @unless($this->hasActiveFilter)
                     <x-slot:action>
+                        @can('customer-create')
                         <flux:button variant="primary" :href="route('customers.create')" wire:navigate>
                             New Customer
                         </flux:button>
+                        @endcan
                     </x-slot:action>
                 @endunless
             </x-ui.empty-state>
@@ -105,14 +139,28 @@ new #[Title('Customers')] class extends Component {
                             <th class="px-4 py-1 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT</th>
                             <th class="px-4 py-1"></th>
                         </tr>
+                        <tr>
+                            <th class="px-4 py-1"><x-ui.column-filter model="filters.reference" :placeholder="__('Filter…')" /></th>
+                            <th class="px-4 py-1"><x-ui.column-filter model="filters.company" :placeholder="__('Filter…')" /></th>
+                            <th class="px-4 py-1"><x-ui.column-filter model="filters.contact" :placeholder="__('Filter…')" /></th>
+                            <th class="px-4 py-1"><x-ui.column-filter model="filters.email" :placeholder="__('Filter…')" /></th>
+                            <th class="px-4 py-1">
+                                <x-ui.column-filter-select model="filters.vat">
+                                    <flux:select.option value="">{{ __('All') }}</flux:select.option>
+                                    <flux:select.option value="1">{{ __('VAT reg.') }}</flux:select.option>
+                                    <flux:select.option value="0">{{ __('Not reg.') }}</flux:select.option>
+                                </x-ui.column-filter-select>
+                            </th>
+                            <th class="px-4 py-1"></th>
+                        </tr>
                     </thead>
                     <tbody class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
-                        @foreach($this->customers as $customer)
+                        @forelse($this->customers as $customer)
                             <tr
                                 data-row-index="{{ $loop->index }}"
-                                data-view-url="{{ route('customers.show', $customer) }}"
-                                data-edit-url="{{ route('customers.edit', $customer) }}"
-                                data-delete-modal="delete-customer-{{ $customer->id }}"
+                                @can('customer-show') data-view-url="{{ route('customers.show', $customer) }}" @endcan
+                                @can('customer-edit') data-edit-url="{{ route('customers.edit', $customer) }}" @endcan
+                                @can('customer-delete') data-delete-modal="delete-customer-{{ $customer->id }}" @endcan
                                 @class([
                                     'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
                                     'sticky bottom-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_-1px_0_0_theme(--color-zinc-100)] dark:shadow-[0_-1px_0_0_theme(--color-white/0.06)]' => false && $loop->last, // sticky first/last row disabled
@@ -130,9 +178,15 @@ new #[Title('Customers')] class extends Component {
                                 <td class="px-4 py-2">
                                     <div class="flex items-center gap-3">
                                         <x-ui.avatar :name="$customer->company_name" size="sm" />
+                                        @can('customer-show')
                                         <a href="{{ route('customers.show', $customer) }}" wire:navigate class="font-semibold text-zinc-900 hover:text-indigo-600 dark:text-white dark:hover:text-indigo-400 transition-colors">
                                             <x-ui.highlight :text="$customer->company_name" :term="$search" />
                                         </a>
+                                        @else
+                                        <span class="font-semibold text-zinc-900 dark:text-white">
+                                            <x-ui.highlight :text="$customer->company_name" :term="$search" />
+                                        </span>
+                                        @endcan
                                     </div>
                                 </td>
                                 <td class="px-6 py-4 text-zinc-600 dark:text-zinc-400">
@@ -148,19 +202,37 @@ new #[Title('Customers')] class extends Component {
                                 </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
+                                        @can('customer-show')
                                         <flux:button size="xs" variant="ghost" icon="eye" :href="route('customers.show', $customer)" wire:navigate data-row-action="view" />
+                                        @endcan
+                                        @can('customer-edit')
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('customers.edit', $customer)" wire:navigate data-row-action="edit" />
+                                        @endcan
+                                        @can('customer-delete')
                                         <livewire:pages::customers.delete-modal :customer="$customer" :key="'delete-'.$customer->id" />
+                                        @endcan
                                     </div>
                                 </td>
                             </tr>
-                        @endforeach
+                        @empty
+                            <tr>
+                                <td colspan="6" class="px-0 py-0">
+                                    <x-ui.empty-state
+                                        icon="users"
+                                        title="No customers found"
+                                        description="Try adjusting your filters or search term."
+                                    />
+                                </td>
+                            </tr>
+                        @endforelse
                     </tbody>
                 </table>
             </div>
 
             {{-- Footer: pagination --}}
-            <flux:pagination :paginator="$this->customers" class="px-6" />
+            @if($this->customers->isNotEmpty())
+                <flux:pagination :paginator="$this->customers" class="px-6" />
+            @endif
         @endif
     </div>
 
