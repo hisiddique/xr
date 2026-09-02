@@ -27,12 +27,16 @@ new #[Title('Overhead')] class extends Component {
                 <flux:button variant="ghost" icon="arrow-left" size="sm" :href="route('overheads.index')" wire:navigate>
                     Back
                 </flux:button>
+                @can('overhead-edit')
                 <flux:button variant="primary" icon="pencil" size="sm" :href="route('overheads.edit', $overhead)" wire:navigate>
                     Edit
                 </flux:button>
+                @endcan
+                @can('overhead-delete')
                 <flux:button variant="danger" icon="trash" size="sm" x-on:click="$flux.modal('delete-overhead').show()">
                     Delete
                 </flux:button>
+                @endcan
             </div>
         </x-slot:action>
     </x-ui.page-header>

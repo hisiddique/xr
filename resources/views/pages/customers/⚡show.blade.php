@@ -532,11 +532,15 @@ new #[Title('Customer Details')] class extends Component {
     <div class="flex items-center justify-between gap-2">
         <flux:button variant="ghost" icon="arrow-left" size="sm" :href="route('customers.index')" wire:navigate>Back</flux:button>
         <div class="flex items-center gap-2">
+            @can('customer-edit')
             <flux:button variant="ghost" icon="pencil" size="sm" :href="route('customers.edit', $customer)" wire:navigate>
                 Edit
                 <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">e</kbd>
             </flux:button>
+            @endcan
+            @can('customer-delete')
             <livewire:pages::customers.delete-modal :customer="$customer" :key="'delete-'.$customer->id" />
+            @endcan
             <livewire:pages::customers.statement-modal :customer="$customer" :key="'statement-'.$customer->id" />
 
             <div class="flex items-center overflow-hidden rounded-lg border border-zinc-200/70 dark:border-white/10">
@@ -572,9 +576,11 @@ new #[Title('Customer Details')] class extends Component {
                         <p class="mt-0.5 font-mono text-sm text-zinc-500 dark:text-zinc-400">{{ $customer->reference }}</p>
                     @endif
                 </div>
+                @can('deliverynote-create')
                 <flux:button variant="primary" icon="plus" size="sm" :href="route('delivery-notes.create').'?customer_id='.$customer->id" wire:navigate>
                     New Delivery Note
                 </flux:button>
+                @endcan
             </div>
         </div>
     </div>
@@ -1006,9 +1012,11 @@ new #[Title('Customer Details')] class extends Component {
                     description="Create the first delivery note for this customer."
                 >
                     <x-slot:action>
+                        @can('deliverynote-create')
                         <flux:button variant="primary" size="sm" :href="route('delivery-notes.create').'?customer_id='.$customer->id" wire:navigate>
                             New Delivery Note
                         </flux:button>
+                        @endcan
                     </x-slot:action>
                 </x-ui.empty-state>
             @else

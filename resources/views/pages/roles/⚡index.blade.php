@@ -94,9 +94,11 @@ new #[Title('Roles')] class extends Component {
         subtitle="Define roles and the permissions each one grants."
     >
         <x-slot:action>
+            @can('role-create')
             <flux:button variant="primary" icon="plus" :href="route('roles.create')" wire:navigate>
                 New Role
             </flux:button>
+            @endcan
         </x-slot:action>
     </x-ui.page-header>
 
@@ -128,9 +130,11 @@ new #[Title('Roles')] class extends Component {
             >
                 @unless($search)
                     <x-slot:action>
+                        @can('role-create')
                         <flux:button variant="primary" :href="route('roles.create')" wire:navigate>
                             New Role
                         </flux:button>
+                        @endcan
                     </x-slot:action>
                 @endunless
             </x-ui.empty-state>
@@ -150,8 +154,8 @@ new #[Title('Roles')] class extends Component {
                         @foreach($this->roles as $role)
                             <tr
                                 data-row-index="{{ $loop->index }}"
-                                @unless($role->slug === 'sysadmin') data-edit-url="{{ route('roles.edit', $role) }}" @endunless
-                                @unless($role->is_system) data-delete-modal="delete-role" @endunless
+                                @unless($role->slug === 'sysadmin') @can('role-edit') data-edit-url="{{ route('roles.edit', $role) }}" @endcan @endunless
+                                @unless($role->is_system) @can('role-delete') data-delete-modal="delete-role" @endcan @endunless
                                 class="transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5"
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
@@ -174,6 +178,7 @@ new #[Title('Roles')] class extends Component {
                                 </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
+                                        @can('role-edit')
                                         @if($role->slug === 'sysadmin')
                                             <flux:tooltip content="System-managed role — cannot be edited">
                                                 <flux:button size="xs" variant="ghost" icon="lock-closed" disabled />
@@ -181,7 +186,9 @@ new #[Title('Roles')] class extends Component {
                                         @else
                                             <flux:button size="xs" variant="ghost" icon="pencil" :href="route('roles.edit', $role)" wire:navigate data-row-action="edit" />
                                         @endif
+                                        @endcan
                                         @unless($role->is_system)
+                                            @can('role-delete')
                                             <flux:button
                                                 size="xs"
                                                 variant="ghost"
@@ -190,6 +197,7 @@ new #[Title('Roles')] class extends Component {
                                                 x-on:click="$flux.modal('delete-role').show()"
                                                 class="text-rose-500 hover:text-rose-600"
                                             />
+                                            @endcan
                                         @endunless
                                     </div>
                                 </td>

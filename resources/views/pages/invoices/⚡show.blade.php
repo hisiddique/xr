@@ -87,11 +87,15 @@ new #[Title('Invoice')] class extends Component
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
+                    @can('invoice-edit')
                     <flux:button variant="ghost" icon="pencil" size="sm" :href="route('invoices.edit', $document)" wire:navigate>
                         Edit
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">e</kbd>
                     </flux:button>
+                    @endcan
+                    @can('invoice-delete')
                     <livewire:pages::invoices.delete-modal :document="$document" :key="'delete-'.$document->id" />
+                    @endcan
                     <flux:button variant="ghost" icon="arrow-down-tray" size="sm" :href="route('documents.pdf.download', $document)">
                         Download PDF
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">⇧P</kbd>

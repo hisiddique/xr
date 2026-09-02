@@ -112,9 +112,11 @@ new #[Title('Supplier Payouts')] class extends Component {
         subtitle="Record outbound supplier payments."
     >
         <x-slot:action>
+            @can('supplierdebitnote-create')
             <flux:button variant="primary" icon="arrow-right" :href="route('supplier-debit-notes.create')" wire:navigate>
                 Issue Debit Note &amp; Pay
             </flux:button>
+            @endcan
         </x-slot:action>
     </x-ui.page-header>
 
@@ -153,9 +155,11 @@ new #[Title('Supplier Payouts')] class extends Component {
             >
                 @unless($search || $dateFrom || $dateTo || $amountMin || $amountMax)
                     <x-slot:action>
+                        @can('supplierdebitnote-create')
                         <flux:button variant="primary" :href="route('supplier-debit-notes.create')" wire:navigate>
                             Issue Debit Note &amp; Pay
                         </flux:button>
+                        @endcan
                     </x-slot:action>
                 @endunless
             </x-ui.empty-state>
@@ -181,8 +185,8 @@ new #[Title('Supplier Payouts')] class extends Component {
                             @endphp
                             <tr
                                 data-row-index="{{ $loop->index }}"
-                                data-view-url="{{ route('supplier-payouts.show', $payout) }}"
-                                data-edit-url="{{ route('supplier-payouts.edit', $payout) }}"
+                                @can('supplierpayout-show') data-view-url="{{ route('supplier-payouts.show', $payout) }}" @endcan
+                                @can('supplierpayout-edit') data-edit-url="{{ route('supplier-payouts.edit', $payout) }}" @endcan
                                 @class([
                                     'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
                                     'sticky bottom-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_-1px_0_0_theme(--color-zinc-100)] dark:shadow-[0_-1px_0_0_theme(--color-white/0.06)]' => false && $loop->last, // sticky first/last row disabled
@@ -191,9 +195,15 @@ new #[Title('Supplier Payouts')] class extends Component {
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
                                 <td class="px-4 py-2">
+                                    @can('supplierpayout-show')
                                     <a href="{{ route('supplier-payouts.show', $payout) }}" wire:navigate class="font-mono text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
                                         {{ $payout->reference }}
                                     </a>
+                                    @else
+                                    <span class="font-mono">
+                                        {{ $payout->reference }}
+                                    </span>
+                                    @endcan
                                 </td>
                                 <td class="px-4 py-2 font-medium text-zinc-900 dark:text-white">
                                     {{ $payout->supplier?->company_name ?? '—' }}
@@ -212,8 +222,12 @@ new #[Title('Supplier Payouts')] class extends Component {
                                 </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
+                                        @can('supplierpayout-show')
                                         <flux:button size="xs" variant="ghost" icon="eye" :href="route('supplier-payouts.show', $payout)" wire:navigate data-row-action="view" />
+                                        @endcan
+                                        @can('supplierpayout-edit')
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('supplier-payouts.edit', $payout)" wire:navigate data-row-action="edit" />
+                                        @endcan
                                         <flux:button
                                             size="xs"
                                             variant="ghost"

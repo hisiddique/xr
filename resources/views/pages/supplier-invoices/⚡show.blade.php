@@ -33,10 +33,13 @@ new #[Title('Supplier Invoice')] class extends Component {
     <div class="flex items-center justify-between gap-2">
         <flux:button variant="ghost" icon="arrow-left" size="sm" :href="route('supplier-invoices.index')" wire:navigate>Back</flux:button>
         <div class="flex items-center gap-2">
+            @can('supplierinvoice-edit')
             <flux:button variant="ghost" icon="pencil" size="sm" :href="route('supplier-invoices.edit', $supplierInvoice)" wire:navigate>
                 Edit
                 <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">e</kbd>
             </flux:button>
+            @endcan
+            @can('supplierinvoice-delete')
             <flux:button
                 size="sm"
                 variant="ghost"
@@ -46,6 +49,7 @@ new #[Title('Supplier Invoice')] class extends Component {
             >
                 Delete
             </flux:button>
+            @endcan
         </div>
     </div>
 

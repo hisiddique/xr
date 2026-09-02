@@ -137,7 +137,7 @@ new #[Title('Payment')] class extends Component
 
     {{-- Back link --}}
     <div>
-        <flux:button variant="ghost" icon="arrow-left" size="sm" :href="route('payments.create')" wire:navigate>Back</flux:button>
+        <flux:button variant="ghost" icon="arrow-left" size="sm" :href="route('payments.index')" wire:navigate>Back</flux:button>
     </div>
 
     {{-- Hero header card --}}
@@ -164,12 +164,16 @@ new #[Title('Payment')] class extends Component
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
+                    @can('payment-edit')
                     <flux:button variant="ghost" icon="pencil" size="sm" :href="route('payments.edit', $payment)" wire:navigate>
                         Edit
                     </flux:button>
+                    @endcan
+                    @can('payment-delete')
                     <flux:button variant="ghost" icon="trash" size="sm" x-on:click="$flux.modal('delete-payment').show()" class="text-red-600 hover:text-red-700 dark:text-red-400">
                         Delete
                     </flux:button>
+                    @endcan
                 </div>
             </div>
         </div>

@@ -33,9 +33,11 @@ new #[Title('Supplier Payout')] class extends Component {
     <div class="flex items-center justify-between gap-2">
         <flux:button variant="ghost" icon="arrow-left" size="sm" :href="route('supplier-payouts.index')" wire:navigate>Back</flux:button>
         <div class="flex items-center gap-2">
+            @can('supplierpayout-edit')
             <flux:button variant="ghost" icon="pencil" size="sm" :href="route('supplier-payouts.edit', $payout)" wire:navigate>
                 Edit
             </flux:button>
+            @endcan
             <flux:button
                 size="sm"
                 variant="ghost"

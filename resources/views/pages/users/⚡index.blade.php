@@ -53,9 +53,11 @@ new #[Title('Users')] class extends Component {
                     Roles
                 </flux:button>
             @endcan
+            @can('user-create')
             <flux:button variant="primary" icon="plus" :href="route('users.create')" wire:navigate>
                 New User
             </flux:button>
+            @endcan
         </x-slot:action>
     </x-ui.page-header>
 
@@ -104,9 +106,11 @@ new #[Title('Users')] class extends Component {
             >
                 @unless($search || $role)
                     <x-slot:action>
+                        @can('user-create')
                         <flux:button variant="primary" :href="route('users.create')" wire:navigate>
                             New User
                         </flux:button>
+                        @endcan
                     </x-slot:action>
                 @endunless
             </x-ui.empty-state>
@@ -126,8 +130,8 @@ new #[Title('Users')] class extends Component {
                         @foreach($this->users as $user)
                             <tr
                                 data-row-index="{{ $loop->index }}"
-                                data-edit-url="{{ route('users.edit', $user) }}"
-                                @if($user->id !== auth()->id()) data-delete-modal="delete-user-{{ $user->id }}" @endif
+                                @can('user-edit') data-edit-url="{{ route('users.edit', $user) }}" @endcan
+                                @if($user->id !== auth()->id()) @can('user-delete') data-delete-modal="delete-user-{{ $user->id }}" @endcan @endif
                                 class="transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5"
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
@@ -158,9 +162,13 @@ new #[Title('Users')] class extends Component {
                                 <td class="px-6 py-4 text-zinc-500 dark:text-zinc-400">{{ $user->created_at?->format('d M Y') ?? '—' }}</td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
+                                        @can('user-edit')
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('users.edit', $user)" wire:navigate data-row-action="edit" />
+                                        @endcan
                                         @if($user->id !== auth()->id())
+                                            @can('user-delete')
                                             <livewire:pages::users.delete-modal :user="$user" :key="'delete-'.$user->id" />
+                                            @endcan
                                         @endif
                                     </div>
                                 </td>

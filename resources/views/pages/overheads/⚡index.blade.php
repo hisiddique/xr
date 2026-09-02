@@ -172,9 +172,11 @@ new #[Title('Overheads')] class extends Component {
         subtitle="Track business expenses and overheads."
     >
         <x-slot:action>
+            @can('overhead-create')
             <flux:button variant="primary" icon="plus" :href="route('overheads.create')" wire:navigate>
                 New Overhead
             </flux:button>
+            @endcan
         </x-slot:action>
     </x-ui.page-header>
 
@@ -247,9 +249,11 @@ new #[Title('Overheads')] class extends Component {
             >
                 @unless($search)
                     <x-slot:action>
+                        @can('overhead-create')
                         <flux:button variant="primary" :href="route('overheads.create')" wire:navigate>
                             New Overhead
                         </flux:button>
+                        @endcan
                     </x-slot:action>
                 @endunless
             </x-ui.empty-state>
@@ -272,8 +276,8 @@ new #[Title('Overheads')] class extends Component {
                         @foreach($this->overheads as $overhead)
                             <tr
                                 data-row-index="{{ $loop->index }}"
-                                data-view-url="{{ route('overheads.show', $overhead) }}"
-                                data-edit-url="{{ route('overheads.edit', $overhead) }}"
+                                @can('overhead-show') data-view-url="{{ route('overheads.show', $overhead) }}" @endcan
+                                @can('overhead-edit') data-edit-url="{{ route('overheads.edit', $overhead) }}" @endcan
                                 @class([
                                     'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
                                     'sticky bottom-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_-1px_0_0_theme(--color-zinc-100)] dark:shadow-[0_-1px_0_0_theme(--color-white/0.06)]' => false && $loop->last, // sticky first/last row disabled
@@ -308,8 +312,13 @@ new #[Title('Overheads')] class extends Component {
                                 </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
+                                        @can('overhead-show')
                                         <flux:button size="xs" variant="ghost" icon="eye" :href="route('overheads.show', $overhead)" wire:navigate data-row-action="view" />
+                                        @endcan
+                                        @can('overhead-edit')
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('overheads.edit', $overhead)" wire:navigate data-row-action="edit" />
+                                        @endcan
+                                        @can('overhead-delete')
                                         <flux:button
                                             size="xs"
                                             variant="ghost"
@@ -319,6 +328,7 @@ new #[Title('Overheads')] class extends Component {
                                             class="text-rose-500 hover:text-rose-600"
                                             data-row-action="delete"
                                         />
+                                        @endcan
                                     </div>
                                 </td>
                             </tr>

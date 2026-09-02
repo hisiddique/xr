@@ -107,9 +107,11 @@ new #[Title('Supplier Debit Notes')] class extends Component {
         subtitle="Manage supplier debit notes."
     >
         <x-slot:action>
+            @can('supplierdebitnote-create')
             <flux:button variant="primary" icon="plus" :href="route('supplier-debit-notes.create')" wire:navigate>
                 New Debit Note
             </flux:button>
+            @endcan
         </x-slot:action>
     </x-ui.page-header>
 
@@ -148,9 +150,11 @@ new #[Title('Supplier Debit Notes')] class extends Component {
             >
                 @unless($search || $dateFrom || $dateTo || $amountMin || $amountMax)
                     <x-slot:action>
+                        @can('supplierdebitnote-create')
                         <flux:button variant="primary" :href="route('supplier-debit-notes.create')" wire:navigate>
                             New Debit Note
                         </flux:button>
+                        @endcan
                     </x-slot:action>
                 @endunless
             </x-ui.empty-state>
@@ -172,8 +176,8 @@ new #[Title('Supplier Debit Notes')] class extends Component {
                         @foreach($this->debitNotes as $note)
                             <tr
                                 data-row-index="{{ $loop->index }}"
-                                data-view-url="{{ route('supplier-debit-notes.show', $note) }}"
-                                data-edit-url="{{ route('supplier-debit-notes.edit', $note) }}"
+                                @can('supplierdebitnote-show') data-view-url="{{ route('supplier-debit-notes.show', $note) }}" @endcan
+                                @can('supplierdebitnote-edit') data-edit-url="{{ route('supplier-debit-notes.edit', $note) }}" @endcan
                                 @class([
                                     'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
                                     'sticky bottom-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_-1px_0_0_theme(--color-zinc-100)] dark:shadow-[0_-1px_0_0_theme(--color-white/0.06)]' => false && $loop->last, // sticky first/last row disabled
@@ -182,9 +186,15 @@ new #[Title('Supplier Debit Notes')] class extends Component {
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
                                 <td class="px-4 py-2">
+                                    @can('supplierdebitnote-show')
                                     <a href="{{ route('supplier-debit-notes.show', $note) }}" wire:navigate class="font-mono text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
                                         {{ $note->reference }}
                                     </a>
+                                    @else
+                                    <span class="font-mono">
+                                        {{ $note->reference }}
+                                    </span>
+                                    @endcan
                                 </td>
                                 <td class="px-4 py-2 font-medium text-zinc-900 dark:text-white">
                                     {{ $note->supplier?->company_name ?? '—' }}
@@ -211,8 +221,13 @@ new #[Title('Supplier Debit Notes')] class extends Component {
                                 </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
+                                        @can('supplierdebitnote-show')
                                         <flux:button size="xs" variant="ghost" icon="eye" :href="route('supplier-debit-notes.show', $note)" wire:navigate data-row-action="view" />
+                                        @endcan
+                                        @can('supplierdebitnote-edit')
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('supplier-debit-notes.edit', $note)" wire:navigate data-row-action="edit" />
+                                        @endcan
+                                        @can('supplierdebitnote-delete')
                                         <flux:button
                                             size="xs"
                                             variant="ghost"
@@ -222,6 +237,7 @@ new #[Title('Supplier Debit Notes')] class extends Component {
                                             class="text-rose-500 hover:text-rose-600"
                                             data-row-action="delete"
                                         />
+                                        @endcan
                                     </div>
                                 </td>
                             </tr>

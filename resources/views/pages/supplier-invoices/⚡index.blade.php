@@ -158,9 +158,11 @@ new #[Title('Supplier Invoices')] class extends Component {
         subtitle="Manage invoices received from suppliers."
     >
         <x-slot:action>
+            @can('supplierinvoice-create')
             <flux:button variant="primary" icon="plus" :href="route('supplier-invoices.create')" wire:navigate>
                 New Invoice
             </flux:button>
+            @endcan
         </x-slot:action>
     </x-ui.page-header>
 
@@ -199,9 +201,11 @@ new #[Title('Supplier Invoices')] class extends Component {
             >
                 @unless($search || $dateFrom || $dateTo || $amountMin || $amountMax)
                     <x-slot:action>
+                        @can('supplierinvoice-create')
                         <flux:button variant="primary" :href="route('supplier-invoices.create')" wire:navigate>
                             New Invoice
                         </flux:button>
+                        @endcan
                     </x-slot:action>
                 @endunless
             </x-ui.empty-state>
@@ -225,8 +229,8 @@ new #[Title('Supplier Invoices')] class extends Component {
                         @foreach($this->supplierInvoices as $invoice)
                             <tr
                                 data-row-index="{{ $loop->index }}"
-                                data-view-url="{{ route('supplier-invoices.show', $invoice) }}"
-                                data-edit-url="{{ route('supplier-invoices.edit', $invoice) }}"
+                                @can('supplierinvoice-show') data-view-url="{{ route('supplier-invoices.show', $invoice) }}" @endcan
+                                @can('supplierinvoice-edit') data-edit-url="{{ route('supplier-invoices.edit', $invoice) }}" @endcan
                                 @class([
                                     'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
                                     'sticky bottom-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_-1px_0_0_theme(--color-zinc-100)] dark:shadow-[0_-1px_0_0_theme(--color-white/0.06)]' => false && $loop->last, // sticky first/last row disabled
@@ -235,9 +239,15 @@ new #[Title('Supplier Invoices')] class extends Component {
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
                                 <td class="px-4 py-2">
+                                    @can('supplierinvoice-show')
                                     <a href="{{ route('supplier-invoices.show', $invoice) }}" wire:navigate class="font-mono text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
                                         {{ $invoice->supplier_invoice_no }}
                                     </a>
+                                    @else
+                                    <span class="font-mono">
+                                        {{ $invoice->supplier_invoice_no }}
+                                    </span>
+                                    @endcan
                                 </td>
                                 <td class="px-4 py-2 font-medium text-zinc-900 dark:text-white">
                                     {{ $invoice->supplier?->company_name ?? '—' }}
@@ -281,8 +291,13 @@ new #[Title('Supplier Invoices')] class extends Component {
                                                 data-row-action="download"
                                             />
                                         @endif
+                                        @can('supplierinvoice-show')
                                         <flux:button size="xs" variant="ghost" icon="eye" :href="route('supplier-invoices.show', $invoice)" wire:navigate data-row-action="view" />
+                                        @endcan
+                                        @can('supplierinvoice-edit')
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('supplier-invoices.edit', $invoice)" wire:navigate data-row-action="edit" />
+                                        @endcan
+                                        @can('supplierinvoice-delete')
                                         <flux:button
                                             size="xs"
                                             variant="ghost"
@@ -291,6 +306,7 @@ new #[Title('Supplier Invoices')] class extends Component {
                                             class="text-rose-500 hover:text-rose-600"
                                             data-row-action="delete"
                                         />
+                                        @endcan
                                     </div>
                                 </td>
                             </tr>
@@ -307,11 +323,13 @@ new #[Title('Supplier Invoices')] class extends Component {
     <div x-data x-init="$nextTick(() => Alpine.store('hotkeys').focusZone('table'))"></div>
 
     {{-- Delete modal --}}
+    @can('supplierinvoice-delete')
     @if($deletingId)
         <livewire:pages::supplier-invoices.delete-modal
             :supplier-invoice="App\Models\SupplierInvoice::find($deletingId)"
             :key="$deletingId"
         />
     @endif
+    @endcan
 
 </div>

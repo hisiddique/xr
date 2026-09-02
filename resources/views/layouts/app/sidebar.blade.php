@@ -36,12 +36,16 @@
             </a>
 
             <div class="ml-auto flex items-center gap-1.5">
+                @can('customer-create')
                 <flux:button size="sm" variant="primary" icon="plus" :href="route('customers.create')" wire:navigate>
                     Customer <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1 rounded bg-white/20 px-1 py-0.5 text-[10px] font-mono">F1</kbd>
                 </flux:button>
+                @endcan
+                @can('deliverynote-create')
                 <flux:button size="sm" variant="primary" icon="plus" :href="route('delivery-notes.create')" wire:navigate>
                     DN
                 </flux:button>
+                @endcan
             </div>
         </header>
 
@@ -432,12 +436,16 @@
                         </div>
 
                         {{-- + New actions --}}
+                        @can('customer-create')
                         <flux:button size="sm" variant="primary" icon="plus" :href="route('customers.create')" wire:navigate class="rounded-lg">
                             Customer <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1 rounded bg-white/20 px-1 py-0.5 text-[10px] font-mono">F1</kbd>
                         </flux:button>
+                        @endcan
+                        @can('deliverynote-create')
                         <flux:button size="sm" variant="primary" icon="plus" :href="route('delivery-notes.create')" wire:navigate class="rounded-lg">
                             DN <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1 rounded bg-white/20 px-1 py-0.5 text-[10px] font-mono">F2</kbd>
                         </flux:button>
+                        @endcan
 
                         {{-- Help --}}
                         <flux:button

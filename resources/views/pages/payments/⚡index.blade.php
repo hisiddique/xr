@@ -126,9 +126,11 @@ new #[Title('Payments')] class extends Component
             <div class="ml-auto flex items-center gap-2">
                 <x-ui.per-page-select />
 
+                @can('payment-create')
                 <flux:button variant="primary" icon="plus" :href="route('payments.create')" wire:navigate>
                     {{ __('Record Payment') }}
                 </flux:button>
+                @endcan
             </div>
         </div>
 
@@ -169,8 +171,8 @@ new #[Title('Payments')] class extends Component
                         @foreach($this->payments as $payment)
                             <tr
                                 data-row-index="{{ $loop->index }}"
-                                data-view-url="{{ route('payments.show', $payment) }}"
-                                data-edit-url="{{ route('payments.edit', $payment) }}"
+                                @can('payment-show') data-view-url="{{ route('payments.show', $payment) }}" @endcan
+                                @can('payment-edit') data-edit-url="{{ route('payments.edit', $payment) }}" @endcan
                                 @class([
                                     'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
                                     'sticky bottom-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_-1px_0_0_theme(--color-zinc-100)] dark:shadow-[0_-1px_0_0_theme(--color-white/0.06)]' => false && $loop->last, // sticky first/last row disabled
@@ -179,9 +181,15 @@ new #[Title('Payments')] class extends Component
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
                                 <td class="px-4 py-2">
+                                    @can('payment-show')
                                     <a href="{{ route('payments.show', $payment) }}" wire:navigate class="inline-flex items-center rounded-md px-2 py-0.5 font-mono text-sm font-semibold text-indigo-700 hover:underline dark:text-indigo-300">
                                         {{ $payment->reference }}
                                     </a>
+                                    @else
+                                    <span class="inline-flex items-center rounded-md px-2 py-0.5 font-mono text-sm font-semibold">
+                                        {{ $payment->reference }}
+                                    </span>
+                                    @endcan
                                 </td>
                                 <td class="px-4 py-2 font-mono text-zinc-600 dark:text-zinc-300">{{ $payment->payment_reference ?: '—' }}</td>
                                 <td class="px-4 py-2">
@@ -201,8 +209,12 @@ new #[Title('Payments')] class extends Component
                                 <td class="px-4 py-2 text-zinc-500 dark:text-zinc-400">{{ $payment->payment_date->format('d M Y') }}</td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
+                                        @can('payment-show')
                                         <flux:button size="xs" variant="ghost" icon="eye" :href="route('payments.show', $payment)" wire:navigate data-row-action="view" />
+                                        @endcan
+                                        @can('payment-edit')
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('payments.edit', $payment)" wire:navigate data-row-action="edit" />
+                                        @endcan
                                         @if($payment->receipt_path)
                                             <flux:button
                                                 size="xs"

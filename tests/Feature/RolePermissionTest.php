@@ -48,6 +48,21 @@ test('syncPermissions prunes keys that are not in the catalogue', function () {
     expect($role->permissionKeys()->all())->toBe(['customer-index']);
 });
 
+test('the 403 page offers a way out for an authenticated user', function () {
+    $this->actingAs(User::factory()->noRoles()->create());
+
+    $this->get(route('overheads.index'))
+        ->assertForbidden()
+        ->assertSee('Go to dashboard')
+        ->assertSee('Log out');
+});
+
+test('the dashboard is reachable without any permission', function () {
+    $this->actingAs(User::factory()->noRoles()->create());
+
+    $this->get(route('dashboard'))->assertOk();
+});
+
 test('user permissionKeys is the de-duplicated union across all roles', function () {
     $user = User::factory()->noRoles()->create();
 

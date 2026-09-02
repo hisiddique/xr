@@ -374,9 +374,11 @@ new #[Title('Delivery Notes')] class extends Component
         subtitle="Track and manage all delivery documents."
     >
         <x-slot:action>
+            @can('deliverynote-create')
             <flux:button variant="primary" icon="plus" :href="route('delivery-notes.create')" wire:navigate>
                 New Delivery Note
             </flux:button>
+            @endcan
         </x-slot:action>
     </x-ui.page-header>
 
@@ -480,9 +482,11 @@ new #[Title('Delivery Notes')] class extends Component
             >
                 @unless($search || $status)
                     <x-slot:action>
+                        @can('deliverynote-create')
                         <flux:button variant="primary" :href="route('delivery-notes.create')" wire:navigate>
                             New Delivery Note
                         </flux:button>
+                        @endcan
                     </x-slot:action>
                 @endunless
             </x-ui.empty-state>
@@ -516,11 +520,11 @@ new #[Title('Delivery Notes')] class extends Component
                         @foreach($this->deliveryNotes as $note)
                             <tr
                                 data-row-index="{{ $loop->index }}"
-                                data-view-url="{{ route('delivery-notes.show', $note) }}"
-                                data-edit-url="{{ route('delivery-notes.edit', $note) }}"
+                                @can('deliverynote-show') data-view-url="{{ route('delivery-notes.show', $note) }}" @endcan
+                                @can('deliverynote-edit') data-edit-url="{{ route('delivery-notes.edit', $note) }}" @endcan
                                 data-email-modal="email-document-{{ $note->id }}"
                                 @if($note->status === DocumentStatus::Active) data-convert-modal="convert-dn" data-convert-id="{{ $note->id }}" @endif
-                                data-delete-modal="delete-document-{{ $note->id }}"
+                                @can('deliverynote-delete') data-delete-modal="delete-document-{{ $note->id }}" @endcan
                                 @class([
                                     'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
                                     'sticky bottom-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_-1px_0_0_theme(--color-zinc-100)] dark:shadow-[0_-1px_0_0_theme(--color-white/0.06)]' => false && $loop->last, // sticky first/last row disabled
@@ -537,6 +541,7 @@ new #[Title('Delivery Notes')] class extends Component
                                     />
                                 </td>
                                 <td class="px-4 py-2">
+                                    @can('deliverynote-show')
                                     <a href="{{ route('delivery-notes.show', $note) }}" wire:navigate @class([
                                         'inline-flex items-center rounded-md px-2 py-0.5 font-mono text-sm font-semibold text-indigo-700 hover:underline dark:text-indigo-300',
                                         'bg-emerald-100 dark:bg-emerald-500/20' => $note->last_email_status === 'sent',
@@ -545,6 +550,16 @@ new #[Title('Delivery Notes')] class extends Component
                                     ])>
                                         <x-ui.highlight :text="$note->doc_number" :term="$search" />
                                     </a>
+                                    @else
+                                    <span @class([
+                                        'inline-flex items-center rounded-md px-2 py-0.5 font-mono text-sm font-semibold',
+                                        'bg-emerald-100 dark:bg-emerald-500/20' => $note->last_email_status === 'sent',
+                                        'bg-rose-100 dark:bg-rose-500/20' => $note->last_email_status === 'failed',
+                                        'bg-amber-100 dark:bg-amber-500/20' => $note->last_email_status === null,
+                                    ])>
+                                        <x-ui.highlight :text="$note->doc_number" :term="$search" />
+                                    </span>
+                                    @endcan
                                 </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center gap-2.5">
@@ -563,8 +578,12 @@ new #[Title('Delivery Notes')] class extends Component
                                 <td class="px-4 py-2 text-zinc-600 dark:text-zinc-300">{{ $note->assignee?->name ?? '—' }}</td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center justify-end gap-1">
+                                        @can('deliverynote-show')
                                         <flux:button size="xs" variant="ghost" icon="eye" :href="route('delivery-notes.show', $note)" wire:navigate data-row-action="view" />
+                                        @endcan
+                                        @can('deliverynote-edit')
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('delivery-notes.edit', $note)" wire:navigate data-row-action="edit" />
+                                        @endcan
                                         <span x-data="{ printed: {{ $note->print_count > 0 ? 'true' : 'false' }} }">
                                             <flux:button
                                                 size="xs"
@@ -612,7 +631,9 @@ new #[Title('Delivery Notes')] class extends Component
                                                 data-row-action="convert"
                                             />
                                         @endif
+                                        @can('deliverynote-delete')
                                         <livewire:pages::delivery-notes.delete-modal :document="$note" :key="'delete-'.$note->id" />
+                                        @endcan
                                     </div>
                                 </td>
                             </tr>

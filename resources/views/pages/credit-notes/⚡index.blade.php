@@ -325,9 +325,11 @@ new #[Title('Credit Notes')] class extends Component
         subtitle="Manage and track all credit notes."
     >
         <x-slot:action>
+            @can('creditnote-create')
             <flux:button variant="primary" icon="plus" :href="route('credit-notes.create')" wire:navigate>
                 New Credit Note
             </flux:button>
+            @endcan
         </x-slot:action>
     </x-ui.page-header>
 
@@ -436,9 +438,11 @@ new #[Title('Credit Notes')] class extends Component
             >
                 @unless($trashed || $search || $status)
                     <x-slot:action>
+                        @can('creditnote-create')
                         <flux:button variant="primary" :href="route('credit-notes.create')" wire:navigate>
                             New Credit Note
                         </flux:button>
+                        @endcan
                     </x-slot:action>
                 @endunless
             </x-ui.empty-state>
@@ -473,8 +477,8 @@ new #[Title('Credit Notes')] class extends Component
                         @foreach($this->creditNotes as $creditNote)
                             <tr
                                 data-row-index="{{ $loop->index }}"
-                                data-view-url="{{ route('credit-notes.show', $creditNote) }}"
-                                data-edit-url="{{ route('credit-notes.edit', $creditNote) }}"
+                                @can('creditnote-show') data-view-url="{{ route('credit-notes.show', $creditNote) }}" @endcan
+                                @can('creditnote-edit') data-edit-url="{{ route('credit-notes.edit', $creditNote) }}" @endcan
                                 data-email-modal="email-document-{{ $creditNote->id }}"
                                 @class([
                                     'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
@@ -494,6 +498,7 @@ new #[Title('Credit Notes')] class extends Component
                                     @endif
                                 </td>
                                 <td class="px-4 py-2">
+                                    @can('creditnote-show')
                                     <a href="{{ route('credit-notes.show', $creditNote) }}" wire:navigate @class([
                                         'inline-flex items-center rounded-md px-2 py-0.5 font-mono text-sm font-semibold text-indigo-700 hover:underline dark:text-indigo-300',
                                         'bg-emerald-100 dark:bg-emerald-500/20' => $creditNote->last_email_status === 'sent',
@@ -502,6 +507,16 @@ new #[Title('Credit Notes')] class extends Component
                                     ])>
                                         <x-ui.highlight :text="$creditNote->doc_number" :term="$search" />
                                     </a>
+                                    @else
+                                    <span @class([
+                                        'inline-flex items-center rounded-md px-2 py-0.5 font-mono text-sm font-semibold',
+                                        'bg-emerald-100 dark:bg-emerald-500/20' => $creditNote->last_email_status === 'sent',
+                                        'bg-rose-100 dark:bg-rose-500/20' => $creditNote->last_email_status === 'failed',
+                                        'bg-amber-100 dark:bg-amber-500/20' => $creditNote->last_email_status === null,
+                                    ])>
+                                        <x-ui.highlight :text="$creditNote->doc_number" :term="$search" />
+                                    </span>
+                                    @endcan
                                 </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center gap-2.5">
@@ -533,8 +548,12 @@ new #[Title('Credit Notes')] class extends Component
                                                 {{ __('Restore') }}
                                             </flux:button>
                                         @else
+                                            @can('creditnote-show')
                                             <flux:button size="xs" variant="ghost" icon="eye" :href="route('credit-notes.show', $creditNote)" wire:navigate data-row-action="view" />
+                                            @endcan
+                                            @can('creditnote-edit')
                                             <flux:button size="xs" variant="ghost" icon="pencil" :href="route('credit-notes.edit', $creditNote)" wire:navigate data-row-action="edit" />
+                                            @endcan
                                             <flux:button size="xs" variant="ghost" icon="arrow-down-tray" :href="route('documents.pdf.download', $creditNote)" data-row-action="download" />
                                             <span x-data="{ printed: {{ $creditNote->print_count > 0 ? 'true' : 'false' }} }">
                                                 <flux:button
@@ -572,7 +591,9 @@ new #[Title('Credit Notes')] class extends Component
                                                     </span>
                                                 @endif
                                             </span>
+                                            @can('creditnote-delete')
                                             <livewire:pages::credit-notes.delete-modal :document="$creditNote" :key="'delete-'.$creditNote->id" />
+                                            @endcan
                                         @endif
                                     </div>
                                 </td>
