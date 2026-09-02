@@ -3,6 +3,7 @@
 use App\Models\SupplierDebitNote;
 use App\Models\SupplierDebitNoteItem;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Flux\Flux;
@@ -12,7 +13,13 @@ new #[Title('Supplier Debit Note')] class extends Component {
 
     public function mount(): void
     {
-        $this->debitNote->load(['supplier', 'supplierInvoice', 'items', 'appliedInvoices', 'creator']);
+        $this->debitNote->load(['supplier', 'supplierInvoice', 'items', 'appliedInvoices', 'creator', 'emailLogs']);
+    }
+
+    #[On('email-log-updated')]
+    public function refreshEmailLogs(): void
+    {
+        $this->debitNote->load('emailLogs');
     }
 
     #[Computed]
@@ -54,6 +61,7 @@ new #[Title('Supplier Debit Note')] class extends Component {
     <div class="flex items-center justify-between gap-2">
         <flux:button variant="ghost" icon="arrow-left" size="sm" :href="route('supplier-debit-notes.index')" wire:navigate>Back</flux:button>
         <div class="flex items-center gap-2">
+            @can('supplierdebitnote-edit')
             @if($debitNote->isApplied())
                 <flux:tooltip content="Cannot edit applied debit note">
                     <flux:button variant="ghost" icon="pencil" size="sm" disabled>Edit</flux:button>
@@ -61,6 +69,25 @@ new #[Title('Supplier Debit Note')] class extends Component {
             @else
                 <flux:button variant="ghost" icon="pencil" size="sm" :href="route('supplier-debit-notes.edit', $debitNote)" wire:navigate>Edit</flux:button>
             @endif
+            @endcan
+            <flux:button variant="ghost" icon="arrow-down-tray" size="sm" :href="route('supplier-debit-notes.pdf.download', $debitNote)">
+                Download PDF
+            </flux:button>
+            <flux:button variant="ghost" icon="document" size="sm" :href="route('supplier-debit-notes.pdf', $debitNote)" target="_blank">
+                View PDF
+            </flux:button>
+            <flux:button variant="ghost" icon="printer" size="sm" x-on:click="window.printPdfDocument('{{ route('supplier-debit-notes.pdf', $debitNote) }}')">
+                Print
+            </flux:button>
+            <flux:button
+                variant="primary"
+                icon="envelope"
+                size="sm"
+                x-on:click="$flux.modal('email-supplier-debit-note-{{ $debitNote->id }}').show()"
+            >
+                Send Email
+            </flux:button>
+            @can('supplierdebitnote-delete')
             <flux:button
                 size="sm"
                 variant="ghost"
@@ -70,6 +97,7 @@ new #[Title('Supplier Debit Note')] class extends Component {
             >
                 Delete
             </flux:button>
+            @endcan
         </div>
     </div>
 
@@ -261,6 +289,41 @@ new #[Title('Supplier Debit Note')] class extends Component {
         </x-ui.section-card>
     @endif
 
+    {{-- Email History --}}
+    <x-ui.section-card title="Email History">
+        @if($debitNote->emailLogs->isEmpty())
+            <x-ui.empty-state
+                icon="envelope"
+                title="No emails sent yet"
+                description="Send this debit note to the supplier."
+            />
+        @else
+            <ul class="space-y-3">
+                @foreach($debitNote->emailLogs()->latest()->get() as $log)
+                    <li class="flex items-start gap-3">
+                        <div @class([
+                            'mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white dark:ring-zinc-900',
+                            'bg-emerald-500' => $log->status === 'sent',
+                            'bg-rose-500' => $log->status !== 'sent',
+                        ])></div>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm text-zinc-900 dark:text-white">{{ implode(', ', $log->recipient_emails ?? [$log->recipient_email]) }}</p>
+                            <p class="text-xs text-zinc-400 dark:text-zinc-500">{{ $log->sent_at?->diffForHumans() ?? $log->created_at?->diffForHumans() ?? 'Unknown' }}</p>
+                            @if($log->status !== 'sent' && $log->error_message)
+                                <p class="mt-1 text-xs text-rose-600 dark:text-rose-400">{{ $log->error_message }}</p>
+                            @endif
+                        </div>
+                        <span @class([
+                            'shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset',
+                            'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400' => $log->status === 'sent',
+                            'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-500/10 dark:text-rose-400' => $log->status !== 'sent',
+                        ])>{{ ucfirst($log->status) }}</span>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+    </x-ui.section-card>
+
     {{-- Delete modal --}}
     <flux:modal name="delete-debit-note" class="max-w-sm">
         <div class="space-y-4">
@@ -274,5 +337,7 @@ new #[Title('Supplier Debit Note')] class extends Component {
             </div>
         </div>
     </flux:modal>
+
+    <livewire:pages::supplier-debit-notes.email-modal :debitNote="$debitNote" :key="'email-'.$debitNote->id" />
 
 </div>

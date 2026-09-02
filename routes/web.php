@@ -5,6 +5,7 @@ use App\Http\Controllers\CustomerOutstandingExportController;
 use App\Http\Controllers\CustomerStatementController;
 use App\Http\Controllers\DocumentPdfController;
 use App\Http\Controllers\ExportDownloadController;
+use App\Http\Controllers\SupplierDebitNotePdfController;
 use App\Http\Controllers\SupplierInvoiceAttachmentController;
 use App\Http\Controllers\SupplierPurchasingExportController;
 use Illuminate\Support\Facades\Route;
@@ -74,6 +75,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('supplier-debit-notes/create', 'pages::supplier-debit-notes.create')->name('supplier-debit-notes.create')->middleware('can:supplierdebitnote-create');
     Route::livewire('supplier-debit-notes/{debitNote}/edit', 'pages::supplier-debit-notes.edit')->name('supplier-debit-notes.edit')->middleware('can:supplierdebitnote-edit');
     Route::livewire('supplier-debit-notes/{debitNote}', 'pages::supplier-debit-notes.show')->name('supplier-debit-notes.show')->middleware('can:supplierdebitnote-show');
+    Route::get('supplier-debit-notes/{debitNote}/pdf', [SupplierDebitNotePdfController::class, 'show'])->name('supplier-debit-notes.pdf')->middleware('can:supplierdebitnote-show');
+    Route::get('supplier-debit-notes/{debitNote}/pdf/download', [SupplierDebitNotePdfController::class, 'download'])->name('supplier-debit-notes.pdf.download')->middleware('can:supplierdebitnote-show');
 
     // Reports
     Route::livewire('reports/overheads', 'pages::reports.overheads')->name('reports.overheads')->middleware('can:report-overheads');

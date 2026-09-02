@@ -86,6 +86,11 @@ class SupplierDebitNote extends Model
         return $this->hasMany(SupplierPayoutAllocation::class);
     }
 
+    public function emailLogs(): HasMany
+    {
+        return $this->hasMany(SupplierDebitNoteEmailLog::class);
+    }
+
     public function appliedInvoices(): BelongsToMany
     {
         return $this->belongsToMany(SupplierInvoice::class, 'supplier_invoice_debit_notes')
@@ -96,6 +101,17 @@ class SupplierDebitNote extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function effectiveVatRate(): float
+    {
+        $vatApplicableSubtotal = (float) $this->items->where('vat_applicable', true)->sum('total');
+
+        if ($vatApplicableSubtotal <= 0) {
+            return 0.0;
+        }
+
+        return round(((float) $this->vat_amount / $vatApplicableSubtotal) * 100, 4);
     }
 
     public function totalDeductions(): float
