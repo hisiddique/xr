@@ -17,7 +17,7 @@ class SupplierPurchasingExportController extends Controller
     public function export(Request $request, string $format): Response|RedirectResponse
     {
         $filters = $request->only([
-            'search', 'supplierId', 'dateFrom', 'dateTo', 'amountMin', 'amountMax', 'paidStatus',
+            'search', 'supplierId', 'dateFrom', 'dateTo', 'amountMin', 'amountMax', 'paidStatus', 'paidStatuses',
         ]);
 
         // The inline PDF preview is a synchronous "Print" action users expect

@@ -59,7 +59,10 @@ class SupplierPurchasingReportService
     {
         $search = trim((string) ($filters['search'] ?? ''));
         $vatRate = (float) Setting::get('vat_rate', 20);
-        $paidStatus = $filters['paidStatus'] ?? null;
+        $paidStatuses = array_values(array_filter(
+            (array) ($filters['paidStatuses'] ?? $filters['paidStatus'] ?? []),
+            fn ($status) => in_array($status, ['paid', 'partial', 'unpaid'], true),
+        ));
 
         return $query
             ->where('status', SupplierInvoiceStatus::Posted->value)
@@ -78,11 +81,26 @@ class SupplierPurchasingReportService
             })
             ->when(is_numeric($filters['amountMin'] ?? null), fn ($q) => $q->whereRaw(self::GROSS_EXPR.' >= CAST(? AS REAL)', [$vatRate, (float) $filters['amountMin']]))
             ->when(is_numeric($filters['amountMax'] ?? null), fn ($q) => $q->whereRaw(self::GROSS_EXPR.' <= CAST(? AS REAL)', [$vatRate, (float) $filters['amountMax']]))
-            ->when($paidStatus === 'paid', fn ($q) => $q->whereRaw(self::PAID_EXPR.' <= 0.001', [$vatRate]))
-            ->when($paidStatus === 'unpaid', fn ($q) => $q->whereRaw(self::PAID_EXPR.' >= '.self::PAYABLE_EXPR.' - 0.001', [$vatRate, $vatRate]))
-            ->when($paidStatus === 'partial', function ($q) use ($vatRate) {
-                $q->whereRaw(self::PAID_EXPR.' > 0.001', [$vatRate])
-                    ->whereRaw(self::PAID_EXPR.' < '.self::PAYABLE_EXPR.' - 0.001', [$vatRate, $vatRate]);
+            ->when($paidStatuses !== [], function ($q) use ($paidStatuses, $vatRate) {
+                // vatRate is inlined into the raw fragments rather than bound: these
+                // predicates nest inside one OR closure alongside correlated
+                // subqueries, and interleaved whereRaw bindings there silently
+                // mismatch (see SQLite whereRaw binding-interleave trap).
+                $paidExpr = str_replace('?', (string) $vatRate, self::PAID_EXPR);
+                $payableExpr = str_replace('?', (string) $vatRate, self::PAYABLE_EXPR);
+
+                $q->where(function ($or) use ($paidStatuses, $paidExpr, $payableExpr) {
+                    foreach ($paidStatuses as $status) {
+                        $or->orWhere(function ($c) use ($status, $paidExpr, $payableExpr) {
+                            match ($status) {
+                                'paid' => $c->whereRaw($paidExpr.' <= 0.001'),
+                                'unpaid' => $c->whereRaw($paidExpr.' >= '.$payableExpr.' - 0.001'),
+                                'partial' => $c->whereRaw($paidExpr.' > 0.001')
+                                    ->whereRaw($paidExpr.' < '.$payableExpr.' - 0.001'),
+                            };
+                        });
+                    }
+                });
             });
     }
 

@@ -317,6 +317,9 @@
                             <flux:menu.item :href="route('supplier-debit-notes.create')" icon="minus-circle" wire:navigate>
                                 {{ __('Supplier Debit Note') }}
                             </flux:menu.item>
+                            <flux:menu.item :href="route('supplier-payouts.create')" icon="banknotes" wire:navigate>
+                                {{ __('Supplier Payout') }}
+                            </flux:menu.item>
 
                             <div class="mt-1.5 flex items-center gap-1.5 border-t border-zinc-200/70 px-2 pb-1.5 pt-2.5 text-xs font-semibold uppercase tracking-wide text-amber-600 dark:border-white/10 dark:text-amber-400">
                                 <flux:icon.wallet variant="micro" />

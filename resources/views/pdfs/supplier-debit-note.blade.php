@@ -253,20 +253,29 @@
 <table class="items">
     <thead>
         <tr>
-            <th class="right" style="width:10%">Qty</th>
+            <th class="right" style="width:9%">Qty</th>
             <th>Details</th>
-            <th class="right" style="width:16%">Amount</th>
-            <th class="right" style="width:16%">Net Value</th>
+            <th style="width:12%">Per</th>
+            <th class="right" style="width:15%">Amount</th>
+            <th class="right" style="width:15%">Net Value</th>
         </tr>
     </thead>
     <tbody>
         @foreach($debitNote->items as $item)
+            @if($item->is_note)
+                <tr>
+                    <td class="item-cell"></td>
+                    <td class="item-cell" colspan="4"><em>{{ $item->description }}</em></td>
+                </tr>
+                @continue
+            @endif
             @if(trim((string) $item->description) === '' && (float) $item->quantity === 0.0 && (float) $item->amount === 0.0 && (float) $item->total === 0.0)
                 @continue
             @endif
             <tr>
                 <td class="item-cell right">{{ (float) $item->quantity !== 0.0 ? rtrim(rtrim(number_format($item->quantity, 2, '.', ''), '0'), '.') : '' }}</td>
                 <td class="item-cell">{{ $item->description }}</td>
+                <td class="item-cell">{{ $item->per }}</td>
                 <td class="item-cell right">{{ (float) $item->amount !== 0.0 ? number_format($item->amount, 2) : '' }}</td>
                 <td class="item-cell right">{{ (float) $item->total !== 0.0 ? number_format($item->total, 2) : '' }}</td>
             </tr>

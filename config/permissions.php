@@ -50,7 +50,7 @@ return [
             ],
             'supplierpayout' => [
                 'label' => 'Supplier Payouts',
-                'actions' => ['index', 'show', 'edit'],
+                'actions' => ['index', 'show', 'create', 'edit'],
             ],
             'overhead' => [
                 'label' => 'Overheads',

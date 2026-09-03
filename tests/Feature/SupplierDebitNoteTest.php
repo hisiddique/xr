@@ -216,6 +216,20 @@ test('deleting a debit note from the show page does not error', function () {
     expect(SupplierDebitNote::find($note->id))->toBeNull();
 });
 
+function debitNoteRow(array $overrides = []): array
+{
+    return array_merge([
+        'id' => null,
+        'details' => 'Damaged goods',
+        'quantity' => '1',
+        'price' => '100',
+        'per' => 'Each',
+        'is_note' => false,
+        'discount_percent' => null,
+        'vat_applicable' => false,
+    ], $overrides);
+}
+
 test('commitDebitNote ignores trailing empty rows and only stores filled items', function () {
     $supplier = Supplier::factory()->create(['vat_applied' => false]);
 
@@ -223,8 +237,8 @@ test('commitDebitNote ignores trailing empty rows and only stores filled items',
         ->set('supplier_id', $supplier->id)
         ->set('doc_date', now()->format('Y-m-d'))
         ->set('items', [
-            ['description' => 'Damaged goods', 'quantity' => '2', 'amount' => '10', 'total' => 20],
-            ['description' => '', 'quantity' => '', 'amount' => '', 'total' => 0],
+            debitNoteRow(['details' => 'Damaged goods', 'quantity' => '2', 'price' => '10']),
+            debitNoteRow(['details' => '', 'quantity' => '', 'price' => '', 'per' => '']),
         ])
         ->call('commitDebitNote')
         ->assertHasNoErrors();
@@ -247,7 +261,7 @@ test('commitDebitNote adds VAT for items marked vat_applicable', function () {
         ->set('supplier_id', $supplier->id)
         ->set('doc_date', now()->format('Y-m-d'))
         ->set('items', [
-            ['description' => 'Damaged goods', 'quantity' => '1', 'amount' => '100', 'vat_applicable' => true, 'total' => 100],
+            debitNoteRow(['quantity' => '1', 'price' => '100', 'vat_applicable' => true]),
         ])
         ->call('commitDebitNote')
         ->assertHasNoErrors();
@@ -267,7 +281,7 @@ test('commitDebitNote does not add VAT for items not marked vat_applicable', fun
         ->set('supplier_id', $supplier->id)
         ->set('doc_date', now()->format('Y-m-d'))
         ->set('items', [
-            ['description' => 'Damaged goods', 'quantity' => '1', 'amount' => '100', 'vat_applicable' => false, 'total' => 100],
+            debitNoteRow(['quantity' => '1', 'price' => '100', 'vat_applicable' => false]),
         ])
         ->call('commitDebitNote')
         ->assertHasNoErrors();
@@ -289,8 +303,8 @@ test('commitDebitNote mixes VAT and non-VAT items on the same note', function ()
         ->set('supplier_id', $supplier->id)
         ->set('doc_date', now()->format('Y-m-d'))
         ->set('items', [
-            ['description' => 'VAT item', 'quantity' => '1', 'amount' => '100', 'vat_applicable' => true, 'total' => 100],
-            ['description' => 'Non-VAT item', 'quantity' => '1', 'amount' => '50', 'vat_applicable' => false, 'total' => 50],
+            debitNoteRow(['details' => 'VAT item', 'quantity' => '1', 'price' => '100', 'vat_applicable' => true]),
+            debitNoteRow(['details' => 'Non-VAT item', 'quantity' => '1', 'price' => '50', 'vat_applicable' => false]),
         ])
         ->call('commitDebitNote')
         ->assertHasNoErrors();
@@ -300,6 +314,48 @@ test('commitDebitNote mixes VAT and non-VAT items on the same note', function ()
     expect((float) $note->subtotal)->toBe(150.0);
     expect((float) $note->vat_amount)->toBe(20.0);
     expect((float) $note->total)->toBe(170.0);
+});
+
+test('commitDebitNote applies per divisor, lot pricing and per-line discount', function () {
+    Setting::updateOrCreate(['key' => 'vat_rate'], ['key' => 'vat_rate', 'value' => '20', 'type' => 'integer']);
+    Setting::flushCache();
+
+    $supplier = Supplier::factory()->create();
+
+    Livewire::test('pages::supplier-debit-notes.create')
+        ->set('supplier_id', $supplier->id)
+        ->set('doc_date', now()->format('Y-m-d'))
+        ->set('items', [
+            // per divisor: (10 / 5) * 100 = 200
+            debitNoteRow(['details' => 'Pack line', 'quantity' => '10', 'price' => '100', 'per' => '5', 'vat_applicable' => true]),
+            // lot: price only, qty ignored -> 250
+            debitNoteRow(['details' => 'Lot line', 'quantity' => '3', 'price' => '250', 'per' => 'lot', 'vat_applicable' => false]),
+            // discount: 100 * 1 * 25% = 25
+            debitNoteRow(['details' => 'Discounted', 'quantity' => '1', 'price' => '100', 'per' => 'Each', 'discount_percent' => 25, 'vat_applicable' => false]),
+            // note row: no qty/price
+            debitNoteRow(['details' => 'Reason: short delivery', 'quantity' => '', 'price' => '', 'per' => '', 'is_note' => true]),
+        ])
+        ->call('commitDebitNote')
+        ->assertHasNoErrors();
+
+    $note = SupplierDebitNote::firstWhere('supplier_id', $supplier->id);
+
+    expect($note->items)->toHaveCount(4);
+    expect((float) $note->subtotal)->toBe(475.0); // 200 + 250 + 25
+    expect((float) $note->vat_amount)->toBe(40.0); // 20% of the 200 line only
+    expect((float) $note->total)->toBe(515.0);
+
+    $pack = $note->items->firstWhere('description', 'Pack line');
+    expect((float) $pack->line_value)->toBe(200.0);
+    expect((float) $pack->total)->toBe(200.0);
+
+    $discounted = $note->items->firstWhere('description', 'Discounted');
+    expect((float) $discounted->line_value)->toBe(100.0);
+    expect((float) $discounted->total)->toBe(25.0);
+
+    $noteRow = $note->items->firstWhere('is_note', true);
+    expect((float) $noteRow->total)->toBe(0.0);
+    expect((float) $noteRow->quantity)->toBe(0.0);
 });
 
 test('soft-deleted debit note is excluded from available debit notes query', function () {

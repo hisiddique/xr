@@ -4,10 +4,12 @@ use App\Models\Supplier;
 use App\Models\SupplierDebitNote;
 use App\Models\SupplierInvoice;
 use App\Models\SupplierPayout;
+use App\Models\SupplierPayoutAllocation;
 use App\Services\SupplierPayoutAllocator;
 use Flux\Flux;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 new class extends Component {
@@ -18,6 +20,11 @@ new class extends Component {
     public string $notes = '';
     public string $nextReference = '';
     public array $committedDebitNotes = [];
+    public bool $focusAmount = false;
+
+    /** Debit note ids handed over from "Save & move to payout" (?dn=1,2). */
+    #[Url(except: '')]
+    public string $dn = '';
 
     private bool $suppressSupplierHook = false;
 
@@ -25,6 +32,50 @@ new class extends Component {
     {
         $this->payout_date = now()->format('Y-m-d');
         $this->nextReference = SupplierPayout::nextNumber();
+        $this->hydrateFromDebitNotes();
+    }
+
+    /**
+     * Carry the debit notes named in ?dn=1,2 into the payout (same effect the
+     * on-page `debit-note-committed` event had before the pages were split).
+     * Silently starts empty when the hand-off can't be trusted — a stale ?dn
+     * (e.g. those debit notes already sit on a payout) is dropped from the URL
+     * by clearing the bound property, no warning.
+     */
+    private function hydrateFromDebitNotes(): void
+    {
+        $ids = collect(explode(',', $this->dn))
+            ->map(fn ($v) => (int) trim($v))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        $debitNotes = SupplierDebitNote::whereIn('id', $ids)->get();
+
+        if ($debitNotes->count() !== $ids->count() || $debitNotes->pluck('supplier_id')->unique()->count() !== 1) {
+            $this->dn = '';
+
+            return;
+        }
+
+        if (SupplierPayoutAllocation::whereIn('supplier_debit_note_id', $ids)->exists()) {
+            $this->dn = '';
+
+            return;
+        }
+
+        $this->supplier_id = (int) $debitNotes->first()->supplier_id;
+        $this->supplierName = Supplier::withTrashed()->find($this->supplier_id)?->typeahead_label ?? '';
+        $this->committedDebitNotes = $debitNotes
+            ->map(fn (SupplierDebitNote $dn) => ['id' => $dn->id, 'linked_invoice_id' => $dn->supplier_invoice_id])
+            ->all();
+        $this->focusAmount = true;
+
+        unset($this->invoiceRows);
     }
 
     #[On('debit-note-committed')]
@@ -219,6 +270,7 @@ new class extends Component {
         $this->payout_date = now()->format('Y-m-d');
         $this->notes = '';
         $this->committedDebitNotes = [];
+        $this->dn = '';
         $this->nextReference = SupplierPayout::nextNumber();
         unset($this->invoiceRows);
         $this->dispatch('payout-supplier-updated', rows: []);
@@ -233,6 +285,7 @@ new class extends Component {
         $this->payout_date = now()->format('Y-m-d');
         $this->notes = '';
         $this->committedDebitNotes = [];
+        $this->dn = '';
         unset($this->invoiceRows);
         $this->dispatch('payout-supplier-updated', rows: []);
     }
@@ -251,7 +304,7 @@ new class extends Component {
         data-form-root
         data-f2-handler
         wire:ignore
-        x-data="supplierPayoutAllocator({ rows: @js($this->invoiceRows) })"
+        x-data="supplierPayoutAllocator({ rows: @js($this->invoiceRows), focusAmount: @js($focusAmount) })"
         @payout-supplier-updated.window="rows = $event.detail.rows.map(r => ({ ...r, allocated_amount: 0 })); autoAllocate(parseFloat($wire.amount) || 0)"
         @keydown.escape="if ($wire.supplier_id) $flux.modal('cancel-payout-confirm').show()"
         @keydown.window="handleKey($event)"
@@ -285,6 +338,7 @@ new class extends Component {
             <div class="grid gap-4 md:grid-cols-2">
                 <flux:input
                     wire:model.blur="amount"
+                    data-payout-amount
                     @change="autoAllocate(parseFloat($event.target.value))"
                     type="number"
                     step="0.01"

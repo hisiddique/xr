@@ -146,6 +146,38 @@ test('report service paidStatus filter returns only the matching subset', functi
     expect($unpaidNumbers)->toBe([$unpaidInvoice->supplier_invoice_no]);
 });
 
+test('report service paidStatuses filter accepts multiple statuses and unions the matches', function () {
+    $supplier = Supplier::factory()->create();
+
+    $paidInvoice = makeSupplierPurchasingTestInvoice($supplier, 100);
+    $payout = SupplierPayout::create(['supplier_id' => $supplier->id, 'amount' => 100, 'payout_date' => now()]);
+    SupplierPayoutAllocation::create([
+        'supplier_payout_id' => $payout->id,
+        'supplier_invoice_id' => $paidInvoice->id,
+        'allocated_amount' => 100,
+    ]);
+
+    $partialInvoice = makeSupplierPurchasingTestInvoice($supplier, 100);
+    $partialPayout = SupplierPayout::create(['supplier_id' => $supplier->id, 'amount' => 40, 'payout_date' => now()]);
+    SupplierPayoutAllocation::create([
+        'supplier_payout_id' => $partialPayout->id,
+        'supplier_invoice_id' => $partialInvoice->id,
+        'allocated_amount' => 40,
+    ]);
+
+    $unpaidInvoice = makeSupplierPurchasingTestInvoice($supplier, 60);
+
+    $service = app(SupplierPurchasingReportService::class);
+
+    $union = array_column($service->buildExportData(['paidStatuses' => ['paid', 'partial']])[0]['invoices'], 'supplier_invoice_no');
+    sort($union);
+    $expected = [$paidInvoice->supplier_invoice_no, $partialInvoice->supplier_invoice_no];
+    sort($expected);
+    expect($union)->toBe($expected);
+
+    expect($service->buildExportData(['paidStatuses' => []])[0]['invoices'])->toHaveCount(3);
+});
+
 test('report service search matches company name, reference, supplier invoice number and supplier ref invoice number', function () {
     $supplier = Supplier::factory()->create(['company_name' => 'Acme Traders']);
     $invoice = makeSupplierPurchasingTestInvoice($supplier, 10);

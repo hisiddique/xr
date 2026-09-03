@@ -38,8 +38,9 @@ new #[Title('Supplier Purchasing Report')] class extends Component
     #[Url(as: 'max', except: '')]
     public string $amountMax = '';
 
-    #[Url(as: 'status', except: '')]
-    public string $paidStatus = '';
+    /** @var array<int, string> */
+    #[Url(as: 'status', except: [])]
+    public array $paidStatuses = [];
 
     #[Url(except: 'this_month')]
     public string $period = 'this_month';
@@ -95,7 +96,7 @@ new #[Title('Supplier Purchasing Report')] class extends Component
         $this->resetPage();
     }
 
-    public function updatedPaidStatus(): void
+    public function updatedPaidStatuses(): void
     {
         $this->resetPage();
     }
@@ -148,7 +149,7 @@ new #[Title('Supplier Purchasing Report')] class extends Component
         $this->supplierId = '';
         $this->amountMin = '';
         $this->amountMax = '';
-        $this->paidStatus = '';
+        $this->paidStatuses = [];
         $this->period = 'this_month';
         $this->resolvePeriod();
         $this->resetPage();
@@ -166,7 +167,7 @@ new #[Title('Supplier Purchasing Report')] class extends Component
             'dateTo' => $this->dateTo,
             'amountMin' => $this->amountMin,
             'amountMax' => $this->amountMax,
-            'paidStatus' => $this->paidStatus,
+            'paidStatuses' => $this->paidStatuses,
             'sortBy' => $this->sortBy,
             'sortDirection' => $this->sortDirection,
         ];
@@ -174,14 +175,14 @@ new #[Title('Supplier Purchasing Report')] class extends Component
 
     public function exportUrl(string $format): string
     {
-        $params = array_filter($this->filters(), fn ($value) => $value !== null && $value !== '');
+        $params = array_filter($this->filters(), fn ($value) => $value !== null && $value !== '' && $value !== []);
 
         return route('reports.supplier-purchasing.export', array_merge(['format' => $format], $params));
     }
 
     public function printUrl(): string
     {
-        $params = array_filter($this->filters(), fn ($value) => $value !== null && $value !== '');
+        $params = array_filter($this->filters(), fn ($value) => $value !== null && $value !== '' && $value !== []);
 
         return route('reports.supplier-purchasing.export', array_merge(['format' => 'pdf', 'inline' => 1], $params));
     }
@@ -233,7 +234,7 @@ new #[Title('Supplier Purchasing Report')] class extends Component
     #[Computed]
     public function hasFilters(): bool
     {
-        return $this->supplierId !== '' || $this->amountMin !== '' || $this->amountMax !== '' || $this->paidStatus !== '' || $this->period !== 'this_month';
+        return $this->supplierId !== '' || $this->amountMin !== '' || $this->amountMax !== '' || $this->paidStatuses !== [] || $this->period !== 'this_month';
     }
 
     public function sendReportEmail(): void
@@ -375,12 +376,11 @@ new #[Title('Supplier Purchasing Report')] class extends Component
 
             <div class="flex flex-col">
                 <label class="mb-0.5 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Paid Status') }}</label>
-                <flux:select wire:model.live="paidStatus" size="sm" class="!w-32">
-                    <flux:select.option value="">{{ __('All') }}</flux:select.option>
-                    <flux:select.option value="paid">{{ __('Paid') }}</flux:select.option>
-                    <flux:select.option value="partial">{{ __('Partial') }}</flux:select.option>
-                    <flux:select.option value="unpaid">{{ __('Unpaid') }}</flux:select.option>
-                </flux:select>
+                <div class="flex flex-row flex-wrap gap-4 pt-2">
+                    <flux:checkbox wire:model.live="paidStatuses" value="paid" :label="__('Paid')" />
+                    <flux:checkbox wire:model.live="paidStatuses" value="partial" :label="__('Partial')" />
+                    <flux:checkbox wire:model.live="paidStatuses" value="unpaid" :label="__('Unpaid')" />
+                </div>
             </div>
         </div>
     </div>

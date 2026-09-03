@@ -100,6 +100,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Supplier Payouts
     Route::livewire('supplier-payouts', 'pages::supplier-payouts.index')->name('supplier-payouts.index')->middleware('can:supplierpayout-index');
+    Route::livewire('supplier-payouts/create', 'pages::supplier-payouts.create')->name('supplier-payouts.create')->middleware('can:supplierpayout-create');
     Route::livewire('supplier-payouts/{payout}/edit', 'pages::supplier-payouts.edit')->name('supplier-payouts.edit')->middleware('can:supplierpayout-edit');
     Route::livewire('supplier-payouts/{payout}', 'pages::supplier-payouts.show')->name('supplier-payouts.show')->middleware('can:supplierpayout-show');
 

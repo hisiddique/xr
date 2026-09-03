@@ -315,7 +315,7 @@ document.addEventListener('alpine:init', () => {
             // ── '+' creates new on scoped list & show pages ──
             if (key === '+') {
                 const path = window.location.pathname;
-                const scopes = ['/customers', '/suppliers', '/delivery-notes', '/credit-notes', '/overheads', '/users', '/roles', '/supplier-invoices', '/supplier-debit-notes'];
+                const scopes = ['/customers', '/suppliers', '/delivery-notes', '/credit-notes', '/overheads', '/users', '/roles', '/supplier-invoices', '/supplier-debit-notes', '/supplier-payouts'];
                 const scope = scopes.find((s) => path === s || new RegExp(`^${s}/\\d+$`).test(path));
                 if (scope) {
                     e.preventDefault();
@@ -1768,6 +1768,44 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 
+    // Keyboard-driven "commit debit note" modal: S / P / C letter shortcuts,
+    // up/down/tab to move focus between the choices, Enter to activate.
+    window.Alpine.data('debitNoteCommitNav', () => ({
+        selected: 0,
+
+        init() {
+            document.addEventListener('modal-show', (e) => {
+                if (e.detail?.name !== 'confirm-commit-debit-note') return;
+                this.selected = 0;
+                setTimeout(() => this.focusSelected(), 60);
+            });
+        },
+
+        _buttons() {
+            return this.$refs.choices ? Array.from(this.$refs.choices.querySelectorAll('button')) : [];
+        },
+
+        focusSelected() {
+            this._buttons()[this.selected]?.focus();
+        },
+
+        move(dir) {
+            const btns = this._buttons();
+            if (!btns.length) return;
+            this.selected = (this.selected + dir + btns.length) % btns.length;
+            this.focusSelected();
+        },
+
+        handleShortcut(e) {
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            const map = { s: 0, p: 1, c: 2 };
+            const idx = map[e.key.toLowerCase()];
+            if (idx === undefined) return;
+            e.preventDefault();
+            this._buttons()[idx]?.click();
+        },
+    }));
+
     window.Alpine.data('exitConfirmNav', (modalName = 'exit-confirm') => ({
         selected: 0,
 
@@ -2296,10 +2334,11 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 
-    window.Alpine.data('supplierPayoutAllocator', ({ rows }) => ({
+    window.Alpine.data('supplierPayoutAllocator', ({ rows, focusAmount = false }) => ({
         rows: rows.map(r => ({ ...r, allocated_amount: r.allocated_amount ?? 0 })),
 
         init() {
+
             document.addEventListener('modal-show', (e) => {
                 if (e.detail?.name !== 'confirm-allocation') return;
                 setTimeout(() => document.querySelector('[data-payout-confirm-btn]')?.focus(), 60);
@@ -2310,6 +2349,15 @@ document.addEventListener('alpine:init', () => {
                     if (el) { el.focus(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
                 });
             });
+
+            // Arriving from "Save & move to payout": supplier + debit notes are
+            // already filled, so the amount is the field awaiting input.
+            if (focusAmount) {
+                this.$nextTick(() => setTimeout(() => {
+                    const el = this.$el.querySelector('[data-payout-amount]');
+                    if (el) { el.focus(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+                }, 80));
+            }
         },
 
         get payoutAmount() {

@@ -527,13 +527,31 @@ new #[Title('Supplier Invoice')] class extends Component
                         </div>
                     @endif
 
-                    <div class="md:col-span-2">
-                        <flux:textarea
-                            wire:model="notes"
-                            :label="__('Internal Remittance Comments / Auditing Notes')"
-                            rows="3"
-                            :placeholder="__('Optional internal notes…')"
-                        />
+                    <div class="md:col-span-2" x-data="{ showNotes: @js(filled($notes)) }">
+                        <flux:button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            icon="chat-bubble-left"
+                            x-show="! showNotes"
+                            x-cloak
+                            x-on:click="showNotes = true"
+                        >
+                            {{ __('Add internal remittance notes') }}
+                        </flux:button>
+
+                        <div x-show="showNotes" x-collapse x-cloak>
+                            <div class="flex items-center justify-between">
+                                <flux:label>{{ __('Internal Remittance Comments / Auditing Notes') }}</flux:label>
+                                <flux:button type="button" variant="ghost" size="xs" icon="chevron-up" x-on:click="showNotes = false">{{ __('Hide') }}</flux:button>
+                            </div>
+                            <flux:textarea
+                                wire:model="notes"
+                                rows="3"
+                                class="mt-1.5"
+                                :placeholder="__('Optional internal notes…')"
+                            />
+                        </div>
                     </div>
 
                     @if($supplier_id && count($this->availableDebitNotes) > 0)

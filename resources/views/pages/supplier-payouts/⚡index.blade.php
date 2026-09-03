@@ -113,8 +113,13 @@ new #[Title('Supplier Payouts')] class extends Component {
     >
         <x-slot:action>
             @can('supplierdebitnote-create')
-            <flux:button variant="primary" icon="arrow-right" :href="route('supplier-debit-notes.create')" wire:navigate>
-                Issue Debit Note &amp; Pay
+            <flux:button variant="ghost" icon="minus-circle" :href="route('supplier-debit-notes.create')" wire:navigate>
+                Issue Debit Note
+            </flux:button>
+            @endcan
+            @can('supplierpayout-create')
+            <flux:button variant="primary" icon="plus" :href="route('supplier-payouts.create')" wire:navigate>
+                New Payout
             </flux:button>
             @endcan
         </x-slot:action>
@@ -151,13 +156,13 @@ new #[Title('Supplier Payouts')] class extends Component {
             <x-ui.empty-state
                 icon="banknotes"
                 title="No supplier payouts found"
-                :description="($search || $dateFrom || $dateTo || $amountMin || $amountMax) ? 'Try adjusting your search or filters.' : 'Payouts are created when issuing a supplier debit note.'"
+                :description="($search || $dateFrom || $dateTo || $amountMin || $amountMax) ? 'Try adjusting your search or filters.' : 'Record your first outbound supplier payout.'"
             >
                 @unless($search || $dateFrom || $dateTo || $amountMin || $amountMax)
                     <x-slot:action>
-                        @can('supplierdebitnote-create')
-                        <flux:button variant="primary" :href="route('supplier-debit-notes.create')" wire:navigate>
-                            Issue Debit Note &amp; Pay
+                        @can('supplierpayout-create')
+                        <flux:button variant="primary" :href="route('supplier-payouts.create')" wire:navigate>
+                            New Payout
                         </flux:button>
                         @endcan
                     </x-slot:action>
