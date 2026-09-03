@@ -15,7 +15,8 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 
-new #[Title('Supplier Details')] class extends Component {
+new #[Title('Supplier Details')] class extends Component
+{
     use WithPagination;
     use WithPerPage;
     use WithSorting;
@@ -24,9 +25,11 @@ new #[Title('Supplier Details')] class extends Component {
 
     public Supplier $supplier;
 
-    #[Url(as: 'tab')] public string $activeTab = 'transaction-history';
+    #[Url(as: 'tab')]
+    public string $activeTab = 'transaction-history';
 
-    #[Url(as: 'ledger_search')] public string $ledgerSearch = '';
+    #[Url(as: 'ledger_search')]
+    public string $ledgerSearch = '';
 
     public int $perPage = 25;
 
@@ -165,7 +168,7 @@ new #[Title('Supplier Details')] class extends Component {
             ->get();
 
         foreach ($invoices as $invoice) {
-            $gross = (float) $invoice->grossTotal;
+            $gross = (float) $invoice->payableTotal;
             $paidPayouts = (float) $invoice->payoutAllocations->sum('allocated_amount');
             $paidDebitNotes = (float) $invoice->debitNotes->sum(fn ($dn) => (float) $dn->pivot->applied_amount);
             $paid = $paidPayouts + $paidDebitNotes;
@@ -505,6 +508,20 @@ new #[Title('Supplier Details')] class extends Component {
                     @if($supplier->reference)
                         <p class="mt-0.5 font-mono text-sm text-zinc-500 dark:text-zinc-400">{{ $supplier->reference }}</p>
                     @endif
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    @can('supplierinvoice-create')
+                    <a href="{{ route('supplier-invoices.create').'?supplier_id='.$supplier->id }}" wire:navigate
+                       class="inline-flex items-center gap-1.5 rounded-lg bg-violet-50 px-2.5 py-1.5 text-sm font-medium text-violet-700 ring-1 ring-inset ring-violet-600/20 transition-colors hover:bg-violet-100 dark:bg-violet-500/10 dark:text-violet-400 dark:ring-violet-500/20 dark:hover:bg-violet-500/20">
+                        <flux:icon.receipt-percent variant="micro" /> Supplier Invoice
+                    </a>
+                    @endcan
+                    @can('supplierdebitnote-create')
+                    <a href="{{ route('supplier-debit-notes.create').'?supplier_id='.$supplier->id }}" wire:navigate
+                       class="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-1.5 text-sm font-medium text-rose-700 ring-1 ring-inset ring-rose-600/20 transition-colors hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:ring-rose-500/20 dark:hover:bg-rose-500/20">
+                        <flux:icon.document-minus variant="micro" /> Debit Note
+                    </a>
+                    @endcan
                 </div>
             </div>
         </div>

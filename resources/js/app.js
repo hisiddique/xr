@@ -1556,6 +1556,19 @@ document.addEventListener('alpine:init', () => {
             return Math.round((this.netTotal + this.vatTotal) * 100) / 100;
         },
 
+        get discountPct() {
+            return parseFloat(this.$wire.tradeDiscount) || 0;
+        },
+
+        get discountAmount() {
+            const base = this.$wire.discountOnGross ? this.grossTotal : this.netTotal;
+            return Math.round(base * this.discountPct / 100 * 100) / 100;
+        },
+
+        get payableTotal() {
+            return Math.max(0, Math.round((this.grossTotal - this.discountAmount) * 100) / 100);
+        },
+
         add() {
             this.rows.push({ ...this._rowDefault });
             this.$nextTick(() => this.focusLast());

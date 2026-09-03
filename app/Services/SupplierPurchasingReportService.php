@@ -35,13 +35,15 @@ class SupplierPurchasingReportService
 
     protected const GROSS_EXPR = '('.self::NET_EXPR.' + '.self::VAT_EXPR.')';
 
+    protected const PAYABLE_EXPR = '('.self::GROSS_EXPR.' - COALESCE(supplier_invoices.discount_amount, 0))';
+
     /**
      * Unclamped outstanding amount. Negative (overpaid) values never satisfy
      * the "partial"/"unpaid" boundaries below, and the "paid" boundary
      * (<= 0) matches the model's clamped `outstandingAmount` accessor for
      * every value it can produce, so no GREATEST/CASE clamp is needed here.
      */
-    protected const PAID_EXPR = '('.self::GROSS_EXPR.'
+    protected const PAID_EXPR = '('.self::PAYABLE_EXPR.'
         - COALESCE((select sum(spa.allocated_amount) from supplier_payout_allocations spa where spa.supplier_invoice_id = supplier_invoices.id), 0)
         - COALESCE((select sum(sidn.applied_amount) from supplier_invoice_debit_notes sidn where sidn.supplier_invoice_id = supplier_invoices.id), 0))';
 
@@ -77,10 +79,10 @@ class SupplierPurchasingReportService
             ->when(is_numeric($filters['amountMin'] ?? null), fn ($q) => $q->whereRaw(self::GROSS_EXPR.' >= CAST(? AS REAL)', [$vatRate, (float) $filters['amountMin']]))
             ->when(is_numeric($filters['amountMax'] ?? null), fn ($q) => $q->whereRaw(self::GROSS_EXPR.' <= CAST(? AS REAL)', [$vatRate, (float) $filters['amountMax']]))
             ->when($paidStatus === 'paid', fn ($q) => $q->whereRaw(self::PAID_EXPR.' <= 0.001', [$vatRate]))
-            ->when($paidStatus === 'unpaid', fn ($q) => $q->whereRaw(self::PAID_EXPR.' >= '.self::GROSS_EXPR.' - 0.001', [$vatRate, $vatRate]))
+            ->when($paidStatus === 'unpaid', fn ($q) => $q->whereRaw(self::PAID_EXPR.' >= '.self::PAYABLE_EXPR.' - 0.001', [$vatRate, $vatRate]))
             ->when($paidStatus === 'partial', function ($q) use ($vatRate) {
                 $q->whereRaw(self::PAID_EXPR.' > 0.001', [$vatRate])
-                    ->whereRaw(self::PAID_EXPR.' < '.self::GROSS_EXPR.' - 0.001', [$vatRate, $vatRate]);
+                    ->whereRaw(self::PAID_EXPR.' < '.self::PAYABLE_EXPR.' - 0.001', [$vatRate, $vatRate]);
             });
     }
 
@@ -103,7 +105,7 @@ class SupplierPurchasingReportService
         // pushes one invoice negative and eats into another), so the aggregate
         // must sum the per-row clamp — not clamp the aggregate — to stay equal
         // to the supplier subtotals shown above it.
-        $netPayableExpr = 'CASE WHEN ('.self::GROSS_EXPR.' - '.$deductExpr.') > 0 THEN ('.self::GROSS_EXPR.' - '.$deductExpr.') ELSE 0 END';
+        $netPayableExpr = 'CASE WHEN ('.self::PAYABLE_EXPR.' - '.$deductExpr.') > 0 THEN ('.self::PAYABLE_EXPR.' - '.$deductExpr.') ELSE 0 END';
 
         $row = SupplierInvoice::query()
             ->tap(fn ($q) => $this->applyFilters($q, $filters))
@@ -208,7 +210,7 @@ class SupplierPurchasingReportService
 
     public function netPayable(SupplierInvoice $invoice): float
     {
-        return round(max(0, (float) $invoice->grossTotal - $this->deductionsTotal($invoice)), 2);
+        return round(max(0, (float) $invoice->payableTotal - $this->deductionsTotal($invoice)), 2);
     }
 
     /**

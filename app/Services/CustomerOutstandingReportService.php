@@ -27,7 +27,7 @@ class CustomerOutstandingReportService
      */
     public const PDF_ROW_CAP = 5000;
 
-    protected const OUTSTANDING_EXPR = '(documents.total_value
+    public const OUTSTANDING_EXPR = '(documents.total_value
         - COALESCE((select sum(pa.allocated_amount) from payment_allocations pa where pa.document_id = documents.id and pa.deleted_at is null), 0)
         - COALESCE((select sum(ca.amount) from credit_allocations ca where ca.invoice_id = documents.id and ca.deleted_at is null), 0)
         - COALESCE((select sum(wo.amount) from write_offs wo where wo.document_id = documents.id and wo.deleted_at is null), 0))';

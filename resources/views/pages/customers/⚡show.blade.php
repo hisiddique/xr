@@ -17,7 +17,8 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 
-new #[Title('Customer Details')] class extends Component {
+new #[Title('Customer Details')] class extends Component
+{
     use WithPagination;
     use WithPerPage;
     use WithSorting;
@@ -576,11 +577,26 @@ new #[Title('Customer Details')] class extends Component {
                         <p class="mt-0.5 font-mono text-sm text-zinc-500 dark:text-zinc-400">{{ $customer->reference }}</p>
                     @endif
                 </div>
-                @can('deliverynote-create')
-                <flux:button variant="primary" icon="plus" size="sm" :href="route('delivery-notes.create').'?customer_id='.$customer->id" wire:navigate>
-                    New Delivery Note
-                </flux:button>
-                @endcan
+                <div class="flex flex-wrap items-center gap-2">
+                    @can('deliverynote-create')
+                    <a href="{{ route('delivery-notes.create').'?customer_id='.$customer->id }}" wire:navigate
+                       class="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1.5 text-sm font-medium text-sky-700 ring-1 ring-inset ring-sky-600/20 transition-colors hover:bg-sky-100 dark:bg-sky-500/10 dark:text-sky-400 dark:ring-sky-500/20 dark:hover:bg-sky-500/20">
+                        <flux:icon.truck variant="micro" /> Delivery Note
+                    </a>
+                    @endcan
+                    @can('creditnote-create')
+                    <a href="{{ route('credit-notes.create').'?customer_id='.$customer->id }}" wire:navigate
+                       class="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-sm font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 transition-colors hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/20 dark:hover:bg-amber-500/20">
+                        <flux:icon.receipt-refund variant="micro" /> Credit Note
+                    </a>
+                    @endcan
+                    @can('payment-create')
+                    <a href="{{ route('payments.create').'?customer_id='.$customer->id }}" wire:navigate
+                       class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20 transition-colors hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/20 dark:hover:bg-emerald-500/20">
+                        <flux:icon.banknotes variant="micro" /> Payment
+                    </a>
+                    @endcan
+                </div>
             </div>
         </div>
     </div>

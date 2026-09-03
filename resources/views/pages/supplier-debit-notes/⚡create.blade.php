@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Setting;
+use App\Models\Supplier;
 use App\Models\SupplierDebitNote;
 use App\Models\SupplierDebitNoteItem;
 use App\Models\SupplierInvoice;
@@ -10,14 +11,22 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Issue Supplier Debit Note')] class extends Component {
+new #[Title('Issue Supplier Debit Note')] class extends Component
+{
     public ?int $supplier_id = null;
+
     public string $supplierName = '';
+
     public string $doc_date = '';
+
     public ?int $supplier_invoice_id = null;
+
     public string $notes = '';
+
     public array $items = [];
+
     public string $nextReference = '';
+
     public float $vatRate = 20.0;
 
     public function mount(): void
@@ -28,6 +37,13 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
         ];
         $this->nextReference = SupplierDebitNote::nextNumber();
         $this->vatRate = (float) Setting::get('vat_rate', 20);
+
+        if (request()->filled('supplier_id')) {
+            $this->supplier_id = (int) request('supplier_id');
+            if ($supplier = Supplier::withTrashed()->find($this->supplier_id)) {
+                $this->supplierName = $supplier->typeahead_label;
+            }
+        }
     }
 
     public function updatedSupplierId(): void
@@ -46,6 +62,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
         return SupplierInvoice::where('supplier_id', $this->supplier_id)
             ->whereRaw('
                 (SELECT COALESCE(SUM(line_total), 0) FROM supplier_invoice_items WHERE supplier_invoice_id = supplier_invoices.id)
+                - COALESCE(supplier_invoices.discount_amount, 0)
                 - (SELECT COALESCE(SUM(allocated_amount), 0) FROM supplier_payout_allocations WHERE supplier_invoice_id = supplier_invoices.id)
                 - (SELECT COALESCE(SUM(applied_amount), 0) FROM supplier_invoice_debit_notes WHERE supplier_invoice_id = supplier_invoices.id)
                 > 0.001
@@ -63,12 +80,12 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
         ));
 
         $this->validate([
-            'supplier_id'         => 'required|integer|exists:suppliers,id',
-            'doc_date'            => 'required|date',
-            'items'               => 'required|array|min:1',
+            'supplier_id' => 'required|integer|exists:suppliers,id',
+            'doc_date' => 'required|date',
+            'items' => 'required|array|min:1',
             'items.*.description' => 'required|string|max:500',
-            'items.*.quantity'    => 'required|numeric|min:0.01',
-            'items.*.amount'      => 'required|numeric|min:0',
+            'items.*.quantity' => 'required|numeric|min:0.01',
+            'items.*.amount' => 'required|numeric|min:0',
             'items.*.vat_applicable' => 'boolean',
         ]);
 
@@ -87,32 +104,32 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
 
         $debitNote = DB::transaction(function () use ($items, $subtotal, $vatAmount, $total) {
             $dn = SupplierDebitNote::create([
-                'supplier_id'         => $this->supplier_id,
-                'doc_date'            => $this->doc_date,
+                'supplier_id' => $this->supplier_id,
+                'doc_date' => $this->doc_date,
                 'supplier_invoice_id' => $this->supplier_invoice_id ?: null,
-                'notes'               => $this->notes ?: null,
-                'subtotal'            => $subtotal,
-                'vat_amount'          => $vatAmount,
-                'total'               => $total,
-                'created_by'          => auth()->id(),
+                'notes' => $this->notes ?: null,
+                'subtotal' => $subtotal,
+                'vat_amount' => $vatAmount,
+                'total' => $total,
+                'created_by' => auth()->id(),
             ]);
 
             foreach (array_values($items) as $idx => $item) {
                 SupplierDebitNoteItem::create([
                     'supplier_debit_note_id' => $dn->id,
-                    'description'            => $item['description'],
-                    'quantity'               => (float) $item['quantity'],
-                    'amount'                 => (float) $item['amount'],
-                    'vat_applicable'         => (bool) ($item['vat_applicable'] ?? false),
-                    'total'                  => round((float) $item['quantity'] * (float) $item['amount'], 2),
-                    'sort_order'             => $idx,
+                    'description' => $item['description'],
+                    'quantity' => (float) $item['quantity'],
+                    'amount' => (float) $item['amount'],
+                    'vat_applicable' => (bool) ($item['vat_applicable'] ?? false),
+                    'total' => round((float) $item['quantity'] * (float) $item['amount'], 2),
+                    'sort_order' => $idx,
                 ]);
             }
 
             if ($this->supplier_invoice_id) {
                 $dn->appliedInvoices()->attach($this->supplier_invoice_id, [
                     'applied_amount' => $dn->total,
-                    'applied_at'     => now(),
+                    'applied_at' => now(),
                 ]);
             }
 
@@ -120,7 +137,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
         });
 
         Flux::modal('confirm-commit-debit-note')->close();
-        Flux::toast(variant: 'success', text: 'Debit note ' . $debitNote->reference . ' committed.', duration: 0);
+        Flux::toast(variant: 'success', text: 'Debit note '.$debitNote->reference.' committed.', duration: 0);
 
         $supplierId = $this->supplier_id;
         $linkedInvoiceId = $this->supplier_invoice_id;

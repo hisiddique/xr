@@ -5,7 +5,9 @@ use App\Models\LookupPaymentMethod;
 use App\Models\Overhead;
 use App\Models\Setting;
 use App\Models\Supplier;
+use App\Models\SupplierDebitNote;
 use App\Models\SupplierInvoice;
+use App\Services\SupplierInvoiceTotalsCalculator;
 use App\SupplierCategory;
 use Flux\Flux;
 use Illuminate\Support\Facades\Storage;
@@ -15,26 +17,45 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
-new #[Title('Supplier Invoice')] class extends Component {
+new #[Title('Supplier Invoice')] class extends Component
+{
     use WithFileUploads;
 
     public ?SupplierInvoice $supplierInvoice = null;
 
     public ?int $supplier_id = null;
+
     public string $supplierName = '';
+
     public string $supplier_ref_invoice_no = '';
+
     public string $invoice_date = '';
+
     public string $notes = '';
+
     public bool $addOverheadExpense = false;
+
     public ?int $overhead_category_id = null;
+
     public string $overhead_payment_method = '';
+
     public bool $overhead_has_vat = true;
+
     public float $vatRate = 20.0;
+
     public array $items = [];
+
     public array $existingAttachments = [];
+
     public array $markedForDeletion = [];
+
     public $newAttachments = [];
+
     public array $selectedDebitNoteIds = [];
+
+    public string $tradeDiscount = '0';
+
+    public bool $discountOnGross = false;
 
     public function mount(): void
     {
@@ -43,6 +64,8 @@ new #[Title('Supplier Invoice')] class extends Component {
         if ($this->supplierInvoice) {
             $this->supplierInvoice->load(['supplier', 'items', 'overhead']);
             $this->supplier_id = $this->supplierInvoice->supplier_id;
+            $this->tradeDiscount = (string) $this->supplierInvoice->trade_discount;
+            $this->discountOnGross = (bool) $this->supplierInvoice->discount_on_gross;
             $this->supplierName = $this->supplierInvoice->supplier->typeahead_label;
             $this->supplier_ref_invoice_no = $this->supplierInvoice->supplier_ref_invoice_no ?? '';
             $this->invoice_date = $this->supplierInvoice->invoice_date->format('Y-m-d');
@@ -71,6 +94,14 @@ new #[Title('Supplier Invoice')] class extends Component {
         } else {
             $this->invoice_date = now()->format('Y-m-d');
             $this->items = [['product_code' => '', 'quantity' => 1, 'unit_amount' => '', 'vat_applicable' => true]];
+
+            if (request()->filled('supplier_id')) {
+                $this->supplier_id = (int) request('supplier_id');
+                if ($supplier = Supplier::withTrashed()->find($this->supplier_id)) {
+                    $this->supplierName = $supplier->typeahead_label;
+                    $this->tradeDiscount = (string) ($supplier->trade_discount ?? '0');
+                }
+            }
         }
     }
 
@@ -100,7 +131,7 @@ new #[Title('Supplier Invoice')] class extends Component {
             return [];
         }
 
-        return \App\Models\SupplierDebitNote::where('supplier_id', $this->supplier_id)
+        return SupplierDebitNote::where('supplier_id', $this->supplier_id)
             ->whereDoesntHave('appliedInvoices')
             ->where('status', 'committed')
             ->orderBy('doc_date')
@@ -143,6 +174,12 @@ new #[Title('Supplier Invoice')] class extends Component {
         });
     }
 
+    public function updatedSupplierId($value): void
+    {
+        $supplier = $value ? Supplier::withTrashed()->find($value) : null;
+        $this->tradeDiscount = (string) ($supplier?->trade_discount ?? '0');
+    }
+
     #[Computed]
     public function supplierCategory(): ?SupplierCategory
     {
@@ -175,6 +212,7 @@ new #[Title('Supplier Invoice')] class extends Component {
             'overhead_category_id' => [Rule::requiredIf(fn () => $this->addOverheadExpense), 'nullable', 'integer', 'exists:expense_categories,id'],
             'overhead_payment_method' => [Rule::requiredIf(fn () => $this->addOverheadExpense), 'nullable', 'string', 'max:50'],
             'overhead_has_vat' => 'boolean',
+            'tradeDiscount' => 'numeric|min:0|max:100',
             'newAttachments.*' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:10240',
         ]);
 
@@ -211,8 +249,20 @@ new #[Title('Supplier Invoice')] class extends Component {
 
         $invoice->unsetRelation('items');
 
+        $pct = (float) ($this->tradeDiscount ?: 0);
+        $lineItems = collect($this->items)->map(fn ($row) => [
+            'line_total' => round((float) ($row['quantity'] ?? 0) * (float) ($row['unit_amount'] ?? 0), 2),
+            'vat_applicable' => (bool) ($row['vat_applicable'] ?? false),
+        ]);
+        $totals = app(SupplierInvoiceTotalsCalculator::class)->calculate($lineItems, $pct, $this->discountOnGross);
+        $invoice->update([
+            'trade_discount' => $pct,
+            'discount_amount' => $totals['discount'],
+            'discount_on_gross' => $this->discountOnGross,
+        ]);
+
         if ($this->addOverheadExpense) {
-            $grossTotal = $invoice->grossTotal;
+            $grossTotal = $invoice->payableTotal;
 
             if ($grossTotal > 0) {
                 $overheadData = [
@@ -268,7 +318,7 @@ new #[Title('Supplier Invoice')] class extends Component {
             $invoice->debitNotes()->detach($toDetach);
 
             foreach ($this->selectedDebitNoteIds as $dnId) {
-                $dn = \App\Models\SupplierDebitNote::find($dnId);
+                $dn = SupplierDebitNote::find($dnId);
                 if ($dn) {
                     $invoice->debitNotes()->attach($dnId, [
                         'applied_amount' => $dn->total,
@@ -595,9 +645,19 @@ new #[Title('Supplier Invoice')] class extends Component {
                             <dt class="text-sm text-zinc-600 dark:text-zinc-400">Calculated VAT Input Pool Element (20%)</dt>
                             <dd class="font-mono font-medium text-zinc-900 dark:text-white" x-text="'£' + vatTotal.toFixed(2)"></dd>
                         </div>
+                        <div x-show="discountPct > 0" x-cloak>
+                            <div class="flex items-center justify-between gap-4">
+                                <dt class="text-sm text-zinc-600 dark:text-zinc-400">Trade Discount (<span x-text="discountPct"></span>%)</dt>
+                                <dd class="font-mono font-medium text-red-600 dark:text-red-400" x-text="'−£' + discountAmount.toFixed(2)"></dd>
+                            </div>
+                            <label class="mt-2 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                                <input type="checkbox" wire:model.live="discountOnGross" class="rounded border-zinc-300 text-violet-600 focus:ring-violet-500/30 dark:border-white/20 dark:bg-zinc-800" />
+                                Apply discount to VAT-inclusive amount
+                            </label>
+                        </div>
                         <div class="flex items-center justify-between gap-4 border-t border-violet-200/70 pt-3 dark:border-violet-500/20">
-                            <dt class="text-base font-semibold text-zinc-900 dark:text-white">Total Final Payable Gross Sum</dt>
-                            <dd class="font-mono text-lg font-bold text-violet-700 dark:text-violet-400" x-text="'£' + grossTotal.toFixed(2)"></dd>
+                            <dt class="text-base font-semibold text-zinc-900 dark:text-white">Total Final Payable</dt>
+                            <dd class="font-mono text-lg font-bold text-violet-700 dark:text-violet-400" x-text="'£' + payableTotal.toFixed(2)"></dd>
                         </div>
                         @if($this->selectedDebitNoteTotal > 0)
                         <div class="flex items-center justify-between gap-4">
@@ -606,7 +666,7 @@ new #[Title('Supplier Invoice')] class extends Component {
                         </div>
                         <div class="flex items-center justify-between gap-4 border-t border-violet-200/70 pt-3 dark:border-violet-500/20">
                             <dt class="text-base font-semibold text-zinc-900 dark:text-white">Net Payable After Deductions</dt>
-                            <dd class="font-mono text-lg font-bold text-emerald-600 dark:text-emerald-400" x-text="'£' + Math.max(0, grossTotal - {{ $this->selectedDebitNoteTotal }}).toFixed(2)"></dd>
+                            <dd class="font-mono text-lg font-bold text-emerald-600 dark:text-emerald-400" x-text="'£' + Math.max(0, payableTotal - {{ $this->selectedDebitNoteTotal }}).toFixed(2)"></dd>
                         </div>
                         @endif
                     </dl>

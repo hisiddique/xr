@@ -1,12 +1,12 @@
 <?php
 
 use App\Models\SupplierInvoice;
-use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Supplier Invoice')] class extends Component {
+new #[Title('Supplier Invoice')] class extends Component
+{
     public SupplierInvoice $supplierInvoice;
 
     public function mount(): void
@@ -186,9 +186,20 @@ new #[Title('Supplier Invoice')] class extends Component {
                     <dt class="text-sm text-zinc-600 dark:text-zinc-400">Calculated VAT Input Pool Element (20%)</dt>
                     <dd class="font-mono font-medium text-zinc-900 dark:text-white">£{{ number_format($supplierInvoice->vatTotal, 2) }}</dd>
                 </div>
+                @if($supplierInvoice->discountTotal > 0)
+                    <div class="flex items-center justify-between gap-4">
+                        <dt class="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                            Trade Discount ({{ rtrim(rtrim(number_format((float) $supplierInvoice->trade_discount, 2), '0'), '.') }}%)
+                            @if($supplierInvoice->discount_on_gross)
+                                <span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-400">incl. VAT</span>
+                            @endif
+                        </dt>
+                        <dd class="font-mono font-medium text-red-600 dark:text-red-400">−£{{ number_format($supplierInvoice->discountTotal, 2) }}</dd>
+                    </div>
+                @endif
                 <div class="flex items-center justify-between gap-4 border-t border-violet-200/70 pt-3 dark:border-violet-500/20">
-                    <dt class="text-base font-semibold text-zinc-900 dark:text-white">Total Final Payable Gross Sum</dt>
-                    <dd class="font-mono text-lg font-bold text-violet-700 dark:text-violet-400">£{{ number_format($supplierInvoice->grossTotal, 2) }}</dd>
+                    <dt class="text-base font-semibold text-zinc-900 dark:text-white">Total Final Payable</dt>
+                    <dd class="font-mono text-lg font-bold text-violet-700 dark:text-violet-400">£{{ number_format($supplierInvoice->payableTotal, 2) }}</dd>
                 </div>
                 @if($supplierInvoice->debitNotes->isNotEmpty())
                     @php $totalDeducted = $supplierInvoice->debitNotes->sum(fn ($dn) => (float) $dn->pivot->applied_amount); @endphp
@@ -198,7 +209,7 @@ new #[Title('Supplier Invoice')] class extends Component {
                     </div>
                     <div class="flex items-center justify-between gap-4 border-t border-violet-200/70 pt-3 dark:border-violet-500/20">
                         <dt class="text-base font-semibold text-zinc-900 dark:text-white">Net Payable After Deductions</dt>
-                        <dd class="font-mono text-lg font-bold text-emerald-600 dark:text-emerald-400">£{{ number_format(max(0, $supplierInvoice->grossTotal - $totalDeducted), 2) }}</dd>
+                        <dd class="font-mono text-lg font-bold text-emerald-600 dark:text-emerald-400">£{{ number_format(max(0, $supplierInvoice->payableTotal - $totalDeducted), 2) }}</dd>
                     </div>
                 @endif
             </dl>

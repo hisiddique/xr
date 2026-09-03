@@ -18,7 +18,7 @@ new #[Title('Supplier Invoices')] class extends Component {
     use WithSorting;
     use WithPerPage;
 
-    protected array $sortable = ['supplier_invoice_no', 'invoice_date', 'created_at', 'gross_total', 'vat_total', 'net_total', 'paid_status'];
+    protected array $sortable = ['supplier_invoice_no', 'invoice_date', 'created_at', 'payable_total', 'vat_total', 'net_total', 'discount_amount', 'paid_status'];
 
     #[Url]
     public string $search = '';
@@ -82,31 +82,20 @@ new #[Title('Supplier Invoices')] class extends Component {
     {
         $rate = (float) Setting::get('vat_rate', 20);
 
-        $grossSub = SupplierInvoiceItem::selectRaw('COALESCE(SUM(line_total), 0)')
-            ->whereColumn('supplier_invoice_id', 'supplier_invoices.id');
-
-        $vatSub = SupplierInvoiceItem::selectRaw(
-            'COALESCE(SUM(CASE WHEN vat_applicable = 1 THEN line_total * ? / (100 + ?) ELSE 0 END), 0)',
-            [$rate, $rate]
-        )->whereColumn('supplier_invoice_id', 'supplier_invoices.id');
-
-        $netRate = 100 / (100 + $rate);
-
-        $netSub = SupplierInvoiceItem::selectRaw(
-            'COALESCE(SUM(line_total * CASE WHEN vat_applicable = 0 THEN 1 ELSE ? END), 0)',
-            [$netRate]
-        )->whereColumn('supplier_invoice_id', 'supplier_invoices.id');
-
-        $outstandingExpr =
-            '(SELECT COALESCE(SUM(line_total), 0) FROM supplier_invoice_items WHERE supplier_invoice_id = supplier_invoices.id)'
+        $netExpr = '(SELECT COALESCE(SUM(line_total), 0) FROM supplier_invoice_items WHERE supplier_invoice_id = supplier_invoices.id)';
+        $vatExpr = "(SELECT COALESCE(SUM(CASE WHEN vat_applicable = 1 THEN line_total * {$rate} / 100 ELSE 0 END), 0) FROM supplier_invoice_items WHERE supplier_invoice_id = supplier_invoices.id)";
+        $grossExpr = "({$netExpr} + {$vatExpr})";
+        $payableExpr = "({$grossExpr} - supplier_invoices.discount_amount)";
+        $outstandingExpr = "({$payableExpr}"
             .' - (SELECT COALESCE(SUM(allocated_amount), 0) FROM supplier_payout_allocations WHERE supplier_invoice_id = supplier_invoices.id AND deleted_at IS NULL)'
-            .' - (SELECT COALESCE(SUM(applied_amount), 0) FROM supplier_invoice_debit_notes WHERE supplier_invoice_id = supplier_invoices.id)';
+            .' - (SELECT COALESCE(SUM(applied_amount), 0) FROM supplier_invoice_debit_notes WHERE supplier_invoice_id = supplier_invoices.id))';
 
         return match ($column) {
-            'gross_total' => $query->orderBy($grossSub, $direction),
-            'vat_total' => $query->orderBy($vatSub, $direction),
-            'net_total' => $query->orderBy($netSub, $direction),
-            'paid_status' => $query->orderByRaw("({$outstandingExpr}) {$direction}"),
+            'net_total' => $query->orderByRaw("{$netExpr} {$direction}"),
+            'vat_total' => $query->orderByRaw("{$vatExpr} {$direction}"),
+            'payable_total' => $query->orderByRaw("{$payableExpr} {$direction}"),
+            'discount_amount' => $query->orderBy('supplier_invoices.discount_amount', $direction),
+            'paid_status' => $query->orderByRaw("{$outstandingExpr} {$direction}"),
             default => null,
         };
     }
@@ -220,7 +209,8 @@ new #[Title('Supplier Invoices')] class extends Component {
                             <x-ui.sortable-header column="invoice_date" :state="$this->sortStateFor('invoice_date')">Date</x-ui.sortable-header>
                             <x-ui.sortable-header column="net_total" align="right" :state="$this->sortStateFor('net_total')">Net (£)</x-ui.sortable-header>
                             <x-ui.sortable-header column="vat_total" align="right" :state="$this->sortStateFor('vat_total')">VAT (£)</x-ui.sortable-header>
-                            <x-ui.sortable-header column="gross_total" align="right" :state="$this->sortStateFor('gross_total')">Gross (£)</x-ui.sortable-header>
+                            <x-ui.sortable-header column="discount_amount" align="right" :state="$this->sortStateFor('discount_amount')">Disc. (£)</x-ui.sortable-header>
+                            <x-ui.sortable-header column="payable_total" align="right" :state="$this->sortStateFor('payable_total')">Total (£)</x-ui.sortable-header>
                             <x-ui.sortable-header column="paid_status" align="center" :state="$this->sortStateFor('paid_status')">Status</x-ui.sortable-header>
                             <th class="px-4 py-1"></th>
                         </tr>
@@ -264,8 +254,11 @@ new #[Title('Supplier Invoices')] class extends Component {
                                 <td class="px-4 py-2 text-right font-mono text-zinc-600 dark:text-zinc-400">
                                     {{ number_format($invoice->vatTotal, 2) }}
                                 </td>
+                                <td class="px-4 py-2 text-right font-mono text-zinc-600 dark:text-zinc-400">
+                                    {{ (float) $invoice->discountTotal > 0 ? number_format($invoice->discountTotal, 2) : '—' }}
+                                </td>
                                 <td class="px-4 py-2 text-right font-mono text-zinc-900 dark:text-white">
-                                    {{ number_format($invoice->grossTotal, 2) }}
+                                    {{ number_format($invoice->payableTotal, 2) }}
                                 </td>
                                 <td class="px-4 py-2 text-center">
                                     <x-ui.payment-status-badge :status="$invoice->paymentStatus()" />

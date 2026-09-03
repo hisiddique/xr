@@ -3,6 +3,7 @@
 use App\Http\Controllers\ConvertDeliveryNoteController;
 use App\Http\Controllers\CustomerOutstandingExportController;
 use App\Http\Controllers\CustomerStatementController;
+use App\Http\Controllers\CustomerTurnoverExportController;
 use App\Http\Controllers\DocumentPdfController;
 use App\Http\Controllers\ExportDownloadController;
 use App\Http\Controllers\SupplierDebitNotePdfController;
@@ -88,6 +89,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('reports/customer-outstanding-payments/export/{format}', [CustomerOutstandingExportController::class, 'export'])
         ->where('format', 'csv|xlsx|pdf')
         ->name('reports.customer-outstanding-payments.export');
+    Route::livewire('reports/customer-turnover', 'pages::reports.customer-turnover')->name('reports.customer-turnover')->middleware('can:report-customerTurnover');
+    Route::get('reports/customer-turnover/export/{format}', [CustomerTurnoverExportController::class, 'export'])
+        ->where('format', 'csv|xlsx|pdf')
+        ->name('reports.customer-turnover.export');
 
     // Exports
     Route::livewire('exports', 'pages::exports.index')->name('exports.index')->middleware('can:export-index');

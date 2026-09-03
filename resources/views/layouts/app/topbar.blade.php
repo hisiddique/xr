@@ -147,7 +147,7 @@
                     </flux:dropdown>
                     @endcanany
 
-                    @canany(['report-supplierPurchasing', 'report-overheads', 'report-customerOutstandingPayments'])
+                    @canany(['report-supplierPurchasing', 'report-overheads', 'report-customerOutstandingPayments', 'report-customerTurnover'])
                     <flux:dropdown>
                         <button
                             type="button"
@@ -185,6 +185,14 @@
                                     <flux:icon icon="banknotes" variant="mini" class="me-2 text-indigo-600 dark:text-indigo-400" />
                                 </x-slot:icon>
                                 Customer Outstanding
+                            </flux:menu.item>
+                            @endcan
+                            @can('report-customerTurnover')
+                            <flux:menu.item :href="route('reports.customer-turnover')" wire:navigate>
+                                <x-slot:icon>
+                                    <flux:icon icon="arrow-trending-up" variant="mini" class="me-2 text-indigo-600 dark:text-indigo-400" />
+                                </x-slot:icon>
+                                Customer Turnover
                             </flux:menu.item>
                             @endcan
                         </flux:menu>
@@ -509,6 +517,22 @@
                             >
                                 <flux:icon.banknotes class="size-5 shrink-0" />
                                 Customer Outstanding
+                            </a>
+                        </li>
+                        @endcan
+                        @can('report-customerTurnover')
+                        <li>
+                            <a
+                                href="{{ route('reports.customer-turnover') }}"
+                                wire:navigate
+                                @class([
+                                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('reports.customer-turnover'),
+                                    'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('reports.customer-turnover'),
+                                ])
+                            >
+                                <flux:icon.arrow-trending-up class="size-5 shrink-0" />
+                                Customer Turnover
                             </a>
                         </li>
                         @endcan

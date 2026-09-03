@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\SupplierInvoiceTotalsCalculator;
 use App\SupplierInvoicePaymentStatus;
 use App\SupplierInvoiceStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -25,6 +26,9 @@ class SupplierInvoice extends Model
         'invoice_date',
         'due_date',
         'status',
+        'trade_discount',
+        'discount_amount',
+        'discount_on_gross',
         'notes',
         'attachments',
         'created_by',
@@ -65,6 +69,9 @@ class SupplierInvoice extends Model
             'invoice_date' => 'date',
             'due_date' => 'date',
             'status' => SupplierInvoiceStatus::class,
+            'trade_discount' => 'decimal:2',
+            'discount_amount' => 'decimal:2',
+            'discount_on_gross' => 'boolean',
             'attachments' => 'array',
         ];
     }
@@ -106,13 +113,13 @@ class SupplierInvoice extends Model
         $paid = (float) $this->payoutAllocations->sum('allocated_amount');
         $deducted = (float) $this->debitNotes->sum(fn ($dn) => (float) $dn->pivot->applied_amount);
 
-        return max(0, $this->grossTotal - $paid - $deducted);
+        return max(0, $this->payableTotal - $paid - $deducted);
     }
 
     public function paymentStatus(): SupplierInvoicePaymentStatus
     {
         $outstanding = round($this->outstandingAmount, 2);
-        $gross = round($this->grossTotal, 2);
+        $gross = round($this->payableTotal, 2);
 
         return match (true) {
             $outstanding <= 0 => SupplierInvoicePaymentStatus::Paid,
@@ -143,5 +150,26 @@ class SupplierInvoice extends Model
     public function getGrossTotalAttribute(): float
     {
         return round($this->netTotal + $this->vatTotal, 2);
+    }
+
+    public function getDiscountTotalAttribute(): float
+    {
+        // Stored snapshot wins; fall back to a live recompute for legacy rows saved before this column existed.
+        if (($this->attributes['discount_amount'] ?? null) !== null && (float) $this->attributes['discount_amount'] > 0) {
+            return (float) $this->attributes['discount_amount'];
+        }
+
+        $pct = (float) ($this->attributes['trade_discount'] ?? 0);
+        if ($pct <= 0) {
+            return 0.0;
+        }
+
+        return app(SupplierInvoiceTotalsCalculator::class)
+            ->calculate($this->items, $pct, (bool) ($this->attributes['discount_on_gross'] ?? false))['discount'];
+    }
+
+    public function getPayableTotalAttribute(): float
+    {
+        return max(0, round($this->grossTotal - $this->discountTotal, 2));
     }
 }

@@ -45,7 +45,10 @@ new #[Title('Dashboard')] class extends Component {
 }; ?>
 
 @php
-    $isAdmin = auth()->user()?->isAdmin();
+    $user = auth()->user();
+    $isAdmin = $user?->isAdmin();
+
+    $canSeeTile = fn (array $tile): bool => ! isset($tile['can']) || (bool) $user?->can($tile['can']);
 
     $categories = array_values(array_filter([
         [
@@ -58,6 +61,7 @@ new #[Title('Dashboard')] class extends Component {
                 ['label' => 'Customer Payment',         'icon' => 'banknotes',      'href' => route('payments.index'), 'can' => 'payment-index'],
                 ['label' => 'Document Search',          'icon' => 'magnifying-glass', 'href' => route('document-search.index'), 'can' => 'documentsearch-index'],
                 ['label' => 'Customer Outstanding',     'icon' => 'banknotes',      'href' => route('reports.customer-outstanding-payments'), 'badge' => 'Report', 'can' => 'report-customerOutstandingPayments'],
+                ['label' => 'Customer Turnover',        'icon' => 'arrow-trending-up', 'href' => route('reports.customer-turnover'), 'badge' => 'Report', 'can' => 'report-customerTurnover'],
             ],
         ],
         [
@@ -92,6 +96,11 @@ new #[Title('Dashboard')] class extends Component {
             ])),
         ],
     ]));
+
+    $categories = array_values(array_filter(
+        $categories,
+        fn (array $category) => collect($category['tiles'])->contains($canSeeTile),
+    ));
 @endphp
 
 <div class="flex flex-col gap-5">

@@ -65,7 +65,7 @@ return [
         'functions' => [
             'report' => [
                 'label' => 'Reports',
-                'actions' => ['overheads', 'supplierPurchasing', 'customerOutstandingPayments'],
+                'actions' => ['overheads', 'supplierPurchasing', 'customerOutstandingPayments', 'customerTurnover'],
             ],
             'export' => [
                 'label' => 'Exports',
