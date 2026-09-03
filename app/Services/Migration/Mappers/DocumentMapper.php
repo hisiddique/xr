@@ -248,14 +248,40 @@ class DocumentMapper implements BulkEntityMapper, ReportsExcludedRows
             'discount_amount' => 0,
             'trade_discount' => 0,
             'show_pricing' => true,
-            'print_count' => 0,
-            'status' => DocumentStatus::Active->value,
+            'print_count' => $this->derivePrintCount($legacyRow),
+            'status' => $this->deriveStatus($type, $legacyRow),
             'notes' => $legacyRow['notes'] ?? null,
             'doc_number' => $docNumber,
             'created_by' => $this->createdBy,
             'deleted_at' => LegacyDate::parse($legacyRow['deleteddate'] ?? null),
             'assigned_to' => $this->resolveAssignedTo($legacyRow['salesman'] ?? null),
         ];
+    }
+
+    /**
+     * documents.status is a single mutually-exclusive enum, so the legacy signals are
+     * ranked rather than combined: a delivery note carrying an invuid has been converted,
+     * and conversion outranks "emailed" for a DN that is also flagged as emailed. Invoices
+     * are never "converted"; credit notes and everything unflagged fall through to active.
+     */
+    private function deriveStatus(DocumentType $type, array $legacyRow): string
+    {
+        if ($type === DocumentType::DeliveryNote && ! empty($legacyRow['invuid'])) {
+            return DocumentStatus::Converted->value;
+        }
+
+        if ($type === DocumentType::Invoice && ! empty($legacyRow['emailsent'])) {
+            return DocumentStatus::Emailed->value;
+        }
+
+        return DocumentStatus::Active->value;
+    }
+
+    private function derivePrintCount(array $legacyRow): int
+    {
+        $wasPrinted = ! empty($legacyRow['printtime']) || (int) ($legacyRow['status'] ?? 0) >= 1;
+
+        return $wasPrinted ? 1 : 0;
     }
 
     /**

@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\MigrationRunStatus;
 use App\Models\MigrationRun;
 use App\Services\Migration\DuplicateStrategy;
+use App\Services\Migration\LegacyConversionReconciler;
 use App\Services\Migration\LegacyCreditNoteReconciler;
 use App\Services\Migration\LegacyPaymentReconciler;
 use App\Services\Migration\LegacyWriteOffReconciler;
@@ -54,6 +55,7 @@ class RunLegacyMigrationJob implements ShouldQueue
             );
 
             $this->reconcilePaymentsIfApplicable($run);
+            $this->reconcileConversionsIfApplicable($run);
             $this->reconcileCreditNotesIfApplicable($run);
             $this->reconcileWriteOffsIfApplicable($run);
         } catch (\Throwable $e) {
@@ -127,6 +129,51 @@ class RunLegacyMigrationJob implements ShouldQueue
 
             $run->update(['options' => array_merge($run->options ?? [], [
                 'reconciliation_error' => Str::limit($e->getMessage(), 500),
+            ])]);
+        }
+    }
+
+    /**
+     * Resolves DN→INV conversion links (`documents.converted_from_id`) that the mapper
+     * can't set, and downgrades converted DNs whose target invoice wasn't migrated — see
+     * LegacyConversionReconciler's docblock. Runs whenever 'documents' was migrated.
+     */
+    private function reconcileConversionsIfApplicable(MigrationRun $run): void
+    {
+        if (! in_array('documents', $this->selectedGroups, true)) {
+            return;
+        }
+
+        if ($run->fresh()->status !== MigrationRunStatus::Completed) {
+            return;
+        }
+
+        try {
+            $reconciler = app(LegacyConversionReconciler::class);
+            $plan = $reconciler->plan();
+
+            if ($reconciler->isEmpty($plan)) {
+                return;
+            }
+
+            $reconciler->apply($plan);
+
+            $run->update(['options' => array_merge($run->options ?? [], [
+                'conversion_reconciliation' => [
+                    'converted_from_updates' => count($plan['converted_from_updates']),
+                    'dn_status_updates' => count($plan['dn_status_updates']),
+                    'orphan_downgrades' => count($plan['orphan_downgrades']),
+                    'signal_mismatches' => $plan['signal_mismatches'],
+                ],
+            ])]);
+        } catch (\Throwable $e) {
+            Log::warning('Legacy conversion reconciliation failed after a successful migration run', [
+                'migration_run_id' => $run->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            $run->update(['options' => array_merge($run->options ?? [], [
+                'conversion_reconciliation_error' => Str::limit($e->getMessage(), 500),
             ])]);
         }
     }

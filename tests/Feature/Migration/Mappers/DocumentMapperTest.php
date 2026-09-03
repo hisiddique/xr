@@ -238,3 +238,116 @@ test('apply skips a document with an unrecognized Rtype without throwing', funct
     expect($outcome)->toBe(MapOutcome::Skipped);
     expect(Document::count())->toBe(0);
 });
+
+test('transform marks a converted delivery note', function () {
+    Customer::factory()->create(['legacy_uid' => 820]);
+
+    DB::connection('legacy')->table('Documents')->insert([
+        'uid' => 920, 'rtype' => 'd', 'acctuid' => 820, 'orderno' => null, 'date' => '2024-01-01',
+        'goods' => 35, 'value' => 42, 'notes' => null, 'ref' => '920920', 'bline' => 0,
+        'invuid' => 55501,
+    ]);
+
+    $row = (array) DB::connection('legacy')->table('Documents')->where('uid', 920)->first();
+
+    expect($this->mapper->transform($row)['status'])->toBe('converted');
+});
+
+test('transform leaves an unconverted delivery note active', function () {
+    Customer::factory()->create(['legacy_uid' => 821]);
+
+    DB::connection('legacy')->table('Documents')->insert([
+        'uid' => 921, 'rtype' => 'd', 'acctuid' => 821, 'orderno' => null, 'date' => '2024-01-01',
+        'goods' => 35, 'value' => 42, 'notes' => null, 'ref' => '921921', 'bline' => 0,
+        'invuid' => null,
+    ]);
+
+    $row = (array) DB::connection('legacy')->table('Documents')->where('uid', 921)->first();
+
+    expect($this->mapper->transform($row)['status'])->toBe('active');
+});
+
+test('transform marks an emailed invoice', function () {
+    Customer::factory()->create(['legacy_uid' => 822]);
+
+    DB::connection('legacy')->table('Documents')->insert([
+        'uid' => 922, 'rtype' => 'i', 'acctuid' => 822, 'orderno' => null, 'date' => '2024-01-01',
+        'goods' => 35, 'value' => 42, 'notes' => null, 'ref' => '922922', 'bline' => 0,
+        'emailsent' => '2024-03-02 09:15:00',
+    ]);
+
+    $row = (array) DB::connection('legacy')->table('Documents')->where('uid', 922)->first();
+
+    expect($this->mapper->transform($row)['status'])->toBe('emailed');
+});
+
+test('transform never marks an invoice converted even with origdeln set', function () {
+    Customer::factory()->create(['legacy_uid' => 823]);
+
+    DB::connection('legacy')->table('Documents')->insert([
+        'uid' => 923, 'rtype' => 'i', 'acctuid' => 823, 'orderno' => null, 'date' => '2024-01-01',
+        'goods' => 35, 'value' => 42, 'notes' => null, 'ref' => '923923', 'bline' => 0,
+        'origdeln' => 900, 'emailsent' => '2024-03-02 09:15:00',
+    ]);
+
+    $row = (array) DB::connection('legacy')->table('Documents')->where('uid', 923)->first();
+
+    expect($this->mapper->transform($row)['status'])->toBe('emailed');
+});
+
+test('transform prefers converted over emailed for a delivery note', function () {
+    Customer::factory()->create(['legacy_uid' => 824]);
+
+    DB::connection('legacy')->table('Documents')->insert([
+        'uid' => 924, 'rtype' => 'd', 'acctuid' => 824, 'orderno' => null, 'date' => '2024-01-01',
+        'goods' => 35, 'value' => 42, 'notes' => null, 'ref' => '924924', 'bline' => 0,
+        'invuid' => 55502, 'emailsent' => '2024-03-02 09:15:00',
+    ]);
+
+    $row = (array) DB::connection('legacy')->table('Documents')->where('uid', 924)->first();
+
+    expect($this->mapper->transform($row)['status'])->toBe('converted');
+});
+
+test('transform derives print_count from printtime', function () {
+    Customer::factory()->create(['legacy_uid' => 825]);
+
+    DB::connection('legacy')->table('Documents')->insert([
+        ['uid' => 925, 'rtype' => 'd', 'acctuid' => 825, 'orderno' => null, 'date' => '2024-01-01', 'goods' => 35, 'value' => 42, 'notes' => null, 'ref' => '925925', 'bline' => 0, 'printtime' => '2024-03-01 10:00:00', 'status' => null],
+        ['uid' => 926, 'rtype' => 'd', 'acctuid' => 825, 'orderno' => null, 'date' => '2024-01-01', 'goods' => 35, 'value' => 42, 'notes' => null, 'ref' => '926926', 'bline' => 0, 'printtime' => null, 'status' => 0],
+    ]);
+
+    $printed = (array) DB::connection('legacy')->table('Documents')->where('uid', 925)->first();
+    $unprinted = (array) DB::connection('legacy')->table('Documents')->where('uid', 926)->first();
+
+    expect($this->mapper->transform($printed)['print_count'])->toBe(1)
+        ->and($this->mapper->transform($unprinted)['print_count'])->toBe(0);
+});
+
+test('transform derives print_count from the legacy status byte', function () {
+    Customer::factory()->create(['legacy_uid' => 826]);
+
+    DB::connection('legacy')->table('Documents')->insert([
+        'uid' => 927, 'rtype' => 'd', 'acctuid' => 826, 'orderno' => null, 'date' => '2024-01-01',
+        'goods' => 35, 'value' => 42, 'notes' => null, 'ref' => '927927', 'bline' => 0,
+        'printtime' => null, 'status' => 1,
+    ]);
+
+    $row = (array) DB::connection('legacy')->table('Documents')->where('uid', 927)->first();
+
+    expect($this->mapper->transform($row)['print_count'])->toBe(1);
+});
+
+test('transform is stable when run twice on the same row', function () {
+    Customer::factory()->create(['legacy_uid' => 827]);
+
+    DB::connection('legacy')->table('Documents')->insert([
+        'uid' => 928, 'rtype' => 'd', 'acctuid' => 827, 'orderno' => null, 'date' => '2024-01-01',
+        'goods' => 35, 'value' => 42, 'notes' => null, 'ref' => '928928', 'bline' => 0,
+        'invuid' => 55503, 'printtime' => '2024-03-01 10:00:00',
+    ]);
+
+    $row = (array) DB::connection('legacy')->table('Documents')->where('uid', 928)->first();
+
+    expect($this->mapper->transform($row))->toEqual($this->mapper->transform($row));
+});

@@ -79,6 +79,11 @@ function createLegacyTables(array $tables): void
                 $table->integer('salesman')->nullable();
                 $table->string('srcabbr')->nullable();
                 $table->string('srcref')->nullable();
+                $table->unsignedBigInteger('invuid')->nullable();
+                $table->unsignedBigInteger('origdeln')->nullable();
+                $table->dateTime('emailsent')->nullable();
+                $table->dateTime('printtime')->nullable();
+                $table->unsignedTinyInteger('status')->nullable();
             });
         },
         'DocumentDetails' => function (): void {
