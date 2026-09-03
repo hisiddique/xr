@@ -362,6 +362,7 @@ new class extends Component {
                                 <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Original Amt</th>
                                 <th class="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Debit Note</th>
                                 <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Deductions</th>
+                                <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Net Payable</th>
                                 <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Allocated Amt</th>
                             </tr>
                         </thead>
@@ -388,6 +389,7 @@ new class extends Component {
                                         </template>
                                     </td>
                                     <td class="px-4 py-3 text-right font-mono text-sm text-red-600 dark:text-red-400" x-text="row.deductions > 0 ? '−£' + parseFloat(row.deductions).toFixed(2) : '—'"></td>
+                                    <td class="px-4 py-3 text-right font-mono text-sm font-medium text-zinc-900 dark:text-white" x-text="'£' + parseFloat(row.effective_outstanding).toFixed(2)"></td>
                                     <td class="px-4 py-3 text-right">
                                         <input
                                             type="number"
@@ -403,12 +405,12 @@ new class extends Component {
                                 </tr>
                             </template>
                             <tr x-show="rows.length === 0">
-                                <td colspan="5" class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No outstanding invoices for this supplier.</td>
+                                <td colspan="6" class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No outstanding invoices for this supplier.</td>
                             </tr>
                         </tbody>
                         <tfoot class="border-t-2 border-zinc-200 dark:border-zinc-700">
                             <tr>
-                                <td colspan="3" class="px-4 pt-3"></td>
+                                <td colspan="4" class="px-4 pt-3"></td>
                                 <td class="px-4 pt-3 text-right text-sm font-medium text-zinc-600 dark:text-zinc-400">Unallocated:</td>
                                 <td class="px-4 pt-3 text-right font-mono font-semibold"
                                     :class="unallocated > 0.001 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'"
