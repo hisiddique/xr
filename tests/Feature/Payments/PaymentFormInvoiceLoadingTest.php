@@ -73,7 +73,7 @@ test('searchInvoice requires at least two characters', function () {
     expect($component->get('extraDocumentIds'))->toBe([]);
 });
 
-test('autoAllocate distributes oldest-first across outstanding invoices beyond the loaded window', function () {
+test('autoAllocate pulls in auto-allocated invoices from beyond the loaded window', function () {
     $customer = Customer::factory()->create();
     $old = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 100, 'doc_date' => now()->subDays(10)]);
     $new = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 100, 'doc_date' => now()]);
@@ -130,4 +130,132 @@ test('PaymentAllocator autoAllocate treats a payment\'s own prior allocation as 
     $allocations = app(PaymentAllocator::class)->autoAllocate($payment);
 
     expect($allocations)->toBe([$invoice->id => 100.0]);
+});
+
+test('autoAllocate settles an exact single invoice and touches nothing else', function () {
+    $customer = Customer::factory()->create();
+    Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 200, 'doc_date' => now()->subDays(3)]);
+    $inv100 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 100, 'doc_date' => now()->subDays(2)]);
+    Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 50, 'doc_date' => now()->subDays(1)]);
+
+    $allocations = app(PaymentAllocator::class)->autoAllocate(new Payment(['customer_id' => $customer->id, 'amount' => 100]));
+
+    expect($allocations)->toBe([$inv100->id => 100.0]);
+});
+
+test('autoAllocate settles each invoice of an exact multi-invoice subset in full', function () {
+    $customer = Customer::factory()->create();
+    $inv200 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 200, 'doc_date' => now()->subDays(5)]);
+    $inv75 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 75, 'doc_date' => now()->subDays(4)]);
+    $inv29 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 29, 'doc_date' => now()->subDays(3)]);
+    $inv33 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 33, 'doc_date' => now()->subDays(2)]);
+    $inv25 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 25, 'doc_date' => now()->subDays(1)]);
+
+    $allocations = app(PaymentAllocator::class)->autoAllocate(new Payment(['customer_id' => $customer->id, 'amount' => 100]));
+
+    expect(collect($allocations)->sortKeys()->all())->toEqual(collect([$inv75->id => 75.0, $inv25->id => 25.0])->sortKeys()->all())
+        ->and($allocations)->not->toHaveKey($inv200->id)
+        ->and($allocations)->not->toHaveKey($inv29->id)
+        ->and($allocations)->not->toHaveKey($inv33->id);
+});
+
+test('autoAllocate prefers the fewest invoices for an exact subset', function () {
+    $customer = Customer::factory()->create();
+    $inv50a = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 50, 'doc_date' => now()->subDays(4)]);
+    Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 30, 'doc_date' => now()->subDays(3)]);
+    Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 20, 'doc_date' => now()->subDays(2)]);
+    $inv50b = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 50, 'doc_date' => now()->subDays(1)]);
+
+    $allocations = app(PaymentAllocator::class)->autoAllocate(new Payment(['customer_id' => $customer->id, 'amount' => 50]));
+
+    expect($allocations)->toHaveCount(1)
+        ->and(array_values($allocations))->toBe([50.0])
+        ->and(array_key_first($allocations))->toBeIn([$inv50a->id, $inv50b->id]);
+});
+
+test('autoAllocate with no exact subset falls back to smallest-first with a partial tail', function () {
+    $customer = Customer::factory()->create();
+    $inv55 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 55, 'doc_date' => now()->subDays(3)]);
+    $inv40 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 40, 'doc_date' => now()->subDays(2)]);
+    $inv35 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 35, 'doc_date' => now()->subDays(1)]);
+
+    $allocations = app(PaymentAllocator::class)->autoAllocate(new Payment(['customer_id' => $customer->id, 'amount' => 100]));
+
+    expect($allocations)->toBe([$inv35->id => 35.0, $inv40->id => 40.0, $inv55->id => 25.0]);
+});
+
+test('autoAllocate settles everything when the amount exceeds total outstanding', function () {
+    $customer = Customer::factory()->create();
+    $inv10 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 10, 'doc_date' => now()->subDays(2)]);
+    $inv20 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 20, 'doc_date' => now()->subDays(1)]);
+
+    $allocations = app(PaymentAllocator::class)->autoAllocate(new Payment(['customer_id' => $customer->id, 'amount' => 100]));
+
+    expect($allocations)->toEqual([$inv10->id => 10.0, $inv20->id => 20.0])
+        ->and(array_sum($allocations))->toBe(30.0);
+});
+
+test('autoAllocate exact search ignores invoices larger than the payment', function () {
+    $customer = Customer::factory()->create();
+    $inv1000 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 1000, 'doc_date' => now()->subDays(3)]);
+    $inv40 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 40, 'doc_date' => now()->subDays(2)]);
+    $inv60 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 60, 'doc_date' => now()->subDays(1)]);
+
+    $allocations = app(PaymentAllocator::class)->autoAllocate(new Payment(['customer_id' => $customer->id, 'amount' => 100]));
+
+    expect(collect($allocations)->sortKeys()->all())->toEqual(collect([$inv40->id => 40.0, $inv60->id => 60.0])->sortKeys()->all())
+        ->and($allocations)->not->toHaveKey($inv1000->id);
+});
+
+test('autoAllocate matches an exact subset on cents without float drift', function () {
+    $customer = Customer::factory()->create();
+    $inv3333 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 33.33, 'doc_date' => now()->subDays(3)]);
+    $inv6667 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 66.67, 'doc_date' => now()->subDays(2)]);
+    $inv500 = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 500, 'doc_date' => now()->subDays(1)]);
+
+    $allocations = app(PaymentAllocator::class)->autoAllocate(new Payment(['customer_id' => $customer->id, 'amount' => 100.00]));
+
+    expect(collect($allocations)->sortKeys()->all())->toEqual(collect([$inv3333->id => 33.33, $inv6667->id => 66.67])->sortKeys()->all())
+        ->and($allocations)->not->toHaveKey($inv500->id);
+});
+
+test('autoAllocate degrades to a valid fallback allocation beyond the candidate cap', function () {
+    $customer = Customer::factory()->create();
+
+    for ($i = 0; $i < 30; $i++) {
+        Document::factory()->invoice()->create([
+            'customer_id' => $customer->id,
+            'total_value' => 7,
+            'doc_date' => now()->subDays(30 - $i),
+        ]);
+    }
+
+    $allocations = app(PaymentAllocator::class)->autoAllocate(new Payment(['customer_id' => $customer->id, 'amount' => 100]));
+
+    expect(array_sum($allocations))->toEqualWithDelta(100.0, 0.001)
+        ->and($allocations)->toHaveCount(15)
+        ->and(collect($allocations)->filter(fn ($value) => $value === 7.0)->count())->toBe(14)
+        ->and(collect($allocations)->filter(fn ($value) => $value === 2.0)->count())->toBe(1);
+});
+
+test('autoAllocate excludes invoices that are already fully settled', function () {
+    $customer = Customer::factory()->create();
+    $settled = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 100, 'doc_date' => now()->subDays(2)]);
+    $open = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 50, 'doc_date' => now()->subDays(1)]);
+
+    $other = Payment::factory()->create(['customer_id' => $customer->id]);
+    PaymentAllocation::create(['payment_id' => $other->id, 'document_id' => $settled->id, 'allocated_amount' => 100]);
+
+    $allocations = app(PaymentAllocator::class)->autoAllocate(new Payment(['customer_id' => $customer->id, 'amount' => 50]));
+
+    expect($allocations)->toBe([$open->id => 50.0]);
+});
+
+test('autoAllocate returns an empty array for a zero or negative amount', function () {
+    $customer = Customer::factory()->create();
+    Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 100]);
+
+    $allocations = app(PaymentAllocator::class)->autoAllocate(new Payment(['customer_id' => $customer->id, 'amount' => 0]));
+
+    expect($allocations)->toBe([]);
 });
