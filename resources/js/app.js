@@ -2336,8 +2336,21 @@ document.addEventListener('alpine:init', () => {
 
     window.Alpine.data('supplierPayoutAllocator', ({ rows, focusAmount = false }) => ({
         rows: rows.map(r => ({ ...r, allocated_amount: r.allocated_amount ?? 0 })),
+        _baseline: {},
+
+        _rowKey(r) {
+            return r.id ?? ('dn-' + r.debit_note_id);
+        },
+
+        // Snapshot the current allocations as the "unmodified" state — Reset
+        // restores to this, and it drives the Reset button's visibility.
+        rebaseline() {
+            this._baseline = {};
+            this.rows.forEach(r => { this._baseline[this._rowKey(r)] = parseFloat(r.allocated_amount) || 0; });
+        },
 
         init() {
+            this.rebaseline();
 
             document.addEventListener('modal-show', (e) => {
                 if (e.detail?.name !== 'confirm-allocation') return;
@@ -2361,7 +2374,13 @@ document.addEventListener('alpine:init', () => {
         },
 
         get payoutAmount() {
-            return parseFloat(this.$wire.amount) || 0;
+            // Amount uses deferred wire:model (persists on Enter), so $wire.amount
+            // lags what the user just typed — read the live input value instead.
+            const el = this.$refs.payoutAmountInput
+                ?? this.$el?.querySelector?.('[data-payout-amount]')
+                ?? document.querySelector('[data-payout-amount]');
+            const raw = el && el.value !== '' ? el.value : this.$wire.amount;
+            return parseFloat(raw) || 0;
         },
 
         get totalAllocated() {
@@ -2370,6 +2389,10 @@ document.addEventListener('alpine:init', () => {
 
         get unallocated() {
             return Math.max(0, this.payoutAmount - this.totalAllocated);
+        },
+
+        get isModified() {
+            return this.rows.some(r => (parseFloat(r.allocated_amount) || 0) !== (this._baseline[this._rowKey(r)] ?? 0));
         },
 
         autoAllocate(amount) {
@@ -2384,6 +2407,42 @@ document.addEventListener('alpine:init', () => {
                 r.allocated_amount = Math.round(alloc * 100) / 100;
                 remaining = Math.round((remaining - alloc) * 100) / 100;
             });
+        },
+
+        resetAllocations() {
+            this.rows.forEach(r => { r.allocated_amount = this._baseline[this._rowKey(r)] ?? 0; });
+        },
+
+        // Previews a suggested amount when an empty row gains focus. The preview
+        // is not committed: @blur reverts it unless the user pressed Enter,
+        // which (via handleKey) is the only action that persists it.
+        _previewRowKey: null,
+        _previewPrev: null,
+
+        focusRow(row) {
+            if (parseFloat(row.allocated_amount)) return;
+            const budgetExcludingRow = this.payoutAmount - this.rows.reduce(
+                (sum, r) => sum + (r === row ? 0 : (parseFloat(r.allocated_amount) || 0)), 0
+            );
+            const suggested = Math.min(Math.max(budgetExcludingRow, 0), parseFloat(row.effective_outstanding) || 0);
+            if (suggested > 0) {
+                this._previewRowKey = this._rowKey(row);
+                this._previewPrev = row.allocated_amount;
+                row.allocated_amount = Math.round(suggested * 100) / 100;
+            }
+        },
+
+        commitPreview() {
+            this._previewRowKey = null;
+            this._previewPrev = null;
+        },
+
+        revertPreviewIfPending(row) {
+            if (this._previewRowKey !== this._rowKey(row)) return false;
+            row.allocated_amount = this._previewPrev;
+            this._previewRowKey = null;
+            this._previewPrev = null;
+            return true;
         },
 
         _allocInputs() {
@@ -2412,6 +2471,7 @@ document.addEventListener('alpine:init', () => {
             if (e.key === 'Enter' && tag !== 'TEXTAREA') {
                 stop();
                 if (isAllocInput) {
+                    this.commitPreview();
                     const inputs = this._allocInputs();
                     const idx = inputs.indexOf(e.target);
                     const next = inputs[idx + 1];

@@ -154,6 +154,7 @@ new #[Title('Edit Payout')] class extends Component {
     <div
         wire:ignore
         x-data="supplierPayoutAllocator({ rows: @js($this->invoiceRows) })"
+        @keydown.window="handleKey($event)"
     >
         <div class="flex flex-col gap-4">
 
@@ -177,8 +178,10 @@ new #[Title('Edit Payout')] class extends Component {
                     />
 
                     <flux:input
-                        wire:model.blur="amount"
-                        @change="autoAllocate(parseFloat($event.target.value))"
+                        wire:model="amount"
+                        data-payout-amount
+                        x-ref="payoutAmountInput"
+                        x-on:keydown.enter.prevent="$wire.$commit()"
                         type="number"
                         step="0.01"
                         min="0.01"
@@ -200,7 +203,10 @@ new #[Title('Edit Payout')] class extends Component {
             <div class="rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
                 <div class="flex items-center justify-between border-b border-zinc-200/70 px-4 py-3 dark:border-white/10">
                     <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Allocations</h2>
-                    <flux:button variant="ghost" size="sm" @click="autoAllocate()">Auto Allocate</flux:button>
+                    <div class="flex items-center gap-2">
+                        <flux:button variant="ghost" size="xs" x-show="isModified" x-cloak @click="resetAllocations()">Reset</flux:button>
+                        <flux:button variant="ghost" size="sm" @click="autoAllocate(parseFloat(($refs.payoutAmountInput || document.querySelector('[data-payout-amount]'))?.value) || 0)">Auto Allocate</flux:button>
+                    </div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
@@ -239,7 +245,9 @@ new #[Title('Edit Payout')] class extends Component {
                                             min="0"
                                             :max="row.effective_outstanding"
                                             x-model="row.allocated_amount"
-                                            @input="row.allocated_amount = Math.min(parseFloat($event.target.value)||0, parseFloat(row.effective_outstanding)||0)"
+                                            data-payout-alloc-input
+                                            @focus="focusRow(row); $nextTick(() => $el.select())"
+                                            @blur="revertPreviewIfPending(row) || (row.allocated_amount = Math.min(parseFloat(row.allocated_amount)||0, parseFloat(row.effective_outstanding)||0))"
                                             class="w-28 rounded-lg border border-zinc-300 px-2 py-1 text-right font-mono text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
                                         />
                                     </td>

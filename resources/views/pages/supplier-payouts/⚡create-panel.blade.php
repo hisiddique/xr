@@ -305,7 +305,7 @@ new class extends Component {
         data-f2-handler
         wire:ignore
         x-data="supplierPayoutAllocator({ rows: @js($this->invoiceRows), focusAmount: @js($focusAmount) })"
-        @payout-supplier-updated.window="rows = $event.detail.rows.map(r => ({ ...r, allocated_amount: 0 })); autoAllocate(parseFloat($wire.amount) || 0)"
+        @payout-supplier-updated.window="rows = $event.detail.rows.map(r => ({ ...r, allocated_amount: 0 })); rebaseline()"
         @keydown.escape="if ($wire.supplier_id) $flux.modal('cancel-payout-confirm').show()"
         @keydown.window="handleKey($event)"
         @do-confirm-allocation.window="$wire.confirmAllocation(rows)"
@@ -337,9 +337,10 @@ new class extends Component {
 
             <div class="grid gap-4 md:grid-cols-2">
                 <flux:input
-                    wire:model.blur="amount"
+                    wire:model="amount"
                     data-payout-amount
-                    @change="autoAllocate(parseFloat($event.target.value))"
+                    x-ref="payoutAmountInput"
+                    x-on:keydown.enter.prevent="$wire.$commit()"
                     type="number"
                     step="0.01"
                     min="0.01"
@@ -353,8 +354,15 @@ new class extends Component {
 
             <flux:input wire:model="notes" :label="__('Notes')" :placeholder="__('Optional notes…')" />
 
-            <div x-show="$wire.supplier_id" x-cloak>
-                <div class="overflow-x-auto rounded-lg border border-zinc-200 dark:border-white/10">
+            <div x-show="$wire.supplier_id" x-cloak class="rounded-lg border border-zinc-200 dark:border-white/10">
+                <div class="flex items-center justify-between border-b border-zinc-200 px-4 py-2.5 dark:border-white/10">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Allocations</span>
+                    <div class="flex items-center gap-2">
+                        <flux:button variant="ghost" size="xs" x-show="isModified" x-cloak @click="resetAllocations()">Reset</flux:button>
+                        <flux:button variant="ghost" size="sm" @click="autoAllocate(parseFloat(($refs.payoutAmountInput || document.querySelector('[data-payout-amount]'))?.value) || 0)">Auto Allocate</flux:button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                             <tr>
@@ -398,7 +406,8 @@ new class extends Component {
                                             :max="row.effective_outstanding"
                                             x-model="row.allocated_amount"
                                             data-payout-alloc-input
-                                            @input="row.allocated_amount = Math.min(parseFloat($event.target.value)||0, parseFloat(row.effective_outstanding)||0)"
+                                            @focus="focusRow(row); $nextTick(() => $el.select())"
+                                            @blur="revertPreviewIfPending(row) || (row.allocated_amount = Math.min(parseFloat(row.allocated_amount)||0, parseFloat(row.effective_outstanding)||0))"
                                             class="w-28 rounded-lg border border-zinc-300 px-2 py-1 text-right font-mono text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
                                         />
                                     </td>
