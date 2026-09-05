@@ -356,7 +356,15 @@ new class extends Component {
 
             <div x-show="$wire.supplier_id" x-cloak class="rounded-lg border border-zinc-200 dark:border-white/10">
                 <div class="flex items-center justify-between border-b border-zinc-200 px-4 py-2.5 dark:border-white/10">
-                    <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Allocations</span>
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Allocations</span>
+                        <span x-show="payoutAmount > 0" x-cloak class="flex items-baseline gap-1.5 text-xs">
+                            <span class="font-medium text-zinc-400 dark:text-zinc-500">Remaining</span>
+                            <span class="font-mono font-semibold tabular-nums"
+                                :class="unallocated > 0.001 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'"
+                                x-text="'£' + unallocated.toFixed(2)"></span>
+                        </span>
+                    </div>
                     <div class="flex items-center gap-2">
                         <flux:button variant="ghost" size="xs" x-show="isModified" x-cloak @click="resetAllocations()">Reset</flux:button>
                         <flux:button variant="ghost" size="sm" @click="autoAllocate(parseFloat(($refs.payoutAmountInput || document.querySelector('[data-payout-amount]'))?.value) || 0)">Auto Allocate</flux:button>

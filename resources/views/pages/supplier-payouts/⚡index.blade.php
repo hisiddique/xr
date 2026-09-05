@@ -112,9 +112,9 @@ new #[Title('Supplier Payouts')] class extends Component {
         subtitle="Record outbound supplier payments."
     >
         <x-slot:action>
-            @can('supplierdebitnote-create')
-            <flux:button variant="ghost" icon="minus-circle" :href="route('supplier-debit-notes.create')" wire:navigate>
-                Issue Debit Note
+            @can('supplierpayout-create')
+            <flux:button variant="ghost" icon="plus" :href="route('supplier-payouts.create')" wire:navigate>
+                Record Supplier Payout
             </flux:button>
             @endcan
             @can('supplierpayout-create')
