@@ -113,6 +113,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('admin')->group(function () {
         Route::livewire('settings/crm', 'pages::settings.crm')->name('settings.crm')->middleware('can:settings-crm');
         Route::livewire('settings/legacy-migration', 'pages::settings.legacy-migration')->name('settings.legacy-migration')->middleware('can:settings-legacyMigration');
+        Route::livewire('settings/archive', 'pages::settings.archive')->name('settings.archive')->middleware('can:settings-archive');
 
         // Users
         Route::livewire('users', 'pages::users.index')->name('users.index')->middleware('can:user-index');

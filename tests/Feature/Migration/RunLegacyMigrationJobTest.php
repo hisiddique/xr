@@ -2,6 +2,7 @@
 
 use App\Jobs\RunLegacyMigrationJob;
 use App\MigrationRunStatus;
+use App\Models\Customer;
 use App\Models\Document;
 use App\Models\LookupPaymentMethod;
 use App\Models\MigrationRun;
@@ -151,6 +152,71 @@ test('reconciliation runs automatically when a run includes both documents and p
     expect($allocation)->not->toBeNull()
         ->and($allocation->payment_id)->toBe($payment->id)
         ->and((float) $allocation->allocated_amount)->toBe(100.0);
+});
+
+/**
+ * Seeds a legacy invoice whose legacy osvalue (30) is below what the migrated data
+ * implies is outstanding (100, nothing allocated), so the outstanding-settlement
+ * step has real work: it should mint one synthetic payment for the 70 delta,
+ * tagged with this run's batch id, and record a summary on the run.
+ */
+function seedOutstandingMismatchLegacyData(float $osvalue): void
+{
+    useLegacyDatabase();
+    createLegacyTables(['Units', 'CustSupps', 'Documents', 'Companies', 'CompanySettings', 'AccountEntries', 'AccountPostTypes', 'AccountBatchItems']);
+
+    DB::connection('legacy')->table('CustSupps')->insert([
+        'uid' => 710, 'rtype' => 'A', 'name' => 'Mismatch Co', 'add1' => '1 Road', 'town' => 'Town', 'pcode' => 'AA1 1AA', 'email' => 'm@test.com', 'disc' => 0,
+    ]);
+
+    DB::connection('legacy')->table('Documents')->insert([
+        'uid' => 810, 'rtype' => 'i', 'acctuid' => 710, 'orderno' => null, 'date' => '2024-02-01',
+        'goods' => 100, 'value' => 100, 'notes' => null, 'ref' => '910001', 'bline' => 0,
+    ]);
+
+    DB::connection('legacy')->table('AccountPostTypes')->insert([
+        ['uid' => 85, 'rtype' => 'i', 'inout' => 'OUT', 'entryvalue' => 1],
+    ]);
+
+    DB::connection('legacy')->table('AccountEntries')->insert([
+        ['uid' => 910, 'rtype' => 'a', 'custid' => 710, 'value' => 100, 'osvalue' => $osvalue, 'txndate' => '2024-02-01', 'invno' => '910001', 'posttype' => 85],
+    ]);
+}
+
+test('outstanding settlement runs when MORR resolves, minting a synthetic payment for the delta', function () {
+    seedOutstandingMismatchLegacyData(osvalue: 30);
+    Customer::factory()->create(['reference' => 'MORR']);
+
+    $admin = User::factory()->admin()->create();
+    $run = MigrationRun::create(['status' => MigrationRunStatus::Running, 'created_by' => $admin->id]);
+
+    (new RunLegacyMigrationJob($run->id, ['customers', 'documents', 'payments'], DuplicateStrategy::UpdateExisting->value, 'none', $admin->id))->handle();
+
+    $run->refresh();
+    $document = Document::where('legacy_uid', 810)->first();
+
+    expect($run->options['outstanding_reconciliation']['path_a_count'] ?? null)->toBe(1)
+        ->and($run->options['outstanding_reconciliation_skipped'] ?? null)->toBeNull();
+
+    $payment = Payment::where('reconciliation_batch', 'MIGRATION-'.$run->id)->sole();
+    expect((float) $payment->amount)->toBe(70.0)
+        ->and($payment->legacy_uid)->toBeNull()
+        ->and((float) PaymentAllocation::where('document_id', $document->id)->sum('allocated_amount'))->toBe(70.0);
+});
+
+test('outstanding settlement is skipped and the reason recorded when MORR does not resolve', function () {
+    seedOutstandingMismatchLegacyData(osvalue: 30);
+
+    $admin = User::factory()->admin()->create();
+    $run = MigrationRun::create(['status' => MigrationRunStatus::Running, 'created_by' => $admin->id]);
+
+    (new RunLegacyMigrationJob($run->id, ['customers', 'documents', 'payments'], DuplicateStrategy::UpdateExisting->value, 'none', $admin->id))->handle();
+
+    $run->refresh();
+
+    expect($run->options['outstanding_reconciliation_skipped'] ?? null)->toContain('MORR')
+        ->and($run->options['outstanding_reconciliation'] ?? null)->toBeNull()
+        ->and(Payment::whereNotNull('reconciliation_batch')->count())->toBe(0);
 });
 
 test('reconciliation does not run when only documents (not payments) is selected', function () {

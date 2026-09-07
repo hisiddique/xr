@@ -44,3 +44,21 @@ test('the create button shows with the create permission', function (string $mod
         ->test($component)
         ->assertSeeHtml(route($createRoute));
 })->with('index pages with a create button');
+
+test('the topbar New menu hides items and sections the user cannot create', function () {
+    $response = $this->actingAs(userWithPerms(['supplierpayout-create']))->get(route('dashboard'));
+
+    $response->assertSeeHtml(route('supplier-payouts.create'));
+    $response->assertDontSeeHtml(route('customers.create'));
+    $response->assertDontSeeHtml(route('overheads.create'));
+    $response->assertDontSee('Customer Flow');
+    $response->assertDontSee('Expenditure');
+    $response->assertSee('Supplier Flow');
+});
+
+test('the topbar New menu is absent when the user can create nothing', function () {
+    $this->actingAs(userWithPerms(['customer-index']))
+        ->get(route('dashboard'))
+        ->assertDontSeeHtml(route('customers.create'))
+        ->assertDontSeeHtml(route('supplier-payouts.create'));
+});

@@ -244,6 +244,9 @@
                                 @can('settings-legacyMigration')
                                 <flux:menu.item :href="route('settings.legacy-migration')" icon="circle-stack" wire:navigate>Legacy Migration</flux:menu.item>
                                 @endcan
+                                @can('settings-archive')
+                                <flux:menu.item :href="route('settings.archive')" icon="archive-box" wire:navigate>Data Archive</flux:menu.item>
+                                @endcan
                             </flux:menu>
                         </flux:dropdown>
                         @endcanany
@@ -281,46 +284,68 @@
 
                 {{-- Right side: + New dropdown + help + user --}}
                 <div class="ml-auto flex items-center gap-1.5">
+                    @canany(['customer-create', 'deliverynote-create', 'creditnote-create', 'payment-create', 'supplier-create', 'supplierinvoice-create', 'supplierdebitnote-create', 'supplierpayout-create', 'overhead-create'])
                     <flux:dropdown position="bottom" align="end">
                         <flux:button size="sm" variant="primary" icon="plus" icon-trailing="chevron-down">
                             New
                         </flux:button>
                         <flux:menu>
+                            @canany(['customer-create', 'deliverynote-create', 'creditnote-create', 'payment-create'])
                             <div class="flex items-center gap-1.5 px-2 pb-1.5 pt-2 text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
                                 <flux:icon.user-group variant="micro" />
                                 Customer Flow
                             </div>
+                            @can('customer-create')
                             <flux:menu.item :href="route('customers.create')" icon="user-plus" wire:navigate>
                                 {{ __('Customer') }}
                                 <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-2 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 font-mono text-[10px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">F1</kbd>
                             </flux:menu.item>
+                            @endcan
+                            @can('deliverynote-create')
                             <flux:menu.item :href="route('delivery-notes.create')" icon="truck" wire:navigate>
                                 {{ __('Delivery Note') }}
                             </flux:menu.item>
+                            @endcan
+                            @can('creditnote-create')
                             <flux:menu.item :href="route('credit-notes.create')" icon="receipt-refund" wire:navigate>
                                 {{ __('Credit Note') }}
                             </flux:menu.item>
+                            @endcan
+                            @can('payment-create')
                             <flux:menu.item :href="route('payments.create')" icon="banknotes" wire:navigate>
                                 {{ __('Payment') }}
                             </flux:menu.item>
+                            @endcan
+                            @endcanany
 
+                            @canany(['supplier-create', 'supplierinvoice-create', 'supplierdebitnote-create', 'supplierpayout-create'])
                             <div class="mt-1.5 flex items-center gap-1.5 border-t border-zinc-200/70 px-2 pb-1.5 pt-2.5 text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:border-white/10 dark:text-emerald-400">
                                 <flux:icon.building-office variant="micro" />
                                 Supplier Flow
                             </div>
+                            @can('supplier-create')
                             <flux:menu.item :href="route('suppliers.create')" icon="building-office" wire:navigate>
                                 {{ __('Supplier') }}
                             </flux:menu.item>
+                            @endcan
+                            @can('supplierinvoice-create')
                             <flux:menu.item :href="route('supplier-invoices.create')" icon="receipt-percent" wire:navigate>
                                 {{ __('Supplier Invoice') }}
                             </flux:menu.item>
+                            @endcan
+                            @can('supplierdebitnote-create')
                             <flux:menu.item :href="route('supplier-debit-notes.create')" icon="minus-circle" wire:navigate>
                                 {{ __('Supplier Debit Note') }}
                             </flux:menu.item>
+                            @endcan
+                            @can('supplierpayout-create')
                             <flux:menu.item :href="route('supplier-payouts.create')" icon="banknotes" wire:navigate>
                                 {{ __('Supplier Payout') }}
                             </flux:menu.item>
+                            @endcan
+                            @endcanany
 
+                            @can('overhead-create')
                             <div class="mt-1.5 flex items-center gap-1.5 border-t border-zinc-200/70 px-2 pb-1.5 pt-2.5 text-xs font-semibold uppercase tracking-wide text-amber-600 dark:border-white/10 dark:text-amber-400">
                                 <flux:icon.wallet variant="micro" />
                                 Expenditure
@@ -328,8 +353,10 @@
                             <flux:menu.item :href="route('overheads.create')" icon="arrow-trending-up" wire:navigate>
                                 {{ __('Overhead') }}
                             </flux:menu.item>
+                            @endcan
                         </flux:menu>
                     </flux:dropdown>
+                    @endcanany
 
                     {{-- User dropdown --}}
                     <flux:dropdown position="bottom" align="end">
@@ -813,6 +840,22 @@
                                 >
                                     <flux:icon.circle-stack class="size-5 shrink-0" />
                                     Legacy Migration
+                                </a>
+                            </li>
+                            @endcan
+                            @can('settings-archive')
+                            <li>
+                                <a
+                                    href="{{ route('settings.archive') }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('settings.archive'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('settings.archive'),
+                                    ])
+                                >
+                                    <flux:icon.archive-box class="size-5 shrink-0" />
+                                    Data Archive
                                 </a>
                             </li>
                             @endcan

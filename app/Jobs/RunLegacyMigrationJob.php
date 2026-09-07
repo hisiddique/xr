@@ -3,10 +3,12 @@
 namespace App\Jobs;
 
 use App\MigrationRunStatus;
+use App\Models\Customer;
 use App\Models\MigrationRun;
 use App\Services\Migration\DuplicateStrategy;
 use App\Services\Migration\LegacyConversionReconciler;
 use App\Services\Migration\LegacyCreditNoteReconciler;
+use App\Services\Migration\LegacyOutstandingReconciler;
 use App\Services\Migration\LegacyPaymentReconciler;
 use App\Services\Migration\LegacyWriteOffReconciler;
 use App\Services\Migration\MigrationRunner;
@@ -58,6 +60,7 @@ class RunLegacyMigrationJob implements ShouldQueue
             $this->reconcileConversionsIfApplicable($run);
             $this->reconcileCreditNotesIfApplicable($run);
             $this->reconcileWriteOffsIfApplicable($run);
+            $this->reconcileOutstandingIfApplicable($run);
         } catch (\Throwable $e) {
             // MigrationRunner already marks the run Failed on per-row/per-mapper
             // failures; this only catches an unexpected escape (e.g. a lost DB
@@ -262,6 +265,71 @@ class RunLegacyMigrationJob implements ShouldQueue
 
             $run->update(['options' => array_merge($run->options ?? [], [
                 'write_off_reconciliation_error' => Str::limit($e->getMessage(), 500),
+            ])]);
+        }
+    }
+
+    /**
+     * Forces each migrated invoice's local outstanding balance to match legacy's
+     * AccountEntries.osvalue — see LegacyOutstandingReconciler's docblock. Runs
+     * last, after the credit-note and write-off reconcilers, because it reads the
+     * local credits and write-offs those create. Needs both 'documents' and
+     * 'payments' in the run. The MORR customer (customers.reference) is excluded;
+     * if it can't be resolved the step is skipped rather than run without the
+     * exclusion.
+     */
+    private function reconcileOutstandingIfApplicable(MigrationRun $run): void
+    {
+        if (! in_array('documents', $this->selectedGroups, true) || ! in_array('payments', $this->selectedGroups, true)) {
+            return;
+        }
+
+        if ($run->fresh()->status !== MigrationRunStatus::Completed) {
+            return;
+        }
+
+        $excludeCustomerId = Customer::where('reference', 'MORR')->value('id');
+
+        if ($excludeCustomerId === null) {
+            $run->update(['options' => array_merge($run->options ?? [], [
+                'outstanding_reconciliation_skipped' => 'MORR customer (customers.reference) not found — settlement not run.',
+            ])]);
+
+            return;
+        }
+
+        try {
+            $batch = 'MIGRATION-'.$run->id;
+            $reconciler = new LegacyOutstandingReconciler($this->createdByUserId, $excludeCustomerId);
+            $plan = $reconciler->plan($batch);
+
+            if ($reconciler->isEmpty($plan)) {
+                return;
+            }
+
+            $reconciler->apply($plan);
+
+            $run->update(['options' => array_merge($run->options ?? [], [
+                'outstanding_reconciliation' => [
+                    'batch' => $batch,
+                    'path_a_count' => $plan['path_a_count'],
+                    'path_a_total' => $plan['path_a_total'],
+                    'path_b_count' => $plan['path_b_count'],
+                    'path_b_total' => $plan['path_b_total'],
+                    'reduced_count' => $plan['reduced_count'],
+                    'matched_count' => $plan['matched_count'],
+                    'ambiguous_ref_count' => $plan['ambiguous_ref_count'],
+                    'unreducible_count' => $plan['unreducible']['count'],
+                ],
+            ])]);
+        } catch (\Throwable $e) {
+            Log::warning('Legacy outstanding reconciliation failed after a successful migration run', [
+                'migration_run_id' => $run->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            $run->update(['options' => array_merge($run->options ?? [], [
+                'outstanding_reconciliation_error' => Str::limit($e->getMessage(), 500),
             ])]);
         }
     }

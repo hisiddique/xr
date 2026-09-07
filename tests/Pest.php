@@ -50,3 +50,4 @@ function something()
 }
 
 require __DIR__.'/Support/LegacyDatabase.php';
+require __DIR__.'/Support/ArchiveDatabase.php';
