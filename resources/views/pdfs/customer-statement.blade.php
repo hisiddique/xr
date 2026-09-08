@@ -253,6 +253,8 @@
                         Credit Note {{ trim($invoice['doc_number'].' '.($invoice['order_no'] ? '(against '.$invoice['order_no'].')' : '')) }}
                     @elseif($rowType === 'payment')
                         Payment {{ trim($invoice['doc_number'].' '.($invoice['order_no'] ?? '')) }}
+                    @elseif($rowType === 'write_off')
+                        Write-Off {{ $invoice['order_no'] ? '(against '.$invoice['order_no'].')' : '' }}
                     @else
                         {{ trim($invoice['doc_number'].' '.($invoice['order_no'] ?? '')) }}
                     @endif

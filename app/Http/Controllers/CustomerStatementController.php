@@ -17,7 +17,9 @@ class CustomerStatementController extends Controller
         $filters['outstandingOnly'] = $request->boolean('outstandingOnly');
         $filters['includeInvoices'] = $request->boolean('includeInvoices', true);
         $filters['includeCreditNotes'] = $request->boolean('includeCreditNotes');
+        $filters['includeWriteOffs'] = $request->boolean('includeWriteOffs');
         $filters['includePayments'] = $request->boolean('includePayments');
+        $filters['paymentMethods'] = array_values(array_map('intval', (array) $request->input('paymentMethods', [])));
 
         return $this->statementService->streamPdf($customer, $filters, $request->boolean('inline'));
     }

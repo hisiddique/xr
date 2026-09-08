@@ -89,7 +89,20 @@ return [
                     'expenseCategories',
                     'customerCategories',
                     'revenueTypes',
+                    'customerGroups',
+                    'supplierGroups',
                 ],
+            ],
+        ],
+    ],
+
+    'operations' => [
+        'label' => 'Operations',
+        'icon' => 'bolt',
+        'functions' => [
+            'statementdispatch' => [
+                'label' => 'Statement Dispatch',
+                'actions' => ['view', 'create', 'edit', 'delete', 'run', 'log'],
             ],
         ],
     ],

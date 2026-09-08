@@ -71,20 +71,6 @@
                     </a>
                     @endcan
 
-                    @can('export-index')
-                    <a
-                        href="{{ route('exports.index') }}"
-                        wire:navigate
-                        @class([
-                            'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-                            'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('exports.*'),
-                            'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !request()->routeIs('exports.*'),
-                        ])
-                    >
-                        Exports
-                    </a>
-                    @endcan
-
                     @canany(['invoice-index', 'creditnote-index', 'payment-index', 'documentsearch-index', 'supplierinvoice-index', 'supplierdebitnote-index', 'supplierpayout-index', 'overhead-index'])
                     <flux:dropdown>
                         <button
@@ -201,7 +187,7 @@
 
                     @if(auth()->user()?->isAdmin())
                         {{-- Reference Data dropdown --}}
-                        @canany(['referencedata-titles', 'referencedata-creditTerms', 'referencedata-creditLimits', 'referencedata-units', 'referencedata-paymentMethods', 'referencedata-expenseCategories', 'referencedata-customerCategories', 'referencedata-revenueTypes'])
+                        @canany(['referencedata-titles', 'referencedata-creditTerms', 'referencedata-creditLimits', 'referencedata-units', 'referencedata-paymentMethods', 'referencedata-expenseCategories', 'referencedata-customerCategories', 'referencedata-revenueTypes', 'referencedata-customerGroups', 'referencedata-supplierGroups'])
                         <flux:dropdown>
                             <button
                                 type="button"
@@ -241,11 +227,47 @@
                                 @can('referencedata-revenueTypes')
                                 <flux:menu.item :href="route('reference-data.revenue-types')" icon="banknotes" wire:navigate>Revenue Types</flux:menu.item>
                                 @endcan
-                                @can('settings-legacyMigration')
-                                <flux:menu.item :href="route('settings.legacy-migration')" icon="circle-stack" wire:navigate>Legacy Migration</flux:menu.item>
+                                @can('referencedata-customerGroups')
+                                <flux:menu.item :href="route('reference-data.customer-groups')" icon="user-group" wire:navigate>Customer Groups</flux:menu.item>
+                                @endcan
+                                @can('referencedata-supplierGroups')
+                                <flux:menu.item :href="route('reference-data.supplier-groups')" icon="user-group" wire:navigate>Supplier Groups</flux:menu.item>
+                                @endcan
+                            </flux:menu>
+                        </flux:dropdown>
+                        @endcanany
+
+                        {{-- Operations dropdown --}}
+                        @canany(['statementdispatch-view', 'export-index', 'settings-archive', 'settings-legacyMigration'])
+                        <flux:dropdown>
+                            <button
+                                type="button"
+                                @class([
+                                    'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('operations.*') || request()->routeIs('exports.*') || request()->routeIs('settings.archive') || request()->routeIs('settings.legacy-migration'),
+                                    'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white' => !(request()->routeIs('operations.*') || request()->routeIs('exports.*') || request()->routeIs('settings.archive') || request()->routeIs('settings.legacy-migration')),
+                                ])
+                            >
+                                Operations
+                                <svg class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                </svg>
+                            </button>
+                            <flux:menu>
+                                @can('statementdispatch-view')
+                                <flux:menu.item :href="route('operations.schedules')" icon="clock" wire:navigate>Schedules</flux:menu.item>
+                                @endcan
+                                @can('statementdispatch-log')
+                                <flux:menu.item :href="route('operations.dispatch-log')" icon="paper-airplane" wire:navigate>Dispatch Log</flux:menu.item>
+                                @endcan
+                                @can('export-index')
+                                <flux:menu.item :href="route('exports.index')" icon="arrow-down-tray" wire:navigate>Exports</flux:menu.item>
                                 @endcan
                                 @can('settings-archive')
                                 <flux:menu.item :href="route('settings.archive')" icon="archive-box" wire:navigate>Data Archive</flux:menu.item>
+                                @endcan
+                                @can('settings-legacyMigration')
+                                <flux:menu.item :href="route('settings.legacy-migration')" icon="circle-stack" wire:navigate>Legacy Migration</flux:menu.item>
                                 @endcan
                             </flux:menu>
                         </flux:dropdown>
@@ -483,22 +505,6 @@
                             >
                                 <flux:icon.truck class="size-5 shrink-0" />
                                 Delivery Notes
-                            </a>
-                        </li>
-                        @endcan
-                        @can('export-index')
-                        <li>
-                            <a
-                                href="{{ route('exports.index') }}"
-                                wire:navigate
-                                @class([
-                                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('exports.*'),
-                                    'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('exports.*'),
-                                ])
-                            >
-                                <flux:icon.arrow-down-tray class="size-5 shrink-0" />
-                                Exports
                             </a>
                         </li>
                         @endcan
@@ -827,19 +833,87 @@
                                 </a>
                             </li>
                             @endcan
-                            @can('settings-legacyMigration')
+                            @can('referencedata-customerGroups')
                             <li>
                                 <a
-                                    href="{{ route('settings.legacy-migration') }}"
+                                    href="{{ route('reference-data.customer-groups') }}"
                                     wire:navigate
                                     @class([
                                         'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('settings.legacy-migration'),
-                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('settings.legacy-migration'),
+                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('reference-data.customer-groups'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('reference-data.customer-groups'),
                                     ])
                                 >
-                                    <flux:icon.circle-stack class="size-5 shrink-0" />
-                                    Legacy Migration
+                                    <flux:icon.user-group class="size-5 shrink-0" />
+                                    Customer Groups
+                                </a>
+                            </li>
+                            @endcan
+                            @can('referencedata-supplierGroups')
+                            <li>
+                                <a
+                                    href="{{ route('reference-data.supplier-groups') }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('reference-data.supplier-groups'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('reference-data.supplier-groups'),
+                                    ])
+                                >
+                                    <flux:icon.user-group class="size-5 shrink-0" />
+                                    Supplier Groups
+                                </a>
+                            </li>
+                            @endcan
+                            @canany(['statementdispatch-view', 'export-index', 'settings-archive', 'settings-legacyMigration'])
+                            <li class="pt-2">
+                                <p class="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Operations</p>
+                            </li>
+                            @can('statementdispatch-view')
+                            <li>
+                                <a
+                                    href="{{ route('operations.schedules') }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('operations.schedules'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('operations.schedules'),
+                                    ])
+                                >
+                                    <flux:icon.clock class="size-5 shrink-0" />
+                                    Schedules
+                                </a>
+                            </li>
+                            @endcan
+                            @can('statementdispatch-log')
+                            <li>
+                                <a
+                                    href="{{ route('operations.dispatch-log') }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('operations.dispatch-log'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('operations.dispatch-log'),
+                                    ])
+                                >
+                                    <flux:icon.paper-airplane class="size-5 shrink-0" />
+                                    Dispatch Log
+                                </a>
+                            </li>
+                            @endcan
+                            @can('export-index')
+                            <li>
+                                <a
+                                    href="{{ route('exports.index') }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('exports.*'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('exports.*'),
+                                    ])
+                                >
+                                    <flux:icon.arrow-down-tray class="size-5 shrink-0" />
+                                    Exports
                                 </a>
                             </li>
                             @endcan
@@ -859,6 +933,23 @@
                                 </a>
                             </li>
                             @endcan
+                            @can('settings-legacyMigration')
+                            <li>
+                                <a
+                                    href="{{ route('settings.legacy-migration') }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('settings.legacy-migration'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('settings.legacy-migration'),
+                                    ])
+                                >
+                                    <flux:icon.circle-stack class="size-5 shrink-0" />
+                                    Legacy Migration
+                                </a>
+                            </li>
+                            @endcan
+                            @endcanany
                             @can('user-index')
                             <li>
                                 <a

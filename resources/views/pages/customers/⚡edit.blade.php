@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Customer;
+use App\Models\CustomerGroup;
 use App\Models\LookupCreditLimit;
 use App\Models\LookupCreditTerm;
 use App\Models\LookupCustomerCategory;
@@ -63,6 +64,9 @@ new #[Title('Edit Customer')] class extends Component {
     #[Validate('boolean')]
     public bool $vat_registered = false;
 
+    /** @var array<int, int> */
+    public array $group_ids = [];
+
     public function mount(): void
     {
         $this->company_name = $this->customer->company_name;
@@ -81,6 +85,7 @@ new #[Title('Edit Customer')] class extends Component {
         $this->customer_category_id = $this->customer->customer_category_id;
         $this->revenue_type_id = $this->customer->revenue_type_id;
         $this->vat_registered = (bool) $this->customer->vat_registered;
+        $this->group_ids = $this->customer->groups()->pluck('customer_groups.id')->map(fn ($id) => (string) $id)->all();
     }
 
     public function save(): void
@@ -102,9 +107,15 @@ new #[Title('Edit Customer')] class extends Component {
             'customer_category_id' => 'nullable|integer|exists:lookup_customer_categories,id',
             'revenue_type_id' => 'nullable|integer|exists:lookup_revenue_types,id',
             'vat_registered' => 'boolean',
+            'group_ids' => 'array',
+            'group_ids.*' => 'integer|exists:customer_groups,id',
         ]);
 
+        $groupIds = $validated['group_ids'] ?? [];
+        unset($validated['group_ids']);
+
         $this->customer->update($validated);
+        $this->customer->groups()->sync($groupIds);
 
         Flux::toast(variant: 'success', text: __('Customer updated successfully.'));
         $this->redirect(route('customers.show', $this->customer), navigate: true);
@@ -138,6 +149,12 @@ new #[Title('Edit Customer')] class extends Component {
     public function revenueTypes()
     {
         return LookupRevenueType::orderBy('name')->get();
+    }
+
+    #[Computed]
+    public function customerGroups()
+    {
+        return CustomerGroup::orderBy('name')->get();
     }
 }; ?>
 
@@ -210,6 +227,17 @@ new #[Title('Edit Customer')] class extends Component {
                         <flux:select.option :value="$type->id">{{ $type->name }}</flux:select.option>
                     @endforeach
                 </flux:select>
+                @if($this->customerGroups->isNotEmpty())
+                    <div class="md:col-span-2">
+                        <x-ui.multi-select
+                            name="group_ids"
+                            :label="__('Groups')"
+                            :placeholder="__('Select groups…')"
+                            :selected="$group_ids"
+                            :options="$this->customerGroups->map(fn ($g) => ['value' => (string) $g->id, 'label' => $g->name])->all()"
+                        />
+                    </div>
+                @endif
             </div>
         </div>
 

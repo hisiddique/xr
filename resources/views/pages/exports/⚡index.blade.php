@@ -156,7 +156,7 @@ new #[Title('Exports')] class extends Component
         </x-slot:action>
     </x-ui.page-header>
 
-    <div class="overflow-x-clip rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
+    <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
         @if($this->exportJobs->isEmpty())
             <x-ui.empty-state
                 icon="arrow-down-tray"

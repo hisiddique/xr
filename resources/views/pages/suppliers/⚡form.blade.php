@@ -4,6 +4,7 @@ use App\Models\LookupCreditLimit;
 use App\Models\LookupCreditTerm;
 use App\Models\LookupTitle;
 use App\Models\Supplier;
+use App\Models\SupplierGroup;
 use App\SupplierCategory;
 use Flux\Flux;
 use Livewire\Attributes\Computed;
@@ -31,6 +32,9 @@ new #[Title('Supplier')] class extends Component {
     public string $town_city = '';
     public string $post_code = '';
 
+    /** @var array<int, int> */
+    public array $group_ids = [];
+
     public function mount(): void
     {
         if ($this->supplier) {
@@ -51,6 +55,7 @@ new #[Title('Supplier')] class extends Component {
             $this->address_line_2 = $this->supplier->address_line_2 ?? '';
             $this->town_city = $this->supplier->town_city ?? '';
             $this->post_code = $this->supplier->post_code ?? '';
+            $this->group_ids = $this->supplier->groups()->pluck('supplier_groups.id')->map(fn ($id) => (string) $id)->all();
         }
     }
 
@@ -78,12 +83,18 @@ new #[Title('Supplier')] class extends Component {
             'address_line_2' => 'nullable|string|max:255',
             'town_city'      => 'nullable|string|max:100',
             'post_code'      => 'nullable|string|max:20',
+            'group_ids'      => 'array',
+            'group_ids.*'    => 'integer|exists:supplier_groups,id',
         ]);
+
+        $groupIds = $validated['group_ids'] ?? [];
+        unset($validated['group_ids']);
 
         if ($this->supplier === null) {
             $supplier = Supplier::create(array_merge($validated, [
                 'created_by' => auth()->id(),
             ]));
+            $supplier->groups()->sync($groupIds);
 
             Flux::toast(variant: 'success', text: 'Supplier created.');
             $this->redirect(route('suppliers.show', $supplier), navigate: true);
@@ -92,6 +103,7 @@ new #[Title('Supplier')] class extends Component {
         }
 
         $this->supplier->update($validated);
+        $this->supplier->groups()->sync($groupIds);
 
         Flux::toast(variant: 'success', text: 'Supplier updated.');
         $this->redirect(route('suppliers.show', $this->supplier), navigate: true);
@@ -113,6 +125,12 @@ new #[Title('Supplier')] class extends Component {
     public function creditLimits()
     {
         return LookupCreditLimit::orderBy('amount')->get();
+    }
+
+    #[Computed]
+    public function supplierGroups()
+    {
+        return SupplierGroup::orderBy('name')->get();
     }
 }; ?>
 
@@ -163,6 +181,15 @@ new #[Title('Supplier')] class extends Component {
                             <flux:select.option :value="$case->value">{{ $case->label() }}</flux:select.option>
                         @endforeach
                     </flux:select>
+                    @if($this->supplierGroups->isNotEmpty())
+                        <x-ui.multi-select
+                            name="group_ids"
+                            :label="__('Groups')"
+                            :placeholder="__('Select groups…')"
+                            :selected="$group_ids"
+                            :options="$this->supplierGroups->map(fn ($g) => ['value' => (string) $g->id, 'label' => $g->name])->all()"
+                        />
+                    @endif
                 </div>
             </div>
 

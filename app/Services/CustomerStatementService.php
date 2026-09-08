@@ -6,8 +6,10 @@ use App\Mail\CustomerStatementMail;
 use App\Models\Customer;
 use App\Models\Document;
 use App\Models\Payment;
+use App\Models\WriteOff;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Mail;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -92,6 +94,7 @@ class CustomerStatementService
         return $customer->payments()
             ->when($filters['dateFrom'] ?? '', fn ($q, $date) => $q->whereDate('payment_date', '>=', $date))
             ->when($filters['dateTo'] ?? '', fn ($q, $date) => $q->whereDate('payment_date', '<=', $date))
+            ->when(! empty($filters['paymentMethods']), fn ($q) => $q->whereIn('payment_method_id', $filters['paymentMethods']))
             ->orderBy('payment_date')
             ->get()
             ->map(fn (Payment $payment) => [
@@ -102,6 +105,35 @@ class CustomerStatementService
                 'total_value' => 0.0,
                 'outstanding' => 0.0,
                 'credited' => (float) $payment->amount,
+            ])
+            ->all();
+    }
+
+    /**
+     * Write-offs listed for reference only (like credit notes / payments): the written-off
+     * amount is already reflected in the invoice `outstanding` via settlement, so these rows
+     * carry `outstanding => 0` and do not affect the aging total.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array<int, array{doc_date: ?string, doc_number: string, order_no: ?string, row_type: string, total_value: float, outstanding: float, credited: float}>
+     */
+    public function buildWriteOffRows(Customer $customer, array $filters): array
+    {
+        return WriteOff::query()
+            ->whereIn('document_id', $customer->invoices()->select('id'))
+            ->with('document:id,doc_number')
+            ->when($filters['dateFrom'] ?? '', fn ($q, $date) => $q->whereDate('written_off_at', '>=', $date))
+            ->when($filters['dateTo'] ?? '', fn ($q, $date) => $q->whereDate('written_off_at', '<=', $date))
+            ->orderBy('written_off_at')
+            ->get()
+            ->map(fn (WriteOff $writeOff) => [
+                'doc_date' => $writeOff->written_off_at?->format('d M Y'),
+                'doc_number' => 'Write-Off',
+                'order_no' => $writeOff->document?->doc_number,
+                'row_type' => 'write_off',
+                'total_value' => 0.0,
+                'outstanding' => 0.0,
+                'credited' => (float) $writeOff->amount,
             ])
             ->all();
     }
@@ -130,6 +162,10 @@ class CustomerStatementService
             $rows = $rows->concat($this->buildPaymentRows($customer, $filters));
         }
 
+        if (! empty($filters['includeWriteOffs'])) {
+            $rows = $rows->concat($this->buildWriteOffRows($customer, $filters));
+        }
+
         return $rows
             ->sortBy(fn (array $row) => $row['doc_date'] ? Carbon::createFromFormat('d M Y', $row['doc_date']) : Carbon::maxValue())
             ->values()
@@ -144,9 +180,9 @@ class CustomerStatementService
      * @param  array<int, array{doc_date: ?string, outstanding: float}>  $invoiceRows
      * @return array{labels: array<string, float>, total: float}
      */
-    public function agingBuckets(array $invoiceRows): array
+    public function agingBuckets(array $invoiceRows, ?CarbonInterface $asOf = null): array
     {
-        $now = now();
+        $now = $asOf ? Carbon::parse($asOf) : now();
         $currentYearMonth = $now->format('Y-m');
 
         $buckets = [];
@@ -198,14 +234,14 @@ class CustomerStatementService
     /**
      * @param  array<string, mixed>  $filters
      */
-    public function pdfBinary(Customer $customer, array $filters): string
+    public function pdfBinary(Customer $customer, array $filters, ?CarbonInterface $asOf = null): string
     {
         $rows = $this->buildStatementRows($customer, $filters);
 
         return Pdf::loadView('pdfs.customer-statement', [
             'customer' => $customer,
             'invoices' => $rows,
-            'aging' => $this->agingBuckets($rows),
+            'aging' => $this->agingBuckets($rows, $asOf),
         ])
             ->setOption('isPhpEnabled', true)
             ->output();
@@ -214,14 +250,14 @@ class CustomerStatementService
     /**
      * @param  array<string, mixed>  $filters
      */
-    public function streamPdf(Customer $customer, array $filters, bool $inline = false): Response
+    public function streamPdf(Customer $customer, array $filters, bool $inline = false, ?CarbonInterface $asOf = null): Response
     {
         $rows = $this->buildStatementRows($customer, $filters);
 
         $pdf = Pdf::loadView('pdfs.customer-statement', [
             'customer' => $customer,
             'invoices' => $rows,
-            'aging' => $this->agingBuckets($rows),
+            'aging' => $this->agingBuckets($rows, $asOf),
         ])
             ->setOption('isPhpEnabled', true);
 
@@ -234,10 +270,10 @@ class CustomerStatementService
      * @param  array<string, mixed>  $filters
      * @param  array<int, string>  $emails
      */
-    public function sendStatementEmail(Customer $customer, array $filters, array $emails, ?string $notes = null): void
+    public function sendStatementEmail(Customer $customer, array $filters, array $emails, ?string $notes = null, ?CarbonInterface $asOf = null): void
     {
         $rows = $this->buildStatementRows($customer, $filters);
-        $aging = $this->agingBuckets($rows);
+        $aging = $this->agingBuckets($rows, $asOf);
 
         $pdfBinary = Pdf::loadView('pdfs.customer-statement', [
             'customer' => $customer,

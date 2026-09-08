@@ -9,6 +9,7 @@ use App\Http\Controllers\ExportDownloadController;
 use App\Http\Controllers\SupplierDebitNotePdfController;
 use App\Http\Controllers\SupplierInvoiceAttachmentController;
 use App\Http\Controllers\SupplierPurchasingExportController;
+use App\Http\Controllers\SupplierStatementController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -30,6 +31,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('suppliers/create', 'pages::suppliers.form')->name('suppliers.create')->middleware('can:supplier-create');
     Route::livewire('suppliers/{supplier}/edit', 'pages::suppliers.form')->name('suppliers.edit')->middleware('can:supplier-edit');
     Route::livewire('suppliers/{supplier}', 'pages::suppliers.show')->name('suppliers.show')->middleware('can:supplier-show');
+    Route::get('suppliers/{supplier}/statement', [SupplierStatementController::class, 'export'])->name('suppliers.statement.export')->middleware('can:supplier-show');
 
     // Supplier Invoices
     Route::livewire('supplier-invoices', 'pages::supplier-invoices.index')->name('supplier-invoices.index')->middleware('can:supplierinvoice-index');
@@ -134,6 +136,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::livewire('reference-data/expense-categories', 'pages::reference-data.expense-categories')->name('reference-data.expense-categories')->middleware('can:referencedata-expenseCategories');
         Route::livewire('reference-data/customer-categories', 'pages::reference-data.customer-categories')->name('reference-data.customer-categories')->middleware('can:referencedata-customerCategories');
         Route::livewire('reference-data/revenue-types', 'pages::reference-data.revenue-types')->name('reference-data.revenue-types')->middleware('can:referencedata-revenueTypes');
+        Route::livewire('reference-data/customer-groups', 'pages::reference-data.customer-groups')->name('reference-data.customer-groups')->middleware('can:referencedata-customerGroups');
+        Route::livewire('reference-data/supplier-groups', 'pages::reference-data.supplier-groups')->name('reference-data.supplier-groups')->middleware('can:referencedata-supplierGroups');
+
+        // Operations — statement dispatch
+        Route::livewire('operations/schedules', 'pages::operations.schedules')->name('operations.schedules')->middleware('can:statementdispatch-view');
+        Route::livewire('operations/dispatch-log', 'pages::operations.dispatch-log')->name('operations.dispatch-log')->middleware('can:statementdispatch-log');
+        Route::livewire('operations/statement-dispatch/create', 'pages::operations.statement-dispatch')->name('operations.statement-dispatch.create')->middleware('can:statementdispatch-create');
+        Route::livewire('operations/schedules/create', 'pages::operations.statement-dispatch')->name('operations.schedules.create')->middleware('can:statementdispatch-create');
+        Route::livewire('operations/statement-dispatch/{schedule}/edit', 'pages::operations.statement-dispatch')->name('operations.statement-dispatch.edit')->middleware('can:statementdispatch-edit');
     });
 });
 

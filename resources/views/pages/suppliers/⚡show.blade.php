@@ -480,6 +480,7 @@ new #[Title('Supplier Details')] class extends Component
     <div class="flex items-center justify-between gap-2">
         <flux:button variant="ghost" icon="arrow-left" size="sm" :href="route('suppliers.index')" wire:navigate>Back</flux:button>
         <div class="flex items-center gap-2">
+            <livewire:pages::suppliers.statement-modal :supplier="$supplier" :key="'supplier-statement-'.$supplier->id" />
             @can('supplier-edit')
             <flux:button variant="ghost" icon="pencil" size="sm" :href="route('suppliers.edit', $supplier)" wire:navigate>
                 Edit

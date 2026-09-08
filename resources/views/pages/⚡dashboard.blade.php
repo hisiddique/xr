@@ -82,6 +82,16 @@ new #[Title('Dashboard')] class extends Component {
             ],
         ],
         $isAdmin ? [
+            'label' => 'Operations', 'icon' => 'bolt', 'color' => 'slate',
+            'tiles' => [
+                ['label' => 'Schedules',        'icon' => 'clock',         'href' => route('operations.schedules'), 'can' => 'statementdispatch-view'],
+                ['label' => 'Dispatch Log',      'icon' => 'paper-airplane', 'href' => route('operations.dispatch-log'), 'can' => 'statementdispatch-log'],
+                ['label' => 'Exports',           'icon' => 'arrow-down-tray', 'href' => route('exports.index'), 'can' => 'export-index'],
+                ['label' => 'Data Archive',      'icon' => 'archive-box',    'href' => route('settings.archive'), 'can' => 'settings-archive'],
+                ['label' => 'Legacy Migration',  'icon' => 'circle-stack',   'href' => route('settings.legacy-migration'), 'can' => 'settings-legacyMigration'],
+            ],
+        ] : null,
+        $isAdmin ? [
             'label' => 'System References & Setup', 'icon' => 'cog-6-tooth', 'color' => 'slate',
             'tiles' => [
                 ['label' => 'References', 'icon' => 'tag',         'modal' => 'references-menu'],
@@ -185,6 +195,12 @@ new #[Title('Dashboard')] class extends Component {
                     @endcan
                     @can('referencedata-units')
                     <x-ui.action-tile label="Units"         icon="scale"          color="slate" :href="route('reference-data.units')" />
+                    @endcan
+                    @can('referencedata-customerGroups')
+                    <x-ui.action-tile label="Customer Groups" icon="user-group"   color="slate" :href="route('reference-data.customer-groups')" />
+                    @endcan
+                    @can('referencedata-supplierGroups')
+                    <x-ui.action-tile label="Supplier Groups" icon="user-group"   color="slate" :href="route('reference-data.supplier-groups')" />
                     @endcan
                 </div>
                 <div class="flex justify-end">

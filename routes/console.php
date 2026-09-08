@@ -32,3 +32,15 @@ Schedule::command('queue:work --queue=emails --stop-when-empty --max-time=50 --t
 Schedule::command('queue:work --queue=archives --stop-when-empty --max-time=50 --tries=1')
     ->everyMinute()
     ->withoutOverlapping(150);
+
+// Requires `* * * * * php artisan schedule:run` in crontab (no persistent worker here).
+// Overlap lock (15 min) sized above ProcessStatementDispatchRunJob's own 600s timeout.
+Schedule::command('queue:work --queue=statements --stop-when-empty --max-time=50 --tries=1')
+    ->everyMinute()
+    ->withoutOverlapping(15);
+
+// Claims any statement schedule whose next_run_at is due and queues one dispatch run each.
+// Kept cheap (no per-recipient work) so the lock can be short.
+Schedule::command('statements:dispatch')
+    ->everyMinute()
+    ->withoutOverlapping(5);

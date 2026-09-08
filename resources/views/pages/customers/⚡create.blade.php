@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Customer;
+use App\Models\CustomerGroup;
 use App\Models\LookupCreditLimit;
 use App\Models\LookupCreditTerm;
 use App\Models\LookupCustomerCategory;
@@ -59,16 +60,26 @@ new #[Title('New Customer')] class extends Component {
     #[Validate('nullable|string|max:50|unique:customers,reference')]
     public string $reference = '';
 
+    /** @var array<int, int> */
+    #[Validate('array')]
+    public array $group_ids = [];
+
     #[Validate('boolean')]
     public bool $vat_registered = false;
 
     public function save(): void
     {
         $validated = $this->validate();
+        $this->validate(['group_ids.*' => 'integer|exists:customer_groups,id']);
 
-        Customer::create(array_merge($validated, [
+        $groupIds = $validated['group_ids'] ?? [];
+        unset($validated['group_ids']);
+
+        $customer = Customer::create(array_merge($validated, [
             'created_by' => Auth::id(),
         ]));
+
+        $customer->groups()->sync($groupIds);
 
         Flux::toast(variant: 'success', text: __('Customer created successfully.'));
 
@@ -103,6 +114,12 @@ new #[Title('New Customer')] class extends Component {
     public function revenueTypes()
     {
         return LookupRevenueType::orderBy('name')->get();
+    }
+
+    #[Computed]
+    public function customerGroups()
+    {
+        return CustomerGroup::orderBy('name')->get();
     }
 }; ?>
 
@@ -173,6 +190,17 @@ new #[Title('New Customer')] class extends Component {
                         <flux:select.option :value="$type->id">{{ $type->name }}</flux:select.option>
                     @endforeach
                 </flux:select>
+                @if($this->customerGroups->isNotEmpty())
+                    <div class="md:col-span-2">
+                        <x-ui.multi-select
+                            name="group_ids"
+                            :label="__('Groups')"
+                            :placeholder="__('Select groups…')"
+                            :selected="$group_ids"
+                            :options="$this->customerGroups->map(fn ($g) => ['value' => (string) $g->id, 'label' => $g->name])->all()"
+                        />
+                    </div>
+                @endif
             </div>
         </div>
 

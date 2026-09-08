@@ -126,6 +126,75 @@ window.emailTagInput = function (wireRef, initialTags = [], propertyName = 'emai
     };
 };
 
+// Client-side filter + multi-select list for the "Add members" modal on customer groups.
+window.groupMemberPicker = function (rows = []) {
+    return {
+        rows,
+        search: '',
+        selected: [],
+        get filtered() {
+            const q = this.search.trim().toLowerCase();
+            if (! q) return this.rows;
+            return this.rows.filter(
+                (r) => r.label.toLowerCase().includes(q) || (r.ref || '').toLowerCase().includes(q),
+            );
+        },
+        get allFilteredSelected() {
+            const ids = this.filtered.map((r) => String(r.id));
+            return ids.length > 0 && ids.every((id) => this.selected.includes(id));
+        },
+        toggleAll() {
+            const ids = this.filtered.map((r) => String(r.id));
+            this.selected = this.allFilteredSelected
+                ? this.selected.filter((id) => ! ids.includes(id))
+                : [...new Set([...this.selected, ...ids])];
+        },
+    };
+};
+
+// Inline searchable multi-select (chips + dropdown) bound to a Livewire array prop.
+// Used by the <x-ui.multi-select> component (e.g. the Groups field on customer/supplier forms).
+window.multiSelect = function (wireRef, initial = [], propertyName = 'ids', options = []) {
+    return {
+        options,
+        selected: initial.map(String),
+        search: '',
+        open: false,
+
+        get filtered() {
+            const q = this.search.trim().toLowerCase();
+            if (! q) return this.options;
+            return this.options.filter((o) => o.label.toLowerCase().includes(q));
+        },
+
+        labelFor(value) {
+            const o = this.options.find((opt) => String(opt.value) === String(value));
+            return o ? o.label : value;
+        },
+
+        isSelected(value) {
+            return this.selected.includes(String(value));
+        },
+
+        toggle(value) {
+            value = String(value);
+            this.selected = this.isSelected(value)
+                ? this.selected.filter((v) => v !== value)
+                : [...this.selected, value];
+            this.sync();
+        },
+
+        clear() {
+            this.selected = [];
+            this.sync();
+        },
+
+        sync() {
+            wireRef.$set(propertyName, this.selected);
+        },
+    };
+};
+
 // After a delivery note is created we land on its page with a ?do= flag telling
 // us which side-effect to run. Fires print and/or email, then strips the flag so
 // a manual refresh won't re-trigger it.
@@ -315,7 +384,7 @@ document.addEventListener('alpine:init', () => {
             // ── '+' creates new on scoped list & show pages ──
             if (key === '+') {
                 const path = window.location.pathname;
-                const scopes = ['/customers', '/suppliers', '/delivery-notes', '/credit-notes', '/overheads', '/users', '/roles', '/supplier-invoices', '/supplier-debit-notes', '/supplier-payouts'];
+                const scopes = ['/customers', '/suppliers', '/delivery-notes', '/credit-notes', '/overheads', '/users', '/roles', '/supplier-invoices', '/supplier-debit-notes', '/supplier-payouts', '/operations/schedules'];
                 const scope = scopes.find((s) => path === s || new RegExp(`^${s}/\\d+$`).test(path));
                 if (scope) {
                     e.preventDefault();

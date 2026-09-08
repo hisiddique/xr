@@ -189,7 +189,7 @@ new #[Title('Overhead Report')] class extends Component {
     </div>
 
     {{-- Table 1: Cost Split Analysis by Category --}}
-    <div class="overflow-x-clip rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
+    <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
         <div class="border-b border-zinc-200/70 px-4 py-3 dark:border-white/10">
             <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Cost Split Analysis by Category</h2>
         </div>
@@ -235,7 +235,7 @@ new #[Title('Overhead Report')] class extends Component {
     </div>
 
     {{-- Table 2: Transaction Audit Log --}}
-    <div class="overflow-x-clip rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
+    <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
         <div class="border-b border-zinc-200/70 px-4 py-3 dark:border-white/10">
             <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Transaction Audit Log</h2>
         </div>

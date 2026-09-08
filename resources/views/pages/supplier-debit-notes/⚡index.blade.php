@@ -140,7 +140,7 @@ new #[Title('Supplier Debit Notes')] class extends Component {
     </div>
 
     {{-- Table card --}}
-    <div class="overflow-x-clip rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
+    <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
 
         @if($this->debitNotes->isEmpty())
             <x-ui.empty-state

@@ -1,9 +1,11 @@
 <?php
 
 use App\Models\Customer;
+use App\Models\LookupPaymentMethod;
 use App\Services\CustomerStatementService;
-use Carbon\Carbon;
+use App\Support\StatementPeriod;
 use Flux\Flux;
+use Livewire\Attributes\Computed;
 use Livewire\Component;
 
 new class extends Component {
@@ -18,7 +20,11 @@ new class extends Component {
 
     public bool $includeInvoices = true;
     public bool $includeCreditNotes = false;
+    public bool $includeWriteOffs = false;
     public bool $includePayments = false;
+
+    /** @var array<int, string> */
+    public array $paymentMethods = [];
 
     /** @var array<int, string> */
     public array $statementEmails = [];
@@ -35,22 +41,22 @@ new class extends Component {
         $this->applyPreset();
     }
 
+    public function updatedIncludePayments(bool $value): void
+    {
+        if (! $value) {
+            $this->paymentMethods = [];
+        }
+    }
+
     protected function applyPreset(): void
     {
-        [$this->dateFrom, $this->dateTo] = match ($this->preset) {
-            'yesterday' => [Carbon::yesterday()->toDateString(), Carbon::yesterday()->toDateString()],
-            'this_week' => [Carbon::now()->startOfWeek()->toDateString(), Carbon::now()->endOfWeek()->toDateString()],
-            'last_week' => [Carbon::now()->subWeek()->startOfWeek()->toDateString(), Carbon::now()->subWeek()->endOfWeek()->toDateString()],
-            'last_two_weeks' => [Carbon::now()->subWeeks(2)->startOfWeek()->toDateString(), Carbon::now()->endOfWeek()->toDateString()],
-            'this_month' => [Carbon::now()->startOfMonth()->toDateString(), Carbon::now()->endOfMonth()->toDateString()],
-            'last_month' => [Carbon::now()->subMonth()->startOfMonth()->toDateString(), Carbon::now()->subMonth()->endOfMonth()->toDateString()],
-            'three_months_ago' => [Carbon::now()->subMonths(3)->startOfMonth()->toDateString(), Carbon::now()->subMonths(3)->endOfMonth()->toDateString()],
-            'six_months_ago' => [Carbon::now()->subMonths(6)->startOfMonth()->toDateString(), Carbon::now()->subMonths(6)->endOfMonth()->toDateString()],
-            'this_year' => [Carbon::now()->startOfYear()->toDateString(), Carbon::now()->endOfYear()->toDateString()],
-            'last_year' => [Carbon::now()->subYear()->startOfYear()->toDateString(), Carbon::now()->subYear()->endOfYear()->toDateString()],
-            'custom' => [$this->dateFrom, $this->dateTo],
-            default => ['', ''],
-        };
+        if ($this->preset === 'custom') {
+            return;
+        }
+
+        $period = StatementPeriod::fromPreset($this->preset);
+        $this->dateFrom = $period->from ?? '';
+        $this->dateTo = $period->to ?? '';
     }
 
     /**
@@ -65,13 +71,23 @@ new class extends Component {
             'minBalance' => $this->minBalance,
             'includeInvoices' => $this->includeInvoices,
             'includeCreditNotes' => $this->includeCreditNotes,
+            'includeWriteOffs' => $this->includeWriteOffs,
             'includePayments' => $this->includePayments,
+            'paymentMethods' => $this->includePayments
+                ? array_values(array_map('intval', $this->paymentMethods))
+                : [],
         ];
+    }
+
+    #[Computed]
+    public function paymentMethodOptions()
+    {
+        return LookupPaymentMethod::orderBy('name')->get();
     }
 
     public function generate(): void
     {
-        if (! $this->includeInvoices && ! $this->includeCreditNotes && ! $this->includePayments) {
+        if (! $this->includeInvoices && ! $this->includeCreditNotes && ! $this->includeWriteOffs && ! $this->includePayments) {
             $this->addError('includeInvoices', __('Select at least one document type to include.'));
 
             return;
@@ -162,13 +178,28 @@ new class extends Component {
 
                 <div>
                     <flux:label>{{ __('Include') }}</flux:label>
-                    <div class="mt-1.5 flex items-center gap-4">
+                    <div class="mt-1.5 flex flex-wrap items-center gap-4">
                         <flux:checkbox wire:model.live="includeInvoices" label="{{ __('Invoices') }}" />
                         <flux:checkbox wire:model.live="includeCreditNotes" label="{{ __('Credit Notes') }}" />
+                        <flux:checkbox wire:model.live="includeWriteOffs" label="{{ __('Write-Offs') }}" />
                         <flux:checkbox wire:model.live="includePayments" label="{{ __('Payments') }}" />
                     </div>
                     <flux:error name="includeInvoices" />
                 </div>
+
+                @if($includePayments && $this->paymentMethodOptions->isNotEmpty())
+                    <div>
+                        <flux:label>{{ __('Payment methods (optional)') }}</flux:label>
+                        <flux:checkbox.group wire:model.live="paymentMethods" class="mt-1.5">
+                            <div class="flex flex-wrap items-center gap-4">
+                                @foreach($this->paymentMethodOptions as $method)
+                                    <flux:checkbox :value="(string) $method->id" :label="$method->name" />
+                                @endforeach
+                            </div>
+                        </flux:checkbox.group>
+                        <flux:description>{{ __('Leave all unchecked to include every method.') }}</flux:description>
+                    </div>
+                @endif
 
                 <flux:input
                     wire:model.live.debounce.400ms="minBalance"
