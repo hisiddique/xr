@@ -59,14 +59,15 @@ class ArchiveConnectionValidator
         }
 
         try {
-            $archiveIdentity = DB::connection('archive')->selectOne('SELECT @@server_uuid AS server_uuid, DATABASE() AS db_name');
+            $archiveIdentity = DB::connection('archive')->selectOne('SELECT @@hostname AS server_host, @@port AS server_port, DATABASE() AS db_name');
 
             if (in_array(DB::connection($mainConnection)->getDriverName(), ['mysql', 'mariadb'], true)) {
-                $mainIdentity = DB::connection($mainConnection)->selectOne('SELECT @@server_uuid AS server_uuid, DATABASE() AS db_name');
+                $mainIdentity = DB::connection($mainConnection)->selectOne('SELECT @@hostname AS server_host, @@port AS server_port, DATABASE() AS db_name');
 
                 if ($archiveIdentity
                     && $mainIdentity
-                    && $archiveIdentity->server_uuid === $mainIdentity->server_uuid
+                    && $archiveIdentity->server_host === $mainIdentity->server_host
+                    && (int) $archiveIdentity->server_port === (int) $mainIdentity->server_port
                     && strtolower((string) $archiveIdentity->db_name) === strtolower((string) $mainIdentity->db_name)
                 ) {
                     return new ArchiveConnectionCheck(false, 'The archive database resolves to the same server and schema as the main application database. Choose a different database.');
