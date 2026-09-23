@@ -74,6 +74,8 @@ class SupplierDebitNoteMapper implements BulkEntityMapper
             'created_by',
             'reference',
             'deleted_at',
+            'created_at',
+            'updated_at',
         ];
     }
 
@@ -104,6 +106,9 @@ class SupplierDebitNoteMapper implements BulkEntityMapper
             return null;
         }
 
+        $createdAt = LegacyDate::parse($legacyRow['createddate'] ?? null) ?? now();
+        $updatedAt = LegacyDate::parse($legacyRow['modifieddate'] ?? null) ?? $createdAt;
+
         return [
             'legacy_uid' => $legacyRow['uid'],
             'supplier_id' => $supplierId,
@@ -117,6 +122,8 @@ class SupplierDebitNoteMapper implements BulkEntityMapper
             'created_by' => $this->createdBy,
             'reference' => $reference,
             'deleted_at' => LegacyDate::parse($legacyRow['deleteddate'] ?? null),
+            'created_at' => $createdAt,
+            'updated_at' => $updatedAt,
         ];
     }
 

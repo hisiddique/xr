@@ -183,6 +183,7 @@ class DocumentMapper implements BulkEntityMapper, ReportsExcludedRows
             'customer_id', 'type', 'order_no', 'doc_date', 'subtotal', 'total_value',
             'vat_amount', 'discount_amount', 'trade_discount', 'show_pricing', 'print_count',
             'status', 'notes', 'doc_number', 'created_by', 'deleted_at', 'assigned_to',
+            'created_at', 'updated_at',
         ];
     }
 
@@ -236,6 +237,9 @@ class DocumentMapper implements BulkEntityMapper, ReportsExcludedRows
             return null;
         }
 
+        $createdAt = LegacyDate::parse($legacyRow['createddate'] ?? null) ?? now();
+        $updatedAt = LegacyDate::parse($legacyRow['modifieddate'] ?? null) ?? $createdAt;
+
         return [
             'legacy_uid' => $legacyRow['uid'],
             'customer_id' => $customerId,
@@ -255,6 +259,8 @@ class DocumentMapper implements BulkEntityMapper, ReportsExcludedRows
             'created_by' => $this->createdBy,
             'deleted_at' => LegacyDate::parse($legacyRow['deleteddate'] ?? null),
             'assigned_to' => $this->resolveAssignedTo($legacyRow['salesman'] ?? null),
+            'created_at' => $createdAt,
+            'updated_at' => $updatedAt,
         ];
     }
 

@@ -7,6 +7,7 @@ use App\Models\SupplierDebitNoteItem;
 use App\Services\Migration\BulkEntityMapper;
 use App\Services\Migration\DuplicateStrategy;
 use App\Services\Migration\MapOutcome;
+use App\Services\Migration\Support\LegacyDate;
 use Illuminate\Support\Facades\DB;
 
 class SupplierDebitNoteItemMapper implements BulkEntityMapper
@@ -62,6 +63,8 @@ class SupplierDebitNoteItemMapper implements BulkEntityMapper
             'amount',
             'total',
             'sort_order',
+            'created_at',
+            'updated_at',
         ];
     }
 
@@ -83,6 +86,9 @@ class SupplierDebitNoteItemMapper implements BulkEntityMapper
 
         $description = trim((string) ($legacyRow['details'] ?? ''));
 
+        $createdAt = LegacyDate::parse($legacyRow['createddate'] ?? null) ?? now();
+        $updatedAt = LegacyDate::parse($legacyRow['modifieddate'] ?? null) ?? $createdAt;
+
         return [
             'legacy_uid' => $legacyRow['uid'],
             'supplier_debit_note_id' => $debitNoteId,
@@ -91,6 +97,8 @@ class SupplierDebitNoteItemMapper implements BulkEntityMapper
             'amount' => $legacyRow['price'] ?? 0,
             'total' => $legacyRow['value'] ?? 0,
             'sort_order' => (int) ($legacyRow['seqno'] ?? 0),
+            'created_at' => $createdAt,
+            'updated_at' => $updatedAt,
         ];
     }
 

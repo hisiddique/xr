@@ -7,6 +7,7 @@ use App\Models\DocumentItem;
 use App\Services\Migration\BulkEntityMapper;
 use App\Services\Migration\DuplicateStrategy;
 use App\Services\Migration\MapOutcome;
+use App\Services\Migration\Support\LegacyDate;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -68,6 +69,7 @@ class DocumentItemMapper implements BulkEntityMapper
         return [
             'document_id', 'details', 'is_note', 'quantity', 'price', 'per',
             'line_value', 'discount_percent', 'net_value',
+            'created_at', 'updated_at',
         ];
     }
 
@@ -89,6 +91,9 @@ class DocumentItemMapper implements BulkEntityMapper
 
         $value = (float) ($legacyRow['value'] ?? 0);
 
+        $createdAt = LegacyDate::parse($legacyRow['createddate'] ?? null) ?? now();
+        $updatedAt = LegacyDate::parse($legacyRow['modifieddate'] ?? null) ?? $createdAt;
+
         return [
             'legacy_uid' => $legacyRow['uid'],
             'document_id' => $documentId,
@@ -102,6 +107,8 @@ class DocumentItemMapper implements BulkEntityMapper
             // e.g. price 21.6 * qty 1 * (1 - 40%) = 12.96 = the stored `value` exactly.
             'discount_percent' => $legacyRow['discount'] ?? 0,
             'net_value' => $value,
+            'created_at' => $createdAt,
+            'updated_at' => $updatedAt,
         ];
     }
 

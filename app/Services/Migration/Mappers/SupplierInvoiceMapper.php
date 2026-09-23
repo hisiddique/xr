@@ -63,7 +63,7 @@ class SupplierInvoiceMapper implements BulkEntityMapper
 
     public function updatableColumns(): array
     {
-        return ['supplier_id', 'invoice_date', 'due_date', 'status', 'notes', 'supplier_invoice_no', 'created_by'];
+        return ['supplier_id', 'invoice_date', 'due_date', 'status', 'notes', 'supplier_invoice_no', 'created_by', 'created_at', 'updated_at'];
     }
 
     public function transform(array $legacyRow): ?array
@@ -93,6 +93,9 @@ class SupplierInvoiceMapper implements BulkEntityMapper
             return null;
         }
 
+        $createdAt = LegacyDate::parse($legacyRow['createddate'] ?? null) ?? now();
+        $updatedAt = LegacyDate::parse($legacyRow['modifieddate'] ?? null) ?? $createdAt;
+
         return [
             'legacy_uid' => $legacyRow['uid'],
             'supplier_id' => $supplierId,
@@ -102,6 +105,8 @@ class SupplierInvoiceMapper implements BulkEntityMapper
             'notes' => $legacyRow['notes'] ?? null,
             'supplier_invoice_no' => $supplierInvoiceNo,
             'created_by' => $this->createdBy,
+            'created_at' => $createdAt,
+            'updated_at' => $updatedAt,
         ];
     }
 

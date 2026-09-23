@@ -8,6 +8,7 @@ use App\Services\Migration\DuplicateStrategy;
 use App\Services\Migration\MapOutcome;
 use App\Services\Migration\Mappers\DocumentMapper;
 use App\UserStatus;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 beforeEach(function () {
@@ -349,5 +350,9 @@ test('transform is stable when run twice on the same row', function () {
 
     $row = (array) DB::connection('legacy')->table('Documents')->where('uid', 928)->first();
 
+    Carbon::setTestNow('2024-03-01 10:00:00');
+
     expect($this->mapper->transform($row))->toEqual($this->mapper->transform($row));
+
+    Carbon::setTestNow();
 });
