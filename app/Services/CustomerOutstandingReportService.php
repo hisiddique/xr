@@ -27,10 +27,10 @@ class CustomerOutstandingReportService
      */
     public const PDF_ROW_CAP = 5000;
 
-    public const OUTSTANDING_EXPR = '(documents.total_value
+    public const OUTSTANDING_EXPR = '(CASE WHEN documents.legacy_confirmed_paid = 1 THEN 0 ELSE (documents.total_value
         - COALESCE((select sum(pa.allocated_amount) from payment_allocations pa where pa.document_id = documents.id and pa.deleted_at is null), 0)
         - COALESCE((select sum(ca.amount) from credit_allocations ca where ca.invoice_id = documents.id and ca.deleted_at is null), 0)
-        - COALESCE((select sum(wo.amount) from write_offs wo where wo.document_id = documents.id and wo.deleted_at is null), 0))';
+        - COALESCE((select sum(wo.amount) from write_offs wo where wo.document_id = documents.id and wo.deleted_at is null), 0)) END)';
 
     /**
      * @param  array<string, mixed>  $filters
@@ -91,6 +91,10 @@ class CustomerOutstandingReportService
 
     public function outstandingAmount(Document $invoice): float
     {
+        if ($invoice->legacy_confirmed_paid) {
+            return 0.0;
+        }
+
         return (float) $invoice->total_value
             - (float) ($invoice->allocated_total ?? 0)
             - (float) ($invoice->credited_total ?? 0)

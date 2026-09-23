@@ -157,8 +157,8 @@ test('reconciliation runs automatically when a run includes both documents and p
 /**
  * Seeds a legacy invoice whose legacy osvalue (30) is below what the migrated data
  * implies is outstanding (100, nothing allocated), so the outstanding-settlement
- * step has real work: it should mint one synthetic payment for the 70 delta,
- * tagged with this run's batch id, and record a summary on the run.
+ * step has real work: it should flag the invoice legacy_confirmed_paid, tagged
+ * with this run's batch id, and record a summary on the run.
  */
 function seedOutstandingMismatchLegacyData(float $osvalue): void
 {
@@ -183,7 +183,7 @@ function seedOutstandingMismatchLegacyData(float $osvalue): void
     ]);
 }
 
-test('outstanding settlement runs when MORR resolves, minting a synthetic payment for the delta', function () {
+test('outstanding settlement runs when MORR resolves, flagging the invoice legacy_confirmed_paid', function () {
     seedOutstandingMismatchLegacyData(osvalue: 30);
     Customer::factory()->create(['reference' => 'MORR']);
 
@@ -195,13 +195,12 @@ test('outstanding settlement runs when MORR resolves, minting a synthetic paymen
     $run->refresh();
     $document = Document::where('legacy_uid', 810)->first();
 
-    expect($run->options['outstanding_reconciliation']['path_a_count'] ?? null)->toBe(1)
+    expect($run->options['outstanding_reconciliation']['flagged_from_row_count'] ?? null)->toBe(1)
         ->and($run->options['outstanding_reconciliation_skipped'] ?? null)->toBeNull();
 
-    $payment = Payment::where('reconciliation_batch', 'MIGRATION-'.$run->id)->sole();
-    expect((float) $payment->amount)->toBe(70.0)
-        ->and($payment->legacy_uid)->toBeNull()
-        ->and((float) PaymentAllocation::where('document_id', $document->id)->sum('allocated_amount'))->toBe(70.0);
+    expect($document->fresh()->legacy_confirmed_paid)->toBeTrue()
+        ->and($document->fresh()->legacy_confirmed_paid_batch)->toBe('MIGRATION-'.$run->id)
+        ->and(Payment::whereNotNull('reconciliation_batch')->count())->toBe(0);
 });
 
 test('outstanding settlement is skipped and the reason recorded when MORR does not resolve', function () {
@@ -217,6 +216,36 @@ test('outstanding settlement is skipped and the reason recorded when MORR does n
     expect($run->options['outstanding_reconciliation_skipped'] ?? null)->toContain('MORR')
         ->and($run->options['outstanding_reconciliation'] ?? null)->toBeNull()
         ->and(Payment::whereNotNull('reconciliation_batch')->count())->toBe(0);
+});
+
+test('outstanding settlement self-heals a deployment missing the legacy_confirmed_paid column', function () {
+    seedOutstandingMismatchLegacyData(osvalue: 30);
+    Customer::factory()->create(['reference' => 'MORR']);
+
+    Schema::table('documents', function (Blueprint $table) {
+        $table->dropColumn(['legacy_confirmed_paid', 'legacy_confirmed_paid_batch']);
+    });
+
+    // artisan migrate skips a migration already recorded in the migrations table,
+    // regardless of actual schema state — remove the record too, matching a
+    // deployment that genuinely never ran this migration.
+    DB::table('migrations')->where('migration', '2026_09_23_125112_add_legacy_confirmed_paid_to_documents_table')->delete();
+
+    expect(Schema::hasColumn('documents', 'legacy_confirmed_paid'))->toBeFalse();
+
+    $admin = User::factory()->admin()->create();
+    $run = MigrationRun::create(['status' => MigrationRunStatus::Running, 'created_by' => $admin->id]);
+
+    (new RunLegacyMigrationJob($run->id, ['customers', 'documents', 'payments'], DuplicateStrategy::UpdateExisting->value, 'none', $admin->id))->handle();
+
+    $run->refresh();
+
+    expect(Schema::hasColumn('documents', 'legacy_confirmed_paid'))->toBeTrue()
+        ->and($run->options['outstanding_reconciliation_error'] ?? null)->toBeNull()
+        ->and($run->options['outstanding_reconciliation']['flagged_from_row_count'] ?? null)->toBe(1);
+
+    $document = Document::where('legacy_uid', 810)->first();
+    expect($document->fresh()->legacy_confirmed_paid)->toBeTrue();
 });
 
 test('reconciliation does not run when only documents (not payments) is selected', function () {

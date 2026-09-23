@@ -34,6 +34,8 @@ class Document extends Model
         'print_count',
         'status',
         'is_settled',
+        'legacy_confirmed_paid',
+        'legacy_confirmed_paid_batch',
         'created_by',
         'assigned_to',
         'converted_from_id',
@@ -56,6 +58,7 @@ class Document extends Model
             'type' => DocumentType::class,
             'status' => DocumentStatus::class,
             'is_settled' => 'boolean',
+            'legacy_confirmed_paid' => 'boolean',
         ];
     }
 

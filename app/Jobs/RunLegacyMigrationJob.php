@@ -17,8 +17,10 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class RunLegacyMigrationJob implements ShouldQueue
@@ -299,6 +301,8 @@ class RunLegacyMigrationJob implements ShouldQueue
         }
 
         try {
+            $this->ensureLegacyConfirmedPaidColumnExists();
+
             $batch = 'MIGRATION-'.$run->id;
             $reconciler = new LegacyOutstandingReconciler($this->createdByUserId, $excludeCustomerId);
             $plan = $reconciler->plan($batch);
@@ -312,10 +316,10 @@ class RunLegacyMigrationJob implements ShouldQueue
             $run->update(['options' => array_merge($run->options ?? [], [
                 'outstanding_reconciliation' => [
                     'batch' => $batch,
-                    'path_a_count' => $plan['path_a_count'],
-                    'path_a_total' => $plan['path_a_total'],
-                    'path_b_count' => $plan['path_b_count'],
-                    'path_b_total' => $plan['path_b_total'],
+                    'flagged_from_row_count' => $plan['flagged_from_row_count'],
+                    'flagged_from_row_total' => $plan['flagged_from_row_total'],
+                    'flagged_from_no_row_count' => $plan['flagged_from_no_row_count'],
+                    'flagged_from_no_row_total' => $plan['flagged_from_no_row_total'],
                     'reduced_count' => $plan['reduced_count'],
                     'matched_count' => $plan['matched_count'],
                     'ambiguous_ref_count' => $plan['ambiguous_ref_count'],
@@ -332,6 +336,23 @@ class RunLegacyMigrationJob implements ShouldQueue
                 'outstanding_reconciliation_error' => Str::limit($e->getMessage(), 500),
             ])]);
         }
+    }
+
+    /**
+     * Self-heals a deployment that hasn't run `php artisan migrate` since
+     * `legacy_confirmed_paid` was added — shared-hosting installs don't always
+     * get migrations run automatically. Runs all pending migrations (not just
+     * this one column) so the outstanding-reconciliation step below can rely on
+     * the column existing; any failure here is caught by this method's caller,
+     * same as any other outstanding-reconciliation failure.
+     */
+    private function ensureLegacyConfirmedPaidColumnExists(): void
+    {
+        if (Schema::hasColumn('documents', 'legacy_confirmed_paid')) {
+            return;
+        }
+
+        Artisan::call('migrate', ['--force' => true]);
     }
 
     /**

@@ -24,6 +24,18 @@ class PaymentAllocation extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::saved(function (PaymentAllocation $allocation): void {
+            if ($allocation->document && $allocation->document->legacy_confirmed_paid) {
+                $allocation->document->update([
+                    'legacy_confirmed_paid' => false,
+                    'legacy_confirmed_paid_batch' => null,
+                ]);
+            }
+        });
+    }
+
     public function payment(): BelongsTo
     {
         return $this->belongsTo(Payment::class);

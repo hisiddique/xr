@@ -3,27 +3,37 @@
 namespace App\Services\Migration;
 
 use App\Models\Document;
-use App\Models\Setting;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 /**
- * Forces every migrated invoice's local outstanding balance to equal legacy's
- * `AccountEntries.osvalue` for that invoice. Four cases per invoice:
+ * Reconciles every migrated invoice's local outstanding balance against legacy's
+ * confirmation of it. Two populations, three outcomes:
  *
+ * Invoices with an `AccountEntries` row (legacy's own osvalue is known):
  *  - matches (|delta| within tolerance): left untouched.
- *  - shortfall, nothing allocated yet (Path A): a backdated synthetic cash
- *    payment for the delta plus a matching allocation.
- *  - shortfall, something already allocated (Path B): a backdated write-off for
- *    the delta (a second payment on top of real allocations would double-count).
+ *  - shortfall (legacy says this is paid down further than we show): rather than
+ *    fabricating a payment or write-off, the invoice is flagged
+ *    `legacy_confirmed_paid` — a marker meaning "legacy confirms this is
+ *    resolved, even though we hold no evidence explaining how." No payment,
+ *    allocation, or write-off row is created.
  *  - over-applied locally (we show LESS outstanding than legacy): migrated
  *    allocations against the invoice are shrunk / soft-deleted until the balance
  *    rises to the legacy figure, and every touched payment is marked exhausted.
+ *    Unchanged from before — this direction has real evidence to correct
+ *    against, so it still edits real allocations rather than flagging.
  *
- * Invoices with no `AccountEntries` row never enter the plan and are left
- * completely alone by design. Synthetic payments carry `legacy_uid = null` on
- * purpose so `LegacyPaymentReconciler::apply()`'s `whereNotNull('legacy_uid')`
- * allocation purge never removes them.
+ * Invoices with no `AccountEntries` row at all (legacy has no osvalue fact for
+ * this invoice — confirmed empirically that legacy drops the row once nothing
+ * is left open, for both genuinely-resolved and genuinely-still-owed invoices
+ * alike, so absence alone proves nothing): flagged `legacy_confirmed_paid` only
+ * when this invoice's own already-migrated evidence (real payment allocations +
+ * credit allocations + write-offs) already sums to the full total_value. An
+ * invoice with no row and no such evidence is left untouched — there is nothing
+ * to reconcile it against.
+ *
+ * `legacy_confirmed_paid_batch` records which run set the flag, so `revert()`
+ * can undo only this run's flags rather than every flagged invoice.
  *
  * Must run AFTER LegacyPaymentReconciler, LegacyConversionReconciler,
  * LegacyCreditNoteReconciler and LegacyWriteOffReconciler — it reads the local
@@ -32,8 +42,6 @@ use Illuminate\Support\Str;
  */
 class LegacyOutstandingReconciler
 {
-    private const string TAG_TEMPLATE = '[LEGACY-RECON %s] Confirmed from legacy system that these invoices are PAID';
-
     private const float TOLERANCE = 0.01;
 
     private const int REPORT_SAMPLE_LIMIT = 100;
@@ -46,14 +54,12 @@ class LegacyOutstandingReconciler
     /**
      * @return array{
      *     batch: string,
-     *     payment_rows: list<array<string, mixed>>,
-     *     pending_allocations: array<string, array{document_id: int, allocated_amount: float, ts: string}>,
-     *     write_off_rows: list<array<string, mixed>>,
+     *     flag_document_ids: list<int>,
      *     allocation_reductions: list<array{id: int, new_amount: float}>,
      *     allocation_deletions: list<int>,
      *     exhaust_payment_ids: list<int>,
-     *     path_a_count: int, path_a_total: float, path_a_samples: list<string>,
-     *     path_b_count: int, path_b_total: float, path_b_samples: list<string>,
+     *     flagged_from_row_count: int, flagged_from_row_total: float, flagged_from_row_samples: list<string>,
+     *     flagged_from_no_row_count: int, flagged_from_no_row_total: float, flagged_from_no_row_samples: list<string>,
      *     reduced_count: int,
      *     matched_count: int,
      *     ambiguous_ref_count: int,
@@ -64,79 +70,26 @@ class LegacyOutstandingReconciler
     {
         [$osvalueByLocalDocId, $ambiguousRefCount] = $this->resolveLegacyOutstanding();
 
-        $prefix = (string) Setting::get('pay_prefix', 'PAY');
-        $padding = (int) Setting::get('number_padding', 4);
-
-        $last = DB::table('payments')->orderByDesc('id')->value('reference');
-        $seq = $last ? (int) Str::afterLast($last, '-') + 1 : 1;
-
-        $docIds = array_keys($osvalueByLocalDocId);
-
-        $docs = collect();
-        $allocByDoc = [];
-        $creditByDoc = [];
-        $woByDoc = [];
-
-        foreach (collect($docIds)->chunk(20000) as $chunk) {
-            $ids = $chunk->all();
-
-            $docs = $docs->merge(
-                Document::query()
-                    ->whereIn('id', $ids)
-                    ->when($this->excludeCustomerId, fn ($q) => $q->where('customer_id', '!=', $this->excludeCustomerId))
-                    ->get(['id', 'customer_id', 'doc_number', 'doc_date', 'total_value'])
-            );
-
-            $allocByDoc += DB::table('payment_allocations')
-                ->whereIn('document_id', $ids)
-                ->whereNull('deleted_at')
-                ->groupBy('document_id')
-                ->selectRaw('document_id, SUM(allocated_amount) as s')
-                ->pluck('s', 'document_id')
-                ->all();
-
-            $creditByDoc += DB::table('credit_allocations')
-                ->whereIn('invoice_id', $ids)
-                ->whereNull('deleted_at')
-                ->groupBy('invoice_id')
-                ->selectRaw('invoice_id, SUM(amount) as s')
-                ->pluck('s', 'invoice_id')
-                ->all();
-
-            $woByDoc += DB::table('write_offs')
-                ->whereIn('document_id', $ids)
-                ->whereNull('deleted_at')
-                ->groupBy('document_id')
-                ->selectRaw('document_id, SUM(amount) as s')
-                ->pluck('s', 'document_id')
-                ->all();
-        }
-
-        $paymentRows = [];
-        $pendingAllocations = [];
-        $writeOffRows = [];
+        $flagDocumentIds = [];
         $allocationReductions = [];
         $allocationDeletions = [];
         $exhaustPaymentIds = [];
 
-        $pathACount = 0;
-        $pathATotal = 0.0;
-        $pathASamples = [];
-        $pathBCount = 0;
-        $pathBTotal = 0.0;
-        $pathBSamples = [];
+        $flaggedFromRowCount = 0;
+        $flaggedFromRowTotal = 0.0;
+        $flaggedFromRowSamples = [];
         $reducedCount = 0;
         $matchedCount = 0;
         $unreducible = ['count' => 0, 'sample' => []];
 
-        foreach ($docs as $doc) {
+        foreach ($this->loadDocs(array_keys($osvalueByLocalDocId)) as $doc) {
+            if ($doc->legacy_confirmed_paid) {
+                continue;
+            }
+
             $legacyOs = $osvalueByLocalDocId[$doc->id];
-            $allocated = round((float) ($allocByDoc[$doc->id] ?? 0), 2);
-            $credited = round((float) ($creditByDoc[$doc->id] ?? 0), 2);
-            $writtenOff = round((float) ($woByDoc[$doc->id] ?? 0), 2);
-            $ourOs = round((float) $doc->total_value - $allocated - $credited - $writtenOff, 2);
-            $delta = round($ourOs - $legacyOs, 2);
-            $ts = ($doc->doc_date?->toDateString()) ?? now()->toDateString();
+            $ourOs = $this->computeOurOs($doc);
+            $delta = round($ourOs['balance'] - $legacyOs, 2);
 
             if (abs($delta) <= self::TOLERANCE) {
                 $matchedCount++;
@@ -145,54 +98,11 @@ class LegacyOutstandingReconciler
             }
 
             if ($delta > self::TOLERANCE) {
-                if ($allocated <= 0.001) {
-                    $reference = sprintf('%s-%s', $prefix, str_pad((string) $seq, $padding, '0', STR_PAD_LEFT));
-                    $seq++;
-
-                    $paymentRows[] = [
-                        'customer_id' => $doc->customer_id,
-                        'payment_method_id' => null,
-                        'source_type' => 'cash',
-                        'reference' => $reference,
-                        'payment_reference' => null,
-                        'amount' => $delta,
-                        'is_exhausted' => false,
-                        'payment_date' => $ts,
-                        'notes' => sprintf(self::TAG_TEMPLATE, $batch),
-                        'reconciliation_batch' => $batch,
-                        'created_by' => $this->userId,
-                        'created_at' => $ts,
-                        'updated_at' => $ts,
-                    ];
-
-                    $pendingAllocations[$reference] = [
-                        'document_id' => $doc->id,
-                        'allocated_amount' => $delta,
-                        'ts' => $ts,
-                    ];
-
-                    $pathACount++;
-                    $pathATotal = round($pathATotal + $delta, 2);
-                    if (count($pathASamples) < 10) {
-                        $pathASamples[] = $doc->doc_number;
-                    }
-                } else {
-                    $writeOffRows[] = [
-                        'document_id' => $doc->id,
-                        'amount' => $delta,
-                        'reason' => sprintf(self::TAG_TEMPLATE, $batch),
-                        'written_off_at' => $ts,
-                        'written_off_by' => $this->userId,
-                        'legacy_uid' => null,
-                        'created_at' => $ts,
-                        'updated_at' => $ts,
-                    ];
-
-                    $pathBCount++;
-                    $pathBTotal = round($pathBTotal + $delta, 2);
-                    if (count($pathBSamples) < 10) {
-                        $pathBSamples[] = $doc->doc_number;
-                    }
+                $flagDocumentIds[] = $doc->id;
+                $flaggedFromRowCount++;
+                $flaggedFromRowTotal = round($flaggedFromRowTotal + $delta, 2);
+                if (count($flaggedFromRowSamples) < 10) {
+                    $flaggedFromRowSamples[] = $doc->doc_number;
                 }
 
                 continue;
@@ -233,7 +143,7 @@ class LegacyOutstandingReconciler
                 if (count($unreducible['sample']) < self::REPORT_SAMPLE_LIMIT) {
                     $unreducible['sample'][] = [
                         'doc_number' => $doc->doc_number,
-                        'our_os' => $ourOs,
+                        'our_os' => $ourOs['balance'],
                         'legacy_os' => $legacyOs,
                     ];
                 }
@@ -244,20 +154,23 @@ class LegacyOutstandingReconciler
             $reducedCount++;
         }
 
+        [$flaggedFromNoRowCount, $flaggedFromNoRowTotal, $flaggedFromNoRowSamples, $noRowFlagIds] =
+            $this->planNoRowInvoices(array_keys($osvalueByLocalDocId));
+
+        $flagDocumentIds = [...$flagDocumentIds, ...$noRowFlagIds];
+
         return [
             'batch' => $batch,
-            'payment_rows' => $paymentRows,
-            'pending_allocations' => $pendingAllocations,
-            'write_off_rows' => $writeOffRows,
+            'flag_document_ids' => $flagDocumentIds,
             'allocation_reductions' => $allocationReductions,
             'allocation_deletions' => $allocationDeletions,
             'exhaust_payment_ids' => array_keys($exhaustPaymentIds),
-            'path_a_count' => $pathACount,
-            'path_a_total' => $pathATotal,
-            'path_a_samples' => $pathASamples,
-            'path_b_count' => $pathBCount,
-            'path_b_total' => $pathBTotal,
-            'path_b_samples' => $pathBSamples,
+            'flagged_from_row_count' => $flaggedFromRowCount,
+            'flagged_from_row_total' => $flaggedFromRowTotal,
+            'flagged_from_row_samples' => $flaggedFromRowSamples,
+            'flagged_from_no_row_count' => $flaggedFromNoRowCount,
+            'flagged_from_no_row_total' => $flaggedFromNoRowTotal,
+            'flagged_from_no_row_samples' => $flaggedFromNoRowSamples,
             'reduced_count' => $reducedCount,
             'matched_count' => $matchedCount,
             'ambiguous_ref_count' => $ambiguousRefCount,
@@ -266,12 +179,11 @@ class LegacyOutstandingReconciler
     }
 
     /**
-     * @param  array{payment_rows: array, write_off_rows: array, allocation_reductions: array, allocation_deletions: array}  $plan
+     * @param  array{flag_document_ids: array, allocation_reductions: array, allocation_deletions: array}  $plan
      */
     public function isEmpty(array $plan): bool
     {
-        return $plan['payment_rows'] === []
-            && $plan['write_off_rows'] === []
+        return $plan['flag_document_ids'] === []
             && $plan['allocation_reductions'] === []
             && $plan['allocation_deletions'] === [];
     }
@@ -279,9 +191,7 @@ class LegacyOutstandingReconciler
     /**
      * @param  array{
      *     batch: string,
-     *     payment_rows: array,
-     *     pending_allocations: array<string, array{document_id: int, allocated_amount: float, ts: string}>,
-     *     write_off_rows: array,
+     *     flag_document_ids: array<int, int>,
      *     allocation_reductions: array<int, array{id: int, new_amount: float}>,
      *     allocation_deletions: array<int, int>,
      *     exhaust_payment_ids: array<int, int>,
@@ -290,46 +200,13 @@ class LegacyOutstandingReconciler
     public function apply(array $plan): void
     {
         DB::transaction(function () use ($plan) {
-            $batch = $plan['batch'];
-
-            $pathADocIds = array_column($plan['pending_allocations'], 'document_id');
-
-            if ($pathADocIds !== []) {
-                DB::table('payment_allocations')
-                    ->whereIn('document_id', $pathADocIds)
-                    ->whereNotNull('deleted_at')
-                    ->delete();
-            }
-
-            foreach (array_chunk($plan['payment_rows'], 1000) as $chunk) {
-                DB::table('payments')->insert($chunk);
-            }
-
-            if ($plan['pending_allocations'] !== []) {
-                $idByRef = DB::table('payments')
-                    ->where('reconciliation_batch', $batch)
-                    ->whereIn('reference', array_keys($plan['pending_allocations']))
-                    ->pluck('id', 'reference');
-
-                $allocationRows = [];
-
-                foreach ($plan['pending_allocations'] as $ref => $entry) {
-                    $allocationRows[] = [
-                        'payment_id' => $idByRef[$ref],
-                        'document_id' => $entry['document_id'],
-                        'allocated_amount' => $entry['allocated_amount'],
-                        'created_at' => $entry['ts'],
-                        'updated_at' => $entry['ts'],
-                    ];
+            if ($plan['flag_document_ids'] !== []) {
+                foreach (array_chunk($plan['flag_document_ids'], 1000) as $ids) {
+                    Document::whereIn('id', $ids)->update([
+                        'legacy_confirmed_paid' => true,
+                        'legacy_confirmed_paid_batch' => $plan['batch'],
+                    ]);
                 }
-
-                foreach (array_chunk($allocationRows, 1000) as $chunk) {
-                    DB::table('payment_allocations')->insert($chunk);
-                }
-            }
-
-            foreach (array_chunk($plan['write_off_rows'], 1000) as $chunk) {
-                DB::table('write_offs')->insert($chunk);
             }
 
             foreach ($plan['allocation_reductions'] as $reduction) {
@@ -351,49 +228,105 @@ class LegacyOutstandingReconciler
     }
 
     /**
-     * Undoes only the rows this run's apply() inserted: soft-deletes the
-     * synthetic payments tagged with $batch, their non-trashed allocations, and
-     * the write-offs it created. It does NOT restore allocations shrunk or
-     * soft-deleted by the over-applied reduce path, nor un-exhaust payments it
-     * marked exhausted.
+     * Clears only this run's flags (`legacy_confirmed_paid_batch = $batch`) — it
+     * does NOT restore allocations shrunk or soft-deleted by the over-applied
+     * reduce path, nor un-exhaust payments it marked exhausted, matching the
+     * same documented limitation the previous synthetic-row revert had.
      *
-     * @return array{payments: int, allocations: int, write_offs: int}
+     * @return array{flags_cleared: int}
      */
     public function revert(string $batch): array
     {
-        return DB::transaction(function () use ($batch) {
-            $paymentIds = DB::table('payments')
-                ->where('reconciliation_batch', $batch)
-                ->whereNull('deleted_at')
-                ->pluck('id');
+        $flagsCleared = Document::where('legacy_confirmed_paid_batch', $batch)
+            ->update(['legacy_confirmed_paid' => false, 'legacy_confirmed_paid_batch' => null]);
 
-            $allocationsDeleted = 0;
+        return ['flags_cleared' => $flagsCleared];
+    }
 
-            foreach ($paymentIds->chunk(1000) as $chunk) {
-                $allocationsDeleted += DB::table('payment_allocations')
-                    ->whereIn('payment_id', $chunk->all())
-                    ->whereNull('deleted_at')
-                    ->update(['deleted_at' => now(), 'updated_at' => now()]);
+    /**
+     * @param  array<int, int>  $excludeLocalIds  local ids already covered by the row-based pass
+     * @return array{0: int, 1: float, 2: list<string>, 3: list<int>}
+     */
+    private function planNoRowInvoices(array $excludeLocalIds): array
+    {
+        $candidateIds = Document::query()
+            ->invoices()
+            ->whereNotNull('legacy_uid')
+            ->when($this->excludeCustomerId, fn ($q) => $q->where('customer_id', '!=', $this->excludeCustomerId))
+            ->where('legacy_confirmed_paid', false)
+            ->whereNotIn('id', $excludeLocalIds ?: [0])
+            ->pluck('id')
+            ->all();
+
+        $flagIds = [];
+        $count = 0;
+        $total = 0.0;
+        $samples = [];
+
+        foreach ($this->loadDocs($candidateIds) as $doc) {
+            $ourOs = $this->computeOurOs($doc);
+
+            if (abs($ourOs['balance']) > self::TOLERANCE) {
+                continue;
             }
 
-            foreach ($paymentIds->chunk(1000) as $chunk) {
-                DB::table('payments')
+            if ($ourOs['allocated'] <= 0.001 && $ourOs['credited'] <= 0.001 && $ourOs['writtenOff'] <= 0.001) {
+                // Nothing at all was ever recorded against this invoice locally —
+                // a zero balance here just means total_value itself is ~0, not
+                // that anything was resolved. Leave it alone.
+                continue;
+            }
+
+            $flagIds[] = $doc->id;
+            $count++;
+            $total = round($total + (float) $doc->total_value, 2);
+            if (count($samples) < 10) {
+                $samples[] = $doc->doc_number;
+            }
+        }
+
+        return [$count, $total, $samples, $flagIds];
+    }
+
+    /**
+     * @param  array<int, int>  $ids
+     * @return Collection<int, Document>
+     */
+    private function loadDocs(array $ids): Collection
+    {
+        $docs = collect();
+
+        foreach (collect($ids)->chunk(20000) as $chunk) {
+            $docs = $docs->merge(
+                Document::query()
                     ->whereIn('id', $chunk->all())
-                    ->whereNull('deleted_at')
-                    ->update(['deleted_at' => now(), 'updated_at' => now()]);
-            }
+                    ->when($this->excludeCustomerId, fn ($q) => $q->where('customer_id', '!=', $this->excludeCustomerId))
+                    ->withSum(['paymentAllocations' => fn ($q) => $q->whereNull('deleted_at')], 'allocated_amount')
+                    ->withSum(['creditAllocationsReceived' => fn ($q) => $q->whereNull('deleted_at')], 'amount')
+                    ->withSum(['writeOffs' => fn ($q) => $q->whereNull('deleted_at')], 'amount')
+                    ->get(['id', 'customer_id', 'doc_number', 'doc_date', 'total_value', 'legacy_confirmed_paid'])
+            );
+        }
 
-            $writeOffsDeleted = DB::table('write_offs')
-                ->where('reason', 'like', sprintf('[LEGACY-RECON %s]', $batch).'%')
-                ->whereNull('deleted_at')
-                ->update(['deleted_at' => now(), 'updated_at' => now()]);
+        return $docs;
+    }
 
-            return [
-                'payments' => $paymentIds->count(),
-                'allocations' => $allocationsDeleted,
-                'write_offs' => $writeOffsDeleted,
-            ];
-        });
+    /**
+     * @return array{balance: float, allocated: float, credited: float, writtenOff: float}
+     */
+    private function computeOurOs(Document $doc): array
+    {
+        $allocated = round((float) ($doc->payment_allocations_sum_allocated_amount ?? 0), 2);
+        $credited = round((float) ($doc->credit_allocations_received_sum_amount ?? 0), 2);
+        $writtenOff = round((float) ($doc->write_offs_sum_amount ?? 0), 2);
+        $balance = round((float) $doc->total_value - $allocated - $credited - $writtenOff, 2);
+
+        return [
+            'balance' => $balance,
+            'allocated' => $allocated,
+            'credited' => $credited,
+            'writtenOff' => $writtenOff,
+        ];
     }
 
     /**

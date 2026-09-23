@@ -6,7 +6,6 @@ use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use App\Models\User;
 use App\Models\WriteOff;
-use App\PaymentSourceType;
 use App\Services\Migration\LegacyOutstandingReconciler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -39,44 +38,31 @@ function linkLegacyInvoice(int $legacyUid, string $ref, float $osvalue, float $t
     ], $docOverrides));
 }
 
-test('osvalue 0 with nothing allocated settles the full balance via a synthetic cash payment', function () {
+test('osvalue 0 with nothing allocated flags the invoice, no synthetic payment', function () {
     $invoice = linkLegacyInvoice(500, 'INV-1', 0.0, 100.0);
 
     $reconciler = new LegacyOutstandingReconciler($this->userId, null);
     $reconciler->apply($reconciler->plan('B1'));
 
-    $payments = Payment::where('customer_id', $invoice->customer_id)->get();
-    expect($payments)->toHaveCount(1);
+    expect(Payment::count())->toBe(0)
+        ->and(PaymentAllocation::count())->toBe(0);
 
-    $payment = $payments->first();
-    expect((float) $payment->amount)->toBe(100.0)
-        ->and($payment->source_type)->toBe(PaymentSourceType::Cash)
-        ->and($payment->payment_method_id)->toBeNull()
-        ->and($payment->legacy_uid)->toBeNull()
-        ->and($payment->reconciliation_batch)->toBe('B1')
-        ->and($payment->payment_date->toDateString())->toBe($invoice->doc_date->toDateString())
-        ->and($payment->created_at->toDateString())->toBe($invoice->doc_date->toDateString())
-        ->and($payment->updated_at->toDateString())->toBe($invoice->doc_date->toDateString());
-
-    $allocations = PaymentAllocation::where('document_id', $invoice->id)->get();
-    expect($allocations)->toHaveCount(1)
-        ->and((float) $allocations->first()->allocated_amount)->toBe(100.0);
+    $invoice->refresh();
+    expect($invoice->legacy_confirmed_paid)->toBeTrue()
+        ->and($invoice->legacy_confirmed_paid_batch)->toBe('B1');
 });
 
-test('osvalue above 0 with nothing allocated settles only the delta', function () {
+test('osvalue above 0 with nothing allocated still just flags the invoice', function () {
     $invoice = linkLegacyInvoice(501, 'INV-2', 30.0, 100.0);
 
     $reconciler = new LegacyOutstandingReconciler($this->userId, null);
     $reconciler->apply($reconciler->plan('B1'));
 
-    $payment = Payment::where('customer_id', $invoice->customer_id)->sole();
-    expect((float) $payment->amount)->toBe(70.0);
-
-    $allocation = PaymentAllocation::where('document_id', $invoice->id)->sole();
-    expect((float) $allocation->allocated_amount)->toBe(70.0);
+    expect(Payment::count())->toBe(0);
+    expect($invoice->fresh()->legacy_confirmed_paid)->toBeTrue();
 });
 
-test('a partly allocated invoice is written off for the delta with no new payment', function () {
+test('a partly allocated invoice with a legacy-confirmed remainder is flagged, no write-off', function () {
     $invoice = linkLegacyInvoice(502, 'INV-3', 20.0, 100.0);
 
     $existingPayment = Payment::factory()->create();
@@ -89,20 +75,13 @@ test('a partly allocated invoice is written off for the delta with no new paymen
     $reconciler = new LegacyOutstandingReconciler($this->userId, null);
     $reconciler->apply($reconciler->plan('B1'));
 
-    expect(Payment::whereNotNull('reconciliation_batch')->count())->toBe(0);
+    expect(WriteOff::count())->toBe(0)
+        ->and(Payment::whereNotNull('reconciliation_batch')->count())->toBe(0);
 
-    $writeOffs = WriteOff::where('document_id', $invoice->id)->get();
-    expect($writeOffs)->toHaveCount(1);
-
-    $writeOff = $writeOffs->first();
-    expect((float) $writeOff->amount)->toBe(40.0)
-        ->and($writeOff->reason)->toContain('[LEGACY-RECON B')
-        ->and($writeOff->written_off_by)->toBe($this->userId)
-        ->and($writeOff->written_off_at->toDateString())->toBe($invoice->doc_date->toDateString())
-        ->and($writeOff->created_at->toDateString())->toBe($invoice->doc_date->toDateString());
+    expect($invoice->fresh()->legacy_confirmed_paid)->toBeTrue();
 });
 
-test('a credited amount is subtracted before the residual is paid', function () {
+test('a credited amount is subtracted before deciding whether to flag', function () {
     $invoice = linkLegacyInvoice(503, 'INV-4', 0.0, 100.0);
 
     CreditAllocation::create([
@@ -113,8 +92,8 @@ test('a credited amount is subtracted before the residual is paid', function () 
     $reconciler = new LegacyOutstandingReconciler($this->userId, null);
     $reconciler->apply($reconciler->plan('B1'));
 
-    $payment = Payment::where('customer_id', $invoice->customer_id)->sole();
-    expect((float) $payment->amount)->toBe(70.0);
+    expect(Payment::count())->toBe(0);
+    expect($invoice->fresh()->legacy_confirmed_paid)->toBeTrue();
 });
 
 test('an over-applied invoice has its migrated allocation shrunk and the payment exhausted', function () {
@@ -132,7 +111,8 @@ test('an over-applied invoice has its migrated allocation shrunk and the payment
 
     expect((float) $allocation->fresh()->allocated_amount)->toBe(75.0)
         ->and((float) $payment->fresh()->amount)->toBe(100.0)
-        ->and($payment->fresh()->is_exhausted)->toBeTrue();
+        ->and($payment->fresh()->is_exhausted)->toBeTrue()
+        ->and($invoice->fresh()->legacy_confirmed_paid)->toBeFalse();
 });
 
 test('an over-applied allocation reduced to zero is soft-deleted', function () {
@@ -171,33 +151,32 @@ test('an invoice whose balance already matches legacy is left untouched', functi
 
     $reconciler->apply($plan);
 
-    expect(Payment::whereNotNull('reconciliation_batch')->count())->toBe(0)
-        ->and(WriteOff::count())->toBe(0);
+    expect($invoice->fresh()->legacy_confirmed_paid)->toBeFalse();
 });
 
-test('the excluded customer is skipped while a normal customer is still settled', function () {
+test('the excluded customer is skipped while a normal customer is still flagged', function () {
     $morrInvoice = linkLegacyInvoice(507, 'INV-8A', 0.0, 100.0);
     $normalInvoice = linkLegacyInvoice(508, 'INV-8B', 0.0, 100.0);
 
     $reconciler = new LegacyOutstandingReconciler($this->userId, $morrInvoice->customer_id);
     $plan = $reconciler->plan('B1');
 
-    expect($plan['path_a_count'])->toBe(1);
+    expect($plan['flagged_from_row_count'])->toBe(1);
 
     $reconciler->apply($plan);
 
-    expect(Payment::where('customer_id', $morrInvoice->customer_id)->count())->toBe(0)
-        ->and(Payment::where('customer_id', $normalInvoice->customer_id)->whereReconciliationBatch('B1')->count())->toBe(1);
+    expect($morrInvoice->fresh()->legacy_confirmed_paid)->toBeFalse()
+        ->and($normalInvoice->fresh()->legacy_confirmed_paid)->toBeTrue();
 });
 
-test('an invoice with no AccountEntries row never enters the plan', function () {
+test('an invoice with no AccountEntries row and no local evidence is left untouched', function () {
     DB::connection('legacy')->table('Documents')->insert([
         'uid' => 600, 'rtype' => 'i', 'acctuid' => 1, 'orderno' => null,
         'date' => '2024-01-01', 'goods' => 0, 'value' => 0, 'notes' => null,
         'ref' => 'INV-X', 'bline' => 0,
     ]);
 
-    Document::factory()->invoice()->create([
+    $invoice = Document::factory()->invoice()->create([
         'legacy_uid' => 600, 'total_value' => 100, 'doc_date' => '2024-03-15',
     ]);
 
@@ -208,9 +187,34 @@ test('an invoice with no AccountEntries row never enters the plan', function () 
 
     $reconciler->apply($plan);
 
-    expect(Payment::count())->toBe(0)
-        ->and(PaymentAllocation::count())->toBe(0)
-        ->and(WriteOff::count())->toBe(0);
+    expect($invoice->fresh()->legacy_confirmed_paid)->toBeFalse();
+});
+
+test('an invoice with no AccountEntries row but full local evidence is flagged', function () {
+    DB::connection('legacy')->table('Documents')->insert([
+        'uid' => 601, 'rtype' => 'i', 'acctuid' => 1, 'orderno' => null,
+        'date' => '2024-01-01', 'goods' => 0, 'value' => 0, 'notes' => null,
+        'ref' => 'INV-Y', 'bline' => 0,
+    ]);
+
+    $invoice = Document::factory()->invoice()->create([
+        'legacy_uid' => 601, 'total_value' => 100, 'doc_date' => '2024-03-15',
+    ]);
+
+    CreditAllocation::create([
+        'invoice_id' => $invoice->id,
+        'amount' => 100,
+    ]);
+
+    $reconciler = new LegacyOutstandingReconciler($this->userId, null);
+    $plan = $reconciler->plan('B1');
+
+    expect($plan['flagged_from_no_row_count'])->toBe(1);
+
+    $reconciler->apply($plan);
+
+    expect($invoice->fresh()->legacy_confirmed_paid)->toBeTrue()
+        ->and($invoice->fresh()->legacy_confirmed_paid_batch)->toBe('B1');
 });
 
 test('an ambiguous ref is counted but not settled', function () {
@@ -226,13 +230,7 @@ test('an ambiguous ref is counted but not settled', function () {
     $plan = $reconciler->plan('B1');
 
     expect($plan['ambiguous_ref_count'])->toBe(1)
-        ->and($plan['path_a_count'])->toBe(0);
-
-    $reconciler->apply($plan);
-
-    expect(Payment::count())->toBe(0)
-        ->and(PaymentAllocation::count())->toBe(0)
-        ->and(WriteOff::count())->toBe(0);
+        ->and($plan['flagged_from_row_count'])->toBe(0);
 });
 
 test('an over-applied invoice with no migrated allocation to shrink is unreducible', function () {
@@ -251,46 +249,61 @@ test('an over-applied invoice with no migrated allocation to shrink is unreducib
 });
 
 test('apply is idempotent across batches', function () {
-    linkLegacyInvoice(510, 'INV-12', 0.0, 100.0);
+    $invoice = linkLegacyInvoice(510, 'INV-12', 0.0, 100.0);
 
     $reconciler = new LegacyOutstandingReconciler($this->userId, null);
     $reconciler->apply($reconciler->plan('B1'));
 
-    $paymentCount = Payment::count();
-    $allocationCount = PaymentAllocation::count();
-    $writeOffCount = WriteOff::count();
+    expect($invoice->fresh()->legacy_confirmed_paid_batch)->toBe('B1');
 
     $plan2 = $reconciler->plan('B2');
     expect($reconciler->isEmpty($plan2))->toBeTrue();
 
     $reconciler->apply($plan2);
 
-    expect(Payment::count())->toBe($paymentCount)
-        ->and(PaymentAllocation::count())->toBe($allocationCount)
-        ->and(WriteOff::count())->toBe($writeOffCount);
+    expect($invoice->fresh()->legacy_confirmed_paid_batch)->toBe('B1');
 });
 
-test('revert undoes a Path A and Path B batch without touching pre-existing allocations', function () {
-    linkLegacyInvoice(511, 'INV-13A', 0.0, 100.0);
-    $pathBInvoice = linkLegacyInvoice(512, 'INV-13B', 20.0, 100.0);
+test('revert clears only this batch\'s flags without touching pre-existing allocations', function () {
+    $flaggedInvoice = linkLegacyInvoice(511, 'INV-13A', 0.0, 100.0);
+    $partiallyAllocatedInvoice = linkLegacyInvoice(512, 'INV-13B', 20.0, 100.0);
 
     $existingPayment = Payment::factory()->create();
     PaymentAllocation::create([
         'payment_id' => $existingPayment->id,
-        'document_id' => $pathBInvoice->id,
+        'document_id' => $partiallyAllocatedInvoice->id,
         'allocated_amount' => 40,
     ]);
 
     $reconciler = new LegacyOutstandingReconciler($this->userId, null);
     $reconciler->apply($reconciler->plan('B1'));
 
+    expect($flaggedInvoice->fresh()->legacy_confirmed_paid)->toBeTrue()
+        ->and($partiallyAllocatedInvoice->fresh()->legacy_confirmed_paid)->toBeTrue();
+
     $result = $reconciler->revert('B1');
 
-    expect($result['payments'])->toBeGreaterThan(0)
-        ->and($result['allocations'])->toBeGreaterThan(0)
-        ->and($result['write_offs'])->toBeGreaterThan(0)
-        ->and(Payment::whereReconciliationBatch('B1')->count())->toBe(0)
-        ->and(WriteOff::count())->toBe(0)
-        ->and(WriteOff::withTrashed()->count())->toBe(1)
+    expect($result['flags_cleared'])->toBe(2)
+        ->and($flaggedInvoice->fresh()->legacy_confirmed_paid)->toBeFalse()
+        ->and($partiallyAllocatedInvoice->fresh()->legacy_confirmed_paid)->toBeFalse()
         ->and(PaymentAllocation::count())->toBe(1);
+});
+
+test('registering a real payment against a flagged invoice lifts the flag', function () {
+    $invoice = linkLegacyInvoice(513, 'INV-14', 0.0, 100.0);
+
+    $reconciler = new LegacyOutstandingReconciler($this->userId, null);
+    $reconciler->apply($reconciler->plan('B1'));
+
+    expect($invoice->fresh()->legacy_confirmed_paid)->toBeTrue();
+
+    $payment = Payment::factory()->create();
+    PaymentAllocation::create([
+        'payment_id' => $payment->id,
+        'document_id' => $invoice->id,
+        'allocated_amount' => 100,
+    ]);
+
+    expect($invoice->fresh()->legacy_confirmed_paid)->toBeFalse()
+        ->and($invoice->fresh()->legacy_confirmed_paid_batch)->toBeNull();
 });
