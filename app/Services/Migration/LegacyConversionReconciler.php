@@ -13,13 +13,15 @@ use Illuminate\Support\Facades\DB;
  * It is deliberately excluded from DocumentMapper::updatableColumns(), so the writes
  * made here survive a re-migration.
  *
- * `invuid` on a delivery-note row is the authoritative link: it points at the linked
- * invoice's legacy uid and is the only conversion column the legacy app actually writes
- * (set when a document is saved from an invoice source). `origdeln` on the invoice row
- * is a cross-check only and may be entirely absent in real data; a disagreement is
- * reported as `signal_mismatches` without changing the outcome.
+ * This legacy install's `Documents` schema has no `invuid`/`origdeln` columns
+ * (confirmed via a schema query and a migration run's SQL error — "Invalid column
+ * name 'invuid'"). Instead, a `rtype='i'` row is matched to a `rtype='d'` row by
+ * identical `ref`: empirically, a converted invoice's `ref` is identical to its
+ * source DN's `ref` (verified against production-representative legacy data, 99.6%
+ * of invoices). A `ref` that repeats within either the DN group or the invoice
+ * group is ambiguous and is skipped rather than guessed, counted in `ambiguous_refs`.
  *
- * A converted DN is either linked (its `invuid` resolves to a migrated invoice) or
+ * A converted DN is either linked (its `ref` resolves to a migrated invoice) or
  * orphaned (it does not). Orphaned converted DNs would otherwise ship with status
  * `'converted'` — uneditable and with no conversion banner to explain why — so they are
  * downgraded back to `'active'`.
@@ -35,7 +37,7 @@ class LegacyConversionReconciler
      *     converted_from_updates: array<int, array{invoice_id: int, dn_id: int}>,
      *     dn_status_updates: array<int, int>,
      *     orphan_downgrades: array<int, int>,
-     *     signal_mismatches: int,
+     *     ambiguous_refs: int,
      * }
      */
     public function plan(): array
@@ -45,29 +47,35 @@ class LegacyConversionReconciler
             $localIdByLegacyUid[(int) $legacyUid] = (int) $localId;
         }
 
-        $dnLinks = DB::connection('legacy')->table('Documents')
-            ->where('rtype', 'd')
-            ->whereNotNull('invuid')
-            ->get(['uid', 'invuid']);
+        $dnRefGroups = [];
+        foreach (DB::connection('legacy')->table('Documents')->where('rtype', 'd')->get(['uid', 'ref']) as $row) {
+            $dnRefGroups[trim((string) $row->ref)][] = (int) $row->uid;
+        }
 
-        $invOrigdelnMap = [];
-        foreach (
-            DB::connection('legacy')->table('Documents')
-                ->where('rtype', 'i')
-                ->whereNotNull('origdeln')
-                ->get(['uid', 'origdeln']) as $row
-        ) {
-            $invOrigdelnMap[(int) $row->uid] = (int) $row->origdeln;
+        $invRefGroups = [];
+        foreach (DB::connection('legacy')->table('Documents')->where('rtype', 'i')->get(['uid', 'ref']) as $row) {
+            $invRefGroups[trim((string) $row->ref)][] = (int) $row->uid;
         }
 
         $candidates = [];
         $linkedDnLocalIds = [];
         $orphanCandidateDnLocalIds = [];
-        $signalMismatches = 0;
+        $ambiguousRefs = 0;
 
-        foreach ($dnLinks as $row) {
-            $dnUid = (int) $row->uid;
-            $invUid = (int) $row->invuid;
+        foreach ($invRefGroups as $ref => $invUids) {
+            $dnUids = $dnRefGroups[$ref] ?? null;
+            if ($dnUids === null) {
+                continue;
+            }
+
+            if (count($invUids) > 1 || count($dnUids) > 1) {
+                $ambiguousRefs++;
+
+                continue;
+            }
+
+            $dnUid = $dnUids[0];
+            $invUid = $invUids[0];
 
             $dnLocalId = $localIdByLegacyUid[$dnUid] ?? null;
             if ($dnLocalId === null) {
@@ -83,10 +91,6 @@ class LegacyConversionReconciler
 
             $candidates[$invLocalId] = $dnLocalId;
             $linkedDnLocalIds[$dnLocalId] = $dnLocalId;
-
-            if (isset($invOrigdelnMap[$invUid]) && $invOrigdelnMap[$invUid] !== $dnUid) {
-                $signalMismatches++;
-            }
         }
 
         $currentConvertedFrom = empty($candidates)
@@ -124,19 +128,19 @@ class LegacyConversionReconciler
             'converted_from_updates' => $convertedFromUpdates,
             'dn_status_updates' => $dnStatusUpdates,
             'orphan_downgrades' => $orphanDowngrades,
-            'signal_mismatches' => $signalMismatches,
+            'ambiguous_refs' => $ambiguousRefs,
         ];
     }
 
     /**
-     * @param  array{converted_from_updates: array, dn_status_updates: array, orphan_downgrades: array, signal_mismatches: int}  $plan
+     * @param  array{converted_from_updates: array, dn_status_updates: array, orphan_downgrades: array, ambiguous_refs: int}  $plan
      */
     public function isEmpty(array $plan): bool
     {
         return empty($plan['converted_from_updates'])
             && empty($plan['dn_status_updates'])
             && empty($plan['orphan_downgrades'])
-            && $plan['signal_mismatches'] === 0;
+            && $plan['ambiguous_refs'] === 0;
     }
 
     /**

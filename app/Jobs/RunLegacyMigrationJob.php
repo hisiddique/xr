@@ -166,7 +166,7 @@ class RunLegacyMigrationJob implements ShouldQueue
                     'converted_from_updates' => count($plan['converted_from_updates']),
                     'dn_status_updates' => count($plan['dn_status_updates']),
                     'orphan_downgrades' => count($plan['orphan_downgrades']),
-                    'signal_mismatches' => $plan['signal_mismatches'],
+                    'ambiguous_refs' => $plan['ambiguous_refs'],
                 ],
             ])]);
         } catch (\Throwable $e) {
