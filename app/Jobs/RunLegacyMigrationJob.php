@@ -178,7 +178,7 @@ class RunLegacyMigrationJob implements ShouldQueue
             ]);
 
             $run->update(['options' => array_merge($run->options ?? [], [
-                'conversion_reconciliation_error' => Str::limit($e->getMessage(), 500),
+                'conversion_reconciliation_error' => Str::limit($e->getMessage(), 2000),
             ])]);
         }
     }
@@ -333,7 +333,7 @@ class RunLegacyMigrationJob implements ShouldQueue
             ]);
 
             $run->update(['options' => array_merge($run->options ?? [], [
-                'outstanding_reconciliation_error' => Str::limit($e->getMessage(), 500),
+                'outstanding_reconciliation_error' => Str::limit($e->getMessage(), 2000),
             ])]);
         }
     }

@@ -447,6 +447,55 @@ new #[Title('Legacy Data Migration')] class extends Component {
                 </div>
             @endif
 
+            @if (isset($activeRun->options['conversion_reconciliation']))
+                <div class="rounded-xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-400">
+                    <p class="font-semibold">Delivery note → invoice conversions linked</p>
+                    <p class="mt-1">
+                        {{ number_format($activeRun->options['conversion_reconciliation']['converted_from_updates']) }} invoice(s) linked to their source delivery note,
+                        {{ number_format($activeRun->options['conversion_reconciliation']['dn_status_updates']) }} delivery note(s) marked converted,
+                        {{ number_format($activeRun->options['conversion_reconciliation']['orphan_downgrades']) }} orphaned conversion(s) downgraded back to active,
+                        {{ number_format($activeRun->options['conversion_reconciliation']['ambiguous_refs']) }} excluded (ambiguous legacy ref).
+                    </p>
+                </div>
+            @endif
+
+            @if (isset($activeRun->options['conversion_reconciliation_error']))
+                <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
+                    <p class="font-semibold">Migration succeeded, but linking delivery note → invoice conversions afterward failed</p>
+                    <p class="mt-1 font-mono text-xs">{{ $activeRun->options['conversion_reconciliation_error'] }}</p>
+                </div>
+            @endif
+
+            @if (isset($activeRun->options['outstanding_reconciliation_skipped']))
+                <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
+                    <p class="font-semibold">Outstanding-balance settlement was skipped</p>
+                    <p class="mt-1">{{ $activeRun->options['outstanding_reconciliation_skipped'] }}</p>
+                </div>
+            @endif
+
+            @if (isset($activeRun->options['outstanding_reconciliation']))
+                <div class="rounded-xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-400">
+                    <p class="font-semibold">Outstanding balances confirmed against legacy</p>
+                    <p class="mt-1">
+                        {{ number_format($activeRun->options['outstanding_reconciliation']['flagged_from_row_count']) }} invoice(s) flagged legacy-confirmed-paid (£{{ number_format($activeRun->options['outstanding_reconciliation']['flagged_from_row_total'], 2) }}),
+                        {{ number_format($activeRun->options['outstanding_reconciliation']['flagged_from_no_row_count']) }} more flagged from our own evidence with no legacy balance row (£{{ number_format($activeRun->options['outstanding_reconciliation']['flagged_from_no_row_total'], 2) }}),
+                        {{ number_format($activeRun->options['outstanding_reconciliation']['reduced_count']) }} over-applied invoice(s) corrected,
+                        {{ number_format($activeRun->options['outstanding_reconciliation']['matched_count']) }} already matching legacy.
+                    </p>
+                    <p class="mt-1">
+                        {{ number_format($activeRun->options['outstanding_reconciliation']['ambiguous_ref_count']) }} excluded (ambiguous legacy ref),
+                        {{ number_format($activeRun->options['outstanding_reconciliation']['unreducible_count']) }} over-applied invoice(s) reported unreducible (not guessed).
+                    </p>
+                </div>
+            @endif
+
+            @if (isset($activeRun->options['outstanding_reconciliation_error']))
+                <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
+                    <p class="font-semibold">Migration succeeded, but confirming outstanding balances against legacy afterward failed</p>
+                    <p class="mt-1 font-mono text-xs">{{ $activeRun->options['outstanding_reconciliation_error'] }}</p>
+                </div>
+            @endif
+
             @if ($activeRun->status === MigrationRunStatus::Failed && $activeRun->error)
                 <div class="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
                     {{ $activeRun->error }}
