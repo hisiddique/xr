@@ -249,13 +249,19 @@ class LegacyOutstandingReconciler
      */
     private function planNoRowInvoices(array $excludeLocalIds): array
     {
+        // A whereNotIn() here would need one placeholder per row-based-pass id, which
+        // can exceed MySQL's 65535-placeholder-per-statement cap on a full production
+        // dataset — fetch every remaining candidate instead and exclude in PHP.
+        $excludeSet = array_flip($excludeLocalIds);
+
         $candidateIds = Document::query()
             ->invoices()
             ->whereNotNull('legacy_uid')
             ->when($this->excludeCustomerId, fn ($q) => $q->where('customer_id', '!=', $this->excludeCustomerId))
             ->where('legacy_confirmed_paid', false)
-            ->whereNotIn('id', $excludeLocalIds ?: [0])
             ->pluck('id')
+            ->reject(fn ($id) => isset($excludeSet[$id]))
+            ->values()
             ->all();
 
         $flagIds = [];

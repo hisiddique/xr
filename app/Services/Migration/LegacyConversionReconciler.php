@@ -29,6 +29,12 @@ use Illuminate\Support\Facades\DB;
  * Idempotent: `converted_from_updates` is emitted only where the invoice's current
  * `converted_from_id` differs, the apply step further guards on `whereNull`, and the
  * status updates are no-ops once already in the target state.
+ *
+ * `plan()` fetches every migrated document's id/converted_from_id/status once up
+ * front and does all lookups against that map, the same way LegacyPaymentReconciler
+ * does — not a `whereIn('id', $candidateIds)` per candidate list, which would need
+ * one placeholder per row and can exceed MySQL's 65535-per-statement cap on a full
+ * production dataset.
  */
 class LegacyConversionReconciler
 {
@@ -43,8 +49,13 @@ class LegacyConversionReconciler
     public function plan(): array
     {
         $localIdByLegacyUid = [];
-        foreach (Document::withTrashed()->whereNotNull('legacy_uid')->pluck('id', 'legacy_uid')->all() as $legacyUid => $localId) {
-            $localIdByLegacyUid[(int) $legacyUid] = (int) $localId;
+        $convertedFromByLocalId = [];
+        $statusByLocalId = [];
+
+        foreach (Document::withTrashed()->whereNotNull('legacy_uid')->get(['id', 'legacy_uid', 'converted_from_id', 'status']) as $doc) {
+            $localIdByLegacyUid[(int) $doc->legacy_uid] = $doc->id;
+            $convertedFromByLocalId[$doc->id] = $doc->converted_from_id;
+            $statusByLocalId[$doc->id] = $doc->status;
         }
 
         $dnRefGroups = [];
@@ -93,36 +104,28 @@ class LegacyConversionReconciler
             $linkedDnLocalIds[$dnLocalId] = $dnLocalId;
         }
 
-        $currentConvertedFrom = empty($candidates)
-            ? []
-            : Document::withTrashed()->whereIn('id', array_keys($candidates))->pluck('converted_from_id', 'id')->all();
-
         $convertedFromUpdates = [];
         foreach ($candidates as $invLocalId => $dnLocalId) {
-            if ((int) ($currentConvertedFrom[$invLocalId] ?? 0) !== $dnLocalId) {
+            if ((int) ($convertedFromByLocalId[$invLocalId] ?? 0) !== $dnLocalId) {
                 $convertedFromUpdates[] = ['invoice_id' => $invLocalId, 'dn_id' => $dnLocalId];
             }
         }
 
-        $dnStatusUpdates = empty($linkedDnLocalIds)
-            ? []
-            : Document::withTrashed()
-                ->whereIn('id', array_values($linkedDnLocalIds))
-                ->where('status', '!=', DocumentStatus::Converted->value)
-                ->pluck('id')
-                ->map(fn ($id) => (int) $id)
-                ->all();
+        $dnStatusUpdates = [];
+        foreach (array_values($linkedDnLocalIds) as $dnLocalId) {
+            if (($statusByLocalId[$dnLocalId] ?? null) !== DocumentStatus::Converted) {
+                $dnStatusUpdates[] = $dnLocalId;
+            }
+        }
 
         $orphanIds = array_values(array_diff(array_unique($orphanCandidateDnLocalIds), array_keys($linkedDnLocalIds)));
 
-        $orphanDowngrades = empty($orphanIds)
-            ? []
-            : Document::withTrashed()
-                ->whereIn('id', $orphanIds)
-                ->where('status', DocumentStatus::Converted->value)
-                ->pluck('id')
-                ->map(fn ($id) => (int) $id)
-                ->all();
+        $orphanDowngrades = [];
+        foreach ($orphanIds as $dnLocalId) {
+            if (($statusByLocalId[$dnLocalId] ?? null) === DocumentStatus::Converted) {
+                $orphanDowngrades[] = $dnLocalId;
+            }
+        }
 
         return [
             'converted_from_updates' => $convertedFromUpdates,
