@@ -25,7 +25,7 @@ new #[Title('Customer Outstanding Payments')] class extends Component
     public string $search = '';
 
     #[Url(as: 'customer', except: '')]
-    public string $customerId = '';
+    public ?string $customerId = '';
 
     #[Url(as: 'from', except: '')]
     public string $dateFrom = '';
@@ -73,6 +73,7 @@ new #[Title('Customer Outstanding Payments')] class extends Component
 
     public function updatedCustomerId(): void
     {
+        $this->customerId ??= '';
         $this->resetPage();
     }
 

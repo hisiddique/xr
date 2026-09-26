@@ -23,7 +23,7 @@ new #[Title('Customer Turnover')] class extends Component
     public string $search = '';
 
     #[Url(as: 'customer', except: '')]
-    public string $customerId = '';
+    public ?string $customerId = '';
 
     #[Url(as: 'preset', except: 'this_month')]
     public string $preset = 'this_month';
@@ -132,6 +132,7 @@ new #[Title('Customer Turnover')] class extends Component
 
     public function updatedCustomerId(): void
     {
+        $this->customerId ??= '';
         $this->resetPage();
     }
 

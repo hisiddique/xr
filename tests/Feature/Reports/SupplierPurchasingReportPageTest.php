@@ -29,6 +29,18 @@ function makeSupplierPurchasingPageInvoice(Supplier $supplier, float $lineTotal)
     return $invoice;
 }
 
+test('clearing the supplier filter to null does not throw', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+    $supplier = Supplier::factory()->create(['company_name' => 'Zeta Traders']);
+
+    Livewire::actingAs($user)
+        ->test('pages::reports.supplier-purchasing')
+        ->set('supplierId', (string) $supplier->id)
+        ->set('supplierId', null)
+        ->assertOk()
+        ->assertSet('supplierId', '');
+});
+
 test('report page is accessible and lists posted invoices grouped by supplier', function () {
     $user = User::factory()->staff()->create(['email_verified_at' => now()]);
     $supplier = Supplier::factory()->create(['company_name' => 'Purchasing Co']);

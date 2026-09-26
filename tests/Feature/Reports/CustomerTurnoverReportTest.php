@@ -27,6 +27,18 @@ function turnoverRows(Testable $component): Collection
     return collect($component->instance()->rows->items());
 }
 
+test('clearing the customer filter to null does not throw', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+    $customer = Customer::factory()->create(['company_name' => 'Zeta Traders']);
+
+    Livewire::actingAs($user)
+        ->test('pages::reports.customer-turnover')
+        ->set('customerId', (string) $customer->id)
+        ->set('customerId', null)
+        ->assertOk()
+        ->assertSet('customerId', '');
+});
+
 test('the report page is gated on the report-customerTurnover permission', function () {
     $forbidden = User::factory()->noRoles()->create(['email_verified_at' => now()]);
     $this->actingAs($forbidden)->get(route('reports.customer-turnover'))->assertForbidden();

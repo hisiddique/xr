@@ -24,7 +24,7 @@ new #[Title('Supplier Purchasing Report')] class extends Component
     public string $search = '';
 
     #[Url(as: 'supplier', except: '')]
-    public string $supplierId = '';
+    public ?string $supplierId = '';
 
     #[Url(as: 'from', except: '')]
     public string $dateFrom = '';
@@ -73,6 +73,7 @@ new #[Title('Supplier Purchasing Report')] class extends Component
 
     public function updatedSupplierId(): void
     {
+        $this->supplierId ??= '';
         $this->resetPage();
     }
 

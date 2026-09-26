@@ -29,6 +29,18 @@ test('report page is accessible and lists outstanding invoices grouped by custom
         ->assertSeeText('75.00');
 });
 
+test('clearing the customer filter to null does not throw', function () {
+    $user = User::factory()->staff()->create(['email_verified_at' => now()]);
+    $customer = Customer::factory()->create(['company_name' => 'Zeta Traders']);
+
+    Livewire::actingAs($user)
+        ->test('pages::reports.customer-outstanding-payments')
+        ->set('customerId', (string) $customer->id)
+        ->set('customerId', null)
+        ->assertOk()
+        ->assertSet('customerId', '');
+});
+
 test('report page search filters by customer name', function () {
     $user = User::factory()->staff()->create(['email_verified_at' => now()]);
     $matching = Customer::factory()->create(['company_name' => 'Zeta Traders']);
