@@ -475,16 +475,9 @@ new #[Title('Legacy Data Migration')] class extends Component {
 
             @if (isset($activeRun->options['outstanding_reconciliation']))
                 <div class="rounded-xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-400">
-                    <p class="font-semibold">Outstanding balances confirmed against legacy</p>
+                    <p class="font-semibold">Outstanding balances confirmed against legacy's t_os_inv list</p>
                     <p class="mt-1">
-                        {{ number_format($activeRun->options['outstanding_reconciliation']['flagged_from_row_count']) }} invoice(s) flagged legacy-confirmed-paid (£{{ number_format($activeRun->options['outstanding_reconciliation']['flagged_from_row_total'], 2) }}),
-                        {{ number_format($activeRun->options['outstanding_reconciliation']['flagged_from_no_row_count']) }} more flagged from our own evidence with no legacy balance row (£{{ number_format($activeRun->options['outstanding_reconciliation']['flagged_from_no_row_total'], 2) }}),
-                        {{ number_format($activeRun->options['outstanding_reconciliation']['reduced_count']) }} over-applied invoice(s) corrected,
-                        {{ number_format($activeRun->options['outstanding_reconciliation']['matched_count']) }} already matching legacy.
-                    </p>
-                    <p class="mt-1">
-                        {{ number_format($activeRun->options['outstanding_reconciliation']['ambiguous_ref_count']) }} excluded (ambiguous legacy ref),
-                        {{ number_format($activeRun->options['outstanding_reconciliation']['unreducible_count']) }} over-applied invoice(s) reported unreducible (not guessed).
+                        {{ number_format($activeRun->options['outstanding_reconciliation']['settled_count']) }} invoice(s) settled (batch {{ $activeRun->options['outstanding_reconciliation']['batch'] }}) — absent from legacy's current outstanding list, so marked legacy-confirmed-paid.
                     </p>
                 </div>
             @endif

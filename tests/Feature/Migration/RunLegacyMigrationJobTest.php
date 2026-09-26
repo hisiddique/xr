@@ -155,15 +155,15 @@ test('reconciliation runs automatically when a run includes both documents and p
 });
 
 /**
- * Seeds a legacy invoice whose legacy osvalue (30) is below what the migrated data
- * implies is outstanding (100, nothing allocated), so the outstanding-settlement
- * step has real work: it should flag the invoice legacy_confirmed_paid, tagged
- * with this run's batch id, and record a summary on the run.
+ * Seeds a legacy invoice with no matching row in t_os_inv, so the
+ * outstanding-settlement step has real work: it should flag the invoice
+ * legacy_confirmed_paid, tagged with this run's batch id, and record a
+ * summary on the run.
  */
-function seedOutstandingMismatchLegacyData(float $osvalue): void
+function seedOutstandingCandidateLegacyData(): void
 {
     useLegacyDatabase();
-    createLegacyTables(['Units', 'CustSupps', 'Documents', 'Companies', 'CompanySettings', 'AccountEntries', 'AccountPostTypes', 'AccountBatchItems']);
+    createLegacyTables(['Units', 'CustSupps', 'Documents', 'Companies', 'CompanySettings']);
 
     DB::connection('legacy')->table('CustSupps')->insert([
         'uid' => 710, 'rtype' => 'A', 'name' => 'Mismatch Co', 'add1' => '1 Road', 'town' => 'Town', 'pcode' => 'AA1 1AA', 'email' => 'm@test.com', 'disc' => 0,
@@ -173,43 +173,73 @@ function seedOutstandingMismatchLegacyData(float $osvalue): void
         'uid' => 810, 'rtype' => 'i', 'acctuid' => 710, 'orderno' => null, 'date' => '2024-02-01',
         'goods' => 100, 'value' => 100, 'notes' => null, 'ref' => '910001', 'bline' => 0,
     ]);
-
-    DB::connection('legacy')->table('AccountPostTypes')->insert([
-        ['uid' => 85, 'rtype' => 'i', 'inout' => 'OUT', 'entryvalue' => 1],
-    ]);
-
-    DB::connection('legacy')->table('AccountEntries')->insert([
-        ['uid' => 910, 'rtype' => 'a', 'custid' => 710, 'value' => 100, 'osvalue' => $osvalue, 'txndate' => '2024-02-01', 'invno' => '910001', 'posttype' => 85],
-    ]);
 }
 
-test('outstanding settlement runs when MORR resolves, flagging the invoice legacy_confirmed_paid', function () {
-    seedOutstandingMismatchLegacyData(osvalue: 30);
+function createTOsInvTable(array $outstandingInvoiceNumbers = []): void
+{
+    Schema::create('t_os_inv', function (Blueprint $table) {
+        $table->id();
+        $table->string('invoice')->nullable();
+    });
+
+    foreach ($outstandingInvoiceNumbers as $invoice) {
+        DB::table('t_os_inv')->insert(['invoice' => $invoice]);
+    }
+}
+
+afterEach(function () {
+    Schema::dropIfExists('t_os_inv');
+});
+
+test('outstanding settlement runs when MORR resolves, settling the invoice absent from t_os_inv', function () {
+    seedOutstandingCandidateLegacyData();
+    createTOsInvTable();
     Customer::factory()->create(['reference' => 'MORR']);
 
     $admin = User::factory()->admin()->create();
     $run = MigrationRun::create(['status' => MigrationRunStatus::Running, 'created_by' => $admin->id]);
 
-    (new RunLegacyMigrationJob($run->id, ['customers', 'documents', 'payments'], DuplicateStrategy::UpdateExisting->value, 'none', $admin->id))->handle();
+    (new RunLegacyMigrationJob($run->id, ['customers', 'documents'], DuplicateStrategy::UpdateExisting->value, 'none', $admin->id))->handle();
 
     $run->refresh();
     $document = Document::where('legacy_uid', 810)->first();
 
-    expect($run->options['outstanding_reconciliation']['flagged_from_row_count'] ?? null)->toBe(1)
+    expect($run->options['outstanding_reconciliation']['settled_count'] ?? null)->toBe(1)
+        ->and($run->options['outstanding_reconciliation']['batch'] ?? null)->toBe('MIGRATION-'.$run->id)
         ->and($run->options['outstanding_reconciliation_skipped'] ?? null)->toBeNull();
 
     expect($document->fresh()->legacy_confirmed_paid)->toBeTrue()
+        ->and($document->fresh()->is_settled)->toBeTrue()
         ->and($document->fresh()->legacy_confirmed_paid_batch)->toBe('MIGRATION-'.$run->id)
+        ->and($document->fresh()->notes)->toBe('Legacy System Confirmed that the invoice has been settled')
         ->and(Payment::whereNotNull('reconciliation_batch')->count())->toBe(0);
 });
 
-test('outstanding settlement is skipped and the reason recorded when MORR does not resolve', function () {
-    seedOutstandingMismatchLegacyData(osvalue: 30);
+test('outstanding settlement leaves an invoice untouched when it is present in t_os_inv', function () {
+    seedOutstandingCandidateLegacyData();
+    createTOsInvTable(['INV-910001']);
+    Customer::factory()->create(['reference' => 'MORR']);
 
     $admin = User::factory()->admin()->create();
     $run = MigrationRun::create(['status' => MigrationRunStatus::Running, 'created_by' => $admin->id]);
 
-    (new RunLegacyMigrationJob($run->id, ['customers', 'documents', 'payments'], DuplicateStrategy::UpdateExisting->value, 'none', $admin->id))->handle();
+    (new RunLegacyMigrationJob($run->id, ['customers', 'documents'], DuplicateStrategy::UpdateExisting->value, 'none', $admin->id))->handle();
+
+    $run->refresh();
+    $document = Document::where('legacy_uid', 810)->first();
+
+    expect($run->options['outstanding_reconciliation'] ?? null)->toBeNull()
+        ->and($document->fresh()->legacy_confirmed_paid)->toBeFalse();
+});
+
+test('outstanding settlement is skipped and the reason recorded when MORR does not resolve', function () {
+    seedOutstandingCandidateLegacyData();
+    createTOsInvTable();
+
+    $admin = User::factory()->admin()->create();
+    $run = MigrationRun::create(['status' => MigrationRunStatus::Running, 'created_by' => $admin->id]);
+
+    (new RunLegacyMigrationJob($run->id, ['customers', 'documents'], DuplicateStrategy::UpdateExisting->value, 'none', $admin->id))->handle();
 
     $run->refresh();
 
@@ -218,8 +248,28 @@ test('outstanding settlement is skipped and the reason recorded when MORR does n
         ->and(Payment::whereNotNull('reconciliation_batch')->count())->toBe(0);
 });
 
+test('outstanding settlement reports an error and does not run when t_os_inv is missing', function () {
+    seedOutstandingCandidateLegacyData();
+    Customer::factory()->create(['reference' => 'MORR']);
+
+    expect(Schema::hasTable('t_os_inv'))->toBeFalse();
+
+    $admin = User::factory()->admin()->create();
+    $run = MigrationRun::create(['status' => MigrationRunStatus::Running, 'created_by' => $admin->id]);
+
+    (new RunLegacyMigrationJob($run->id, ['customers', 'documents'], DuplicateStrategy::UpdateExisting->value, 'none', $admin->id))->handle();
+
+    $run->refresh();
+    $document = Document::where('legacy_uid', 810)->first();
+
+    expect($run->options['outstanding_reconciliation_error'] ?? null)->toContain('t_os_inv')
+        ->and($run->options['outstanding_reconciliation'] ?? null)->toBeNull()
+        ->and($document->fresh()->legacy_confirmed_paid)->toBeFalse();
+});
+
 test('outstanding settlement self-heals a deployment missing the legacy_confirmed_paid column', function () {
-    seedOutstandingMismatchLegacyData(osvalue: 30);
+    seedOutstandingCandidateLegacyData();
+    createTOsInvTable();
     Customer::factory()->create(['reference' => 'MORR']);
 
     Schema::table('documents', function (Blueprint $table) {
@@ -236,13 +286,13 @@ test('outstanding settlement self-heals a deployment missing the legacy_confirme
     $admin = User::factory()->admin()->create();
     $run = MigrationRun::create(['status' => MigrationRunStatus::Running, 'created_by' => $admin->id]);
 
-    (new RunLegacyMigrationJob($run->id, ['customers', 'documents', 'payments'], DuplicateStrategy::UpdateExisting->value, 'none', $admin->id))->handle();
+    (new RunLegacyMigrationJob($run->id, ['customers', 'documents'], DuplicateStrategy::UpdateExisting->value, 'none', $admin->id))->handle();
 
     $run->refresh();
 
     expect(Schema::hasColumn('documents', 'legacy_confirmed_paid'))->toBeTrue()
         ->and($run->options['outstanding_reconciliation_error'] ?? null)->toBeNull()
-        ->and($run->options['outstanding_reconciliation']['flagged_from_row_count'] ?? null)->toBe(1);
+        ->and($run->options['outstanding_reconciliation']['settled_count'] ?? null)->toBe(1);
 
     $document = Document::where('legacy_uid', 810)->first();
     expect($document->fresh()->legacy_confirmed_paid)->toBeTrue();

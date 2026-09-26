@@ -8,7 +8,7 @@ use App\Models\MigrationRun;
 use App\Services\Migration\DuplicateStrategy;
 use App\Services\Migration\LegacyConversionReconciler;
 use App\Services\Migration\LegacyCreditNoteReconciler;
-use App\Services\Migration\LegacyOutstandingReconciler;
+use App\Services\Migration\LegacyOsInvReconciler;
 use App\Services\Migration\LegacyPaymentReconciler;
 use App\Services\Migration\LegacyWriteOffReconciler;
 use App\Services\Migration\MigrationRunner;
@@ -272,17 +272,19 @@ class RunLegacyMigrationJob implements ShouldQueue
     }
 
     /**
-     * Forces each migrated invoice's local outstanding balance to match legacy's
-     * AccountEntries.osvalue — see LegacyOutstandingReconciler's docblock. Runs
-     * last, after the credit-note and write-off reconcilers, because it reads the
-     * local credits and write-offs those create. Needs both 'documents' and
-     * 'payments' in the run. The MORR customer (customers.reference) is excluded;
-     * if it can't be resolved the step is skipped rather than run without the
-     * exclusion.
+     * Settles invoices against a client-supplied `t_os_inv` table listing every
+     * invoice number legacy currently considers outstanding — see
+     * LegacyOsInvReconciler's docblock. Needs 'documents' in the run. The MORR
+     * customer (customers.reference) is excluded; if it can't be resolved the
+     * step is skipped rather than run without the exclusion. `t_os_inv` is a
+     * one-off table the client populates manually — if it's missing (or lacks
+     * its `invoice` column), the failure is reported on the settings page
+     * rather than silently skipped, since its absence means settlement could
+     * not run at all.
      */
     private function reconcileOutstandingIfApplicable(MigrationRun $run): void
     {
-        if (! in_array('documents', $this->selectedGroups, true) || ! in_array('payments', $this->selectedGroups, true)) {
+        if (! in_array('documents', $this->selectedGroups, true)) {
             return;
         }
 
@@ -303,27 +305,29 @@ class RunLegacyMigrationJob implements ShouldQueue
         try {
             $this->ensureLegacyConfirmedPaidColumnExists();
 
+            $reconciler = new LegacyOsInvReconciler($excludeCustomerId);
+
+            if (! $reconciler->tableAvailable()) {
+                $run->update(['options' => array_merge($run->options ?? [], [
+                    'outstanding_reconciliation_error' => "t_os_inv table (with an 'invoice' column) not found — outstanding-balance settlement could not run.",
+                ])]);
+
+                return;
+            }
+
             $batch = 'MIGRATION-'.$run->id;
-            $reconciler = new LegacyOutstandingReconciler($this->createdByUserId, $excludeCustomerId);
             $plan = $reconciler->plan($batch);
 
             if ($reconciler->isEmpty($plan)) {
                 return;
             }
 
-            $reconciler->apply($plan);
+            $settledCount = $reconciler->apply($plan);
 
             $run->update(['options' => array_merge($run->options ?? [], [
                 'outstanding_reconciliation' => [
                     'batch' => $batch,
-                    'flagged_from_row_count' => $plan['flagged_from_row_count'],
-                    'flagged_from_row_total' => $plan['flagged_from_row_total'],
-                    'flagged_from_no_row_count' => $plan['flagged_from_no_row_count'],
-                    'flagged_from_no_row_total' => $plan['flagged_from_no_row_total'],
-                    'reduced_count' => $plan['reduced_count'],
-                    'matched_count' => $plan['matched_count'],
-                    'ambiguous_ref_count' => $plan['ambiguous_ref_count'],
-                    'unreducible_count' => $plan['unreducible']['count'],
+                    'settled_count' => $settledCount,
                 ],
             ])]);
         } catch (\Throwable $e) {
