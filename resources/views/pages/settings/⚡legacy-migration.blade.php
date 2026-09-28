@@ -473,7 +473,7 @@ new #[Title('Legacy Data Migration')] class extends Component {
                 </div>
             @endif
 
-            @if (isset($activeRun->options['outstanding_reconciliation']))
+            @if (isset($activeRun->options['outstanding_reconciliation']['settled_count']))
                 <div class="rounded-xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-400">
                     <p class="font-semibold">Outstanding balances confirmed against legacy's t_os_inv list</p>
                     <p class="mt-1">
