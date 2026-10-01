@@ -428,7 +428,7 @@ new #[Title('Credit Notes')] class extends Component
     @endif
 
     {{-- Table card --}}
-    <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white dark:border-white/10 dark:bg-zinc-900">
+    <div class="rounded-2xl border border-zinc-200/70 bg-white [clip-path:inset(0_round_1rem)] dark:border-white/10 dark:bg-zinc-900">
 
         @if($this->creditNotes->isEmpty())
             <x-ui.empty-state
