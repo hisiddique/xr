@@ -2406,6 +2406,7 @@ document.addEventListener('alpine:init', () => {
     window.Alpine.data('supplierPayoutAllocator', ({ rows, focusAmount = false }) => ({
         rows: rows.map(r => ({ ...r, allocated_amount: r.allocated_amount ?? 0 })),
         _baseline: {},
+        _typedAmount: 0,
 
         _rowKey(r) {
             return r.id ?? ('dn-' + r.debit_note_id);
@@ -2443,13 +2444,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         get payoutAmount() {
-            // Amount uses deferred wire:model (persists on Enter), so $wire.amount
-            // lags what the user just typed — read the live input value instead.
-            const el = this.$refs.payoutAmountInput
-                ?? this.$el?.querySelector?.('[data-payout-amount]')
-                ?? document.querySelector('[data-payout-amount]');
-            const raw = el && el.value !== '' ? el.value : this.$wire.amount;
-            return parseFloat(raw) || 0;
+            return this._typedAmount || parseFloat(this.$wire.amount) || 0;
         },
 
         get totalAllocated() {

@@ -340,6 +340,7 @@ new class extends Component {
                     wire:model="amount"
                     data-payout-amount
                     x-ref="payoutAmountInput"
+                    x-on:input="_typedAmount = parseFloat($event.target.value) || 0"
                     x-on:keydown.enter.prevent="$wire.$commit()"
                     type="number"
                     step="0.01"

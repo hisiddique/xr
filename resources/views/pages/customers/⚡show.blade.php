@@ -61,8 +61,9 @@ new #[Title('Customer Details')] class extends Component
         $balance = (clone $invoices)
             ->withSum('paymentAllocations as allocated_total', 'allocated_amount')
             ->withSum('creditAllocationsReceived as credited_total', 'amount')
+            ->withSum('writeOffs as written_off_total', 'amount')
             ->get()
-            ->sum(fn (Document $invoice) => $invoice->total_value - ($invoice->allocated_total ?? 0) - ($invoice->credited_total ?? 0));
+            ->sum(fn (Document $invoice) => $invoice->total_value - ($invoice->allocated_total ?? 0) - ($invoice->credited_total ?? 0) - ($invoice->written_off_total ?? 0));
 
         $onAccount = $this->customer->payments()
             ->withSum('allocations as allocations_sum_allocated_amount', 'allocated_amount')
@@ -198,12 +199,14 @@ new #[Title('Customer Details')] class extends Component
             ->with(['paymentAllocations.payment.paymentMethod', 'creditAllocationsReceived.creditNote'])
             ->withSum('paymentAllocations as allocated_total', 'allocated_amount')
             ->withSum('creditAllocationsReceived as credited_total', 'amount')
+            ->withSum('writeOffs as written_off_total', 'amount')
             ->get();
 
         foreach ($invoices as $invoice) {
             $allocatedTotal = (float) ($invoice->allocated_total ?? 0);
             $creditedTotal = (float) ($invoice->credited_total ?? 0);
-            $balance = (float) $invoice->total_value - $allocatedTotal - $creditedTotal;
+            $writtenOffTotal = (float) ($invoice->written_off_total ?? 0);
+            $balance = (float) $invoice->total_value - $allocatedTotal - $creditedTotal - $writtenOffTotal;
             $dueDate = CreditTermDueDateCalculator::calculate($this->customer->creditTerm?->name, $invoice->doc_date);
 
             $isOverdue = $dueDate && $dueDate->isPast() && $balance > 0;
@@ -266,7 +269,7 @@ new #[Title('Customer Details')] class extends Component
             $details = [
                 'kind' => 'invoice',
                 'total' => (float) $invoice->total_value,
-                'paid' => $allocatedTotal + $creditedTotal,
+                'paid' => $allocatedTotal + $creditedTotal + $writtenOffTotal,
                 'outstanding' => $balance,
                 'due_date' => $dueDate,
                 'paid_date' => $paidDate,
