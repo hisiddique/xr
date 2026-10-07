@@ -11,7 +11,7 @@ new #[Title('Invoice')] class extends Component
 
     public function mount(): void
     {
-        $this->document->load(['customer', 'items', 'emailLogs', 'convertedFrom', 'creator', 'creditNotesIssued', 'paymentAllocations.payment.paymentMethod']);
+        $this->document->load(['customer', 'items', 'emailLogs', 'convertedFrom', 'creator', 'creditNotesIssued', 'paymentAllocations.payment.paymentMethod', 'writeOffs.writtenOffBy']);
     }
 
     #[On('email-log-updated')]
@@ -246,6 +246,33 @@ new #[Title('Invoice')] class extends Component
                     </ul>
                 @endif
             </x-ui.section-card>
+
+            {{-- Write-offs --}}
+            @if($document->writeOffs->isNotEmpty())
+                <x-ui.section-card title="Write-offs">
+                    <ul class="space-y-3">
+                        @foreach($document->writeOffs as $writeOff)
+                            <li class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-1.5">
+                                        <flux:icon.document-minus class="size-4 text-amber-500 shrink-0" />
+                                        <span class="font-semibold text-zinc-900 dark:text-white">£{{ number_format($writeOff->amount, 2) }} written off</span>
+                                    </div>
+                                    <p class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">
+                                        {{ $writeOff->written_off_at?->format('d F Y, H:i') }}
+                                        @if($writeOff->writtenOffBy)
+                                            · {{ $writeOff->writtenOffBy->name }}
+                                        @endif
+                                    </p>
+                                    @if($writeOff->reason)
+                                        <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ $writeOff->reason }}</p>
+                                    @endif
+                                </div>
+                            </li>
+                        @endforeach
+                    </ul>
+                </x-ui.section-card>
+            @endif
 
             {{-- Email History --}}
             <x-ui.section-card title="Email History">

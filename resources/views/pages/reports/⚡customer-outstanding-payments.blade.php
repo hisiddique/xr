@@ -119,7 +119,11 @@ new #[Title('Customer Outstanding Payments')] class extends Component
 
     public function openWriteOffModal(int $invoiceId): void
     {
-        $invoice = Document::invoices()->findOrFail($invoiceId);
+        $invoice = Document::invoices()
+            ->withSum('paymentAllocations as allocated_total', 'allocated_amount')
+            ->withSum('creditAllocationsReceived as credited_total', 'amount')
+            ->withSum('writeOffs as written_off_total', 'amount')
+            ->findOrFail($invoiceId);
 
         $this->writeOffDocumentId = $invoiceId;
         $this->writeOffAmount = number_format(app(CustomerOutstandingReportService::class)->outstandingAmount($invoice), 2, '.', '');

@@ -149,6 +149,7 @@ new #[Title('Customer Details')] class extends Component
                         'invoice' => 'invoice',
                         'credit_note' => 'credit note',
                         'payment' => 'payment',
+                        'write_off' => 'write off written off',
                     },
                 ])));
 
@@ -196,7 +197,7 @@ new #[Title('Customer Details')] class extends Component
         $invoiceDetailsByRef = [];
 
         $invoices = $this->customer->invoices()
-            ->with(['paymentAllocations.payment.paymentMethod', 'creditAllocationsReceived.creditNote'])
+            ->with(['paymentAllocations.payment.paymentMethod', 'creditAllocationsReceived.creditNote', 'writeOffs.writtenOffBy'])
             ->withSum('paymentAllocations as allocated_total', 'allocated_amount')
             ->withSum('creditAllocationsReceived as credited_total', 'amount')
             ->withSum('writeOffs as written_off_total', 'amount')
@@ -257,6 +258,41 @@ new #[Title('Customer Details')] class extends Component
                     'route' => route('credit-notes.show', $creditNote),
                     'payment_id' => null,
                     'credit_note_id' => $creditNote->id,
+                ];
+            }
+
+            foreach ($invoice->writeOffs as $writeOff) {
+                $allocations[] = [
+                    'kind' => 'write_off',
+                    'ref' => 'Write-off',
+                    'label' => 'Write-off',
+                    'date' => $writeOff->written_off_at ?? $invoice->doc_date,
+                    'amount' => (float) $writeOff->amount,
+                    'route' => null,
+                    'payment_id' => null,
+                    'credit_note_id' => null,
+                    'reason' => $writeOff->reason,
+                    'written_off_by' => $writeOff->writtenOffBy?->name,
+                ];
+
+                $rows[] = [
+                    'date' => $writeOff->written_off_at ?? $invoice->doc_date,
+                    'type' => 'write_off',
+                    'ref_no' => $invoice->doc_number,
+                    'order_ref' => $invoice->order_no,
+                    'amount' => -(float) $writeOff->amount,
+                    'outstanding' => 0.0,
+                    'route' => route('invoices.show', $invoice),
+                    'status' => 'applied',
+                    'details' => [
+                        'kind' => 'write_off',
+                        'invoice_ref' => $invoice->doc_number,
+                        'invoice_route' => route('invoices.show', $invoice),
+                        'amount' => (float) $writeOff->amount,
+                        'reason' => $writeOff->reason,
+                        'written_off_by' => $writeOff->writtenOffBy?->name,
+                        'written_off_at' => $writeOff->written_off_at,
+                    ],
                 ];
             }
 
@@ -896,6 +932,10 @@ new #[Title('Customer Details')] class extends Component
                                         @if($row['type'] === 'payment')
                                             <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">
                                                 {{ $row['method_label'] }}
+                                            </span>
+                                        @elseif($row['type'] === 'write_off')
+                                            <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+                                                <flux:icon.document-minus class="size-3" /> Write-off
                                             </span>
                                         @else
                                             <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">

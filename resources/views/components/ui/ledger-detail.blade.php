@@ -63,6 +63,19 @@
                                     >
                                         {{ $allocation['ref'] }} ({{ $allocation['label'] }})
                                     </button>
+                                @elseif($allocation['kind'] === 'write_off')
+                                    <span class="inline-flex items-center gap-1 text-zinc-500 dark:text-zinc-400">
+                                        <flux:icon.document-minus class="size-3.5 shrink-0" />
+                                        Written off
+                                        @if($allocation['written_off_by'])
+                                            · {{ $allocation['written_off_by'] }}
+                                        @endif
+                                        @if($allocation['reason'])
+                                            <flux:tooltip :content="$allocation['reason']">
+                                                <flux:icon.information-circle class="size-3.5 text-zinc-400 dark:text-zinc-500" />
+                                            </flux:tooltip>
+                                        @endif
+                                    </span>
                                 @else
                                     <button
                                         type="button"
@@ -292,6 +305,39 @@
                 </div>
             @endif
         @endforeach
+    </div>
+@elseif($row['details']['kind'] === 'write_off')
+    <div class="rounded-lg border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-500/20 dark:bg-amber-500/5">
+        <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs lg:grid-cols-3">
+            <div>
+                <dt class="text-zinc-500 dark:text-zinc-400">Invoice</dt>
+                <dd class="font-mono font-medium">
+                    <a href="{{ $row['details']['invoice_route'] }}" wire:navigate class="text-indigo-600 underline dark:text-indigo-400">
+                        {{ $row['details']['invoice_ref'] }}
+                    </a>
+                </dd>
+            </div>
+            <div>
+                <dt class="text-zinc-500 dark:text-zinc-400">Amount Written Off</dt>
+                <dd class="font-mono font-medium text-amber-600 dark:text-amber-400">£{{ number_format($row['details']['amount'], 2) }}</dd>
+            </div>
+            <div>
+                <dt class="text-zinc-500 dark:text-zinc-400">Date</dt>
+                <dd class="font-medium text-zinc-900 dark:text-white">{{ $row['details']['written_off_at']?->format('d M Y, H:i') ?? '—' }}</dd>
+            </div>
+            @if($row['details']['written_off_by'])
+            <div>
+                <dt class="text-zinc-500 dark:text-zinc-400">Written Off By</dt>
+                <dd class="font-medium text-zinc-900 dark:text-white">{{ $row['details']['written_off_by'] }}</dd>
+            </div>
+            @endif
+            @if($row['details']['reason'])
+            <div class="col-span-2 lg:col-span-3">
+                <dt class="text-zinc-500 dark:text-zinc-400">Reason</dt>
+                <dd class="font-medium text-zinc-900 dark:text-white">{{ $row['details']['reason'] }}</dd>
+            </div>
+            @endif
+        </dl>
     </div>
 @else
     @php
