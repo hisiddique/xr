@@ -72,7 +72,7 @@ new #[Title('Supplier')] class extends Component {
             'title_id' => 'nullable|integer|exists:lookup_titles,id',
             'first_name' => 'nullable|string|max:100',
             'last_name' => 'nullable|string|max:100',
-            'trade_discount' => 'numeric|min:0|max:100',
+            'trade_discount' => 'required|numeric|min:0|max:100',
             'vat_applied' => 'boolean',
             'credit_limit_id' => 'nullable|integer|exists:lookup_credit_limits,id',
             'credit_term_id' => 'nullable|integer|exists:lookup_credit_terms,id',
@@ -229,6 +229,7 @@ new #[Title('Supplier')] class extends Component {
                     <flux:input
                         wire:model="trade_discount"
                         type="number"
+                        required
                         min="0"
                         max="100"
                         step="0.01"

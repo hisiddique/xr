@@ -33,3 +33,16 @@ test('supplier form saves the selected category', function () {
 
     expect($supplier->category)->toBe(SupplierCategory::OverheadExpenses);
 });
+
+test('supplier form requires a non-negative trade discount', function (string $value, string $rule) {
+    $this->actingAs(User::factory()->create());
+
+    Livewire::test('pages::suppliers.form')
+        ->set('company_name', 'Acme Ltd')
+        ->set('trade_discount', $value)
+        ->call('save')
+        ->assertHasErrors(['trade_discount' => $rule]);
+})->with([
+    'empty' => ['', 'required'],
+    'negative' => ['-1', 'min'],
+]);
