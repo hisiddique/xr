@@ -83,6 +83,7 @@ new #[Title('Supplier Payouts')] class extends Component {
     {
         SupplierPayout::findOrFail($id)->delete();
         $this->deletingId = null;
+        Flux::modal('delete-payout')->close();
         Flux::toast('Payout deleted.');
         $this->dispatch('$refresh');
     }
@@ -237,7 +238,8 @@ new #[Title('Supplier Payouts')] class extends Component {
                                             size="xs"
                                             variant="ghost"
                                             icon="trash"
-                                            wire:click="$set('deletingId', {{ $payout->id }}); $flux.modal('delete-payout').show()"
+                                            wire:click="$set('deletingId', {{ $payout->id }})"
+                                            @click="$flux.modal('delete-payout').show()"
                                             class="text-rose-500 hover:text-rose-600"
                                             data-row-action="delete"
                                         />
