@@ -100,6 +100,7 @@ new #[Title('Supplier Invoice')] class extends Component
                 if ($supplier = Supplier::withTrashed()->find($this->supplier_id)) {
                     $this->supplierName = $supplier->typeahead_label;
                     $this->tradeDiscount = (string) ($supplier->trade_discount ?? '0');
+                    $this->addOverheadExpense = $supplier->category === SupplierCategory::OverheadExpenses;
                 }
             }
         }
@@ -178,6 +179,10 @@ new #[Title('Supplier Invoice')] class extends Component
     {
         $supplier = $value ? Supplier::withTrashed()->find($value) : null;
         $this->tradeDiscount = (string) ($supplier?->trade_discount ?? '0');
+
+        if (! $this->supplierInvoice) {
+            $this->addOverheadExpense = $supplier?->category === SupplierCategory::OverheadExpenses;
+        }
     }
 
     #[Computed]

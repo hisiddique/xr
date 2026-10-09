@@ -152,3 +152,18 @@ test('product_code is forced null and quantity defaults to 1 on save since there
     expect($item->product_code)->toBeNull()
         ->and((float) $item->quantity)->toBe(1.0);
 });
+
+test('add overhead expense is ticked by default for overhead-expenses suppliers on create', function () {
+    $overheadSupplier = Supplier::factory()->create(['category' => 'overhead_expenses']);
+    $tradingSupplier = Supplier::factory()->create(['category' => 'trading']);
+
+    Livewire::test('pages::supplier-invoices.form')
+        ->set('supplier_id', $overheadSupplier->id)
+        ->assertSet('addOverheadExpense', true)
+        ->set('supplier_id', $tradingSupplier->id)
+        ->assertSet('addOverheadExpense', false);
+
+    Livewire::withQueryParams(['supplier_id' => $overheadSupplier->id])
+        ->test('pages::supplier-invoices.form')
+        ->assertSet('addOverheadExpense', true);
+});
