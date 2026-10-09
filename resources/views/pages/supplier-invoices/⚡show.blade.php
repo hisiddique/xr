@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\SupplierInvoice;
+use Illuminate\Support\Collection;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -11,7 +13,21 @@ new #[Title('Supplier Invoice')] class extends Component
 
     public function mount(): void
     {
-        $this->supplierInvoice->load(['supplier', 'items', 'creator', 'debitNotes', 'payoutAllocations']);
+        $this->supplierInvoice->load(['supplier', 'items', 'creator', 'debitNotes', 'payoutAllocations.supplierPayout']);
+    }
+
+    #[Computed]
+    public function settlingPayouts(): Collection
+    {
+        if (! $this->supplierInvoice->isPaid()) {
+            return collect();
+        }
+
+        return $this->supplierInvoice->payoutAllocations
+            ->pluck('supplierPayout')
+            ->filter()
+            ->unique('id')
+            ->values();
     }
 
     #[On('supplier-invoice-deleted')]
@@ -142,6 +158,20 @@ new #[Title('Supplier Invoice')] class extends Component
                         <x-ui.payment-status-badge :status="$supplierInvoice->paymentStatus()" />
                     </dd>
                 </div>
+                @if($this->settlingPayouts->isNotEmpty())
+                    <div class="flex justify-between gap-4">
+                        <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Paid By</dt>
+                        <dd class="flex flex-col items-end gap-1 text-sm font-mono">
+                            @foreach($this->settlingPayouts as $payout)
+                                @can('supplierpayout-show')
+                                    <a href="{{ route('supplier-payouts.show', $payout) }}" wire:navigate class="font-semibold text-violet-600 hover:underline dark:text-violet-400">{{ $payout->reference }}</a>
+                                @else
+                                    <span class="text-zinc-900 dark:text-white">{{ $payout->reference }}</span>
+                                @endcan
+                            @endforeach
+                        </dd>
+                    </div>
+                @endif
                 <div class="flex justify-between gap-4">
                     <dt class="text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Created By</dt>
                     <dd class="text-sm text-zinc-900 dark:text-white text-right">{{ $supplierInvoice->creator?->name ?? '—' }}</dd>
