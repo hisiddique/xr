@@ -8,8 +8,22 @@ use Livewire\Component;
 new class extends Component {
     public Customer $customer;
 
+    public bool $hasNoRelatedRecords = false;
+
+    public function checkRelatedRecords(): void
+    {
+        $this->hasNoRelatedRecords = $this->customer->deletionBlockers() === [];
+    }
+
     public function deleteCustomer(): void
     {
+        if ($message = $this->customer->deletionBlockedMessage($this->customer->company_name)) {
+            Flux::toast(heading: __('Cannot Delete Customer'), text: $message, variant: 'danger', duration: 0);
+            Flux::modal('delete-customer-'.$this->customer->id)->close();
+
+            return;
+        }
+
         $this->customer->delete();
 
         Flux::toast(variant: 'success', text: __('Customer deleted successfully.'));
@@ -24,6 +38,7 @@ new class extends Component {
         size="xs"
         variant="ghost"
         icon="trash"
+        wire:click="checkRelatedRecords"
         x-on:click="$flux.modal('delete-customer-{{ $customer->id }}').show()"
         class="text-red-500 hover:text-red-700"
         :title="__('Delete')"
@@ -37,6 +52,9 @@ new class extends Component {
                 <flux:subheading>
                     {{ __('Are you sure you want to delete :company? This action cannot be undone.', ['company' => $customer->company_name]) }}
                 </flux:subheading>
+                @if($hasNoRelatedRecords)
+                    <flux:text class="mt-2 text-emerald-600 dark:text-emerald-400">{{ $customer->noRelatedRecordsMessage($customer->company_name) }}</flux:text>
+                @endif
             </div>
 
             <div class="flex justify-end gap-3">

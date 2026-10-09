@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\HasDeletionBlockers;
 use Database\Factories\CustomerFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 class Customer extends Model
 {
     /** @use HasFactory<CustomerFactory> */
-    use HasFactory, SoftDeletes;
+    use HasDeletionBlockers, HasFactory, SoftDeletes;
 
     protected static function booted(): void
     {
@@ -105,6 +106,16 @@ class Customer extends Model
         $name = $this->company_name ?: trim($this->first_name.' '.$this->last_name);
 
         return $this->reference ? "{$name} ({$this->reference})" : $name;
+    }
+
+    protected function deletionBlockerRelations(): array
+    {
+        return [
+            'delivery note' => 'deliveryNotes',
+            'invoice' => 'invoices',
+            'credit note' => 'creditNotes',
+            'payment' => 'payments',
+        ];
     }
 
     public function documents(): HasMany

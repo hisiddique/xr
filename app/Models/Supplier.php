@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\SupplierCategory;
+use App\Traits\HasDeletionBlockers;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 
 class Supplier extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasDeletionBlockers, HasFactory, SoftDeletes;
 
     protected static function booted(): void
     {
@@ -96,6 +97,15 @@ class Supplier extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    protected function deletionBlockerRelations(): array
+    {
+        return [
+            'supplier invoice' => 'supplierInvoices',
+            'debit note' => 'debitNotes',
+            'payout' => 'payouts',
+        ];
     }
 
     public function supplierInvoices(): HasMany
