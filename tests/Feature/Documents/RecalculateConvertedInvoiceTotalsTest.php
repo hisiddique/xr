@@ -51,6 +51,22 @@ it('recalculates converted invoices using the item per unit and their own discou
         ->and((float) $invoice->total_value)->toBe(54.0);
 });
 
+it('only considers invoices that have an item with a numeric or lot per', function () {
+    $dn = Document::factory()->deliveryNote()->create();
+    $plainUnit = Document::factory()->invoice()
+        ->has(DocumentItem::factory()->state(['quantity' => 2, 'price' => 10, 'per' => 'each', 'line_value' => 20]), 'items')
+        ->create(['converted_from_id' => $dn->id, 'subtotal' => 999, 'total_value' => 999]);
+    $lot = convertedInvoiceWithWrongTotals();
+    $lot->items()->update(['per' => 'lot', 'quantity' => 5, 'price' => 40, 'line_value' => 40]);
+
+    $this->artisan('invoices:recalculate-converted-totals')
+        ->expectsConfirmation('Update 1 invoice(s)?', 'yes')
+        ->assertSuccessful();
+
+    expect((float) $plainUnit->fresh()->subtotal)->toBe(999.0)
+        ->and((float) $lot->fresh()->subtotal)->toBe(40.0);
+});
+
 it('leaves correct and non-converted invoices alone', function () {
     $standalone = Document::factory()->invoice()
         ->has(DocumentItem::factory()->state(['quantity' => 500, 'price' => 10, 'per' => '100', 'line_value' => 50]), 'items')
