@@ -51,6 +51,7 @@ class ConvertDeliveryNoteToInvoice
                 'is_note' => (bool) $item->is_note,
                 'quantity' => (float) $item->quantity,
                 'price' => (float) $item->price,
+                'per' => $item->per,
             ]);
             $totals = $this->totalsCalculator->calculate($itemsForCalc, $deliveryNote->customer);
 

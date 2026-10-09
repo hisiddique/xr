@@ -105,3 +105,17 @@ it('rejects conversion of an invoice document', function () {
     expect(fn () => app(ConvertDeliveryNoteToInvoice::class)->handle($inv))
         ->toThrow(DomainException::class, 'Only delivery notes');
 });
+
+it('applies the item per unit when computing invoice header totals at conversion', function () {
+    $customer = Customer::factory()->create(['trade_discount' => 0, 'vat_registered' => false]);
+
+    $dn = Document::factory()->deliveryNote()
+        ->for($customer, 'customer')
+        ->has(DocumentItem::factory()->state(['quantity' => 500, 'price' => 10, 'per' => '100', 'line_value' => 50]), 'items')
+        ->create(['show_pricing' => true]);
+
+    $invoice = app(ConvertDeliveryNoteToInvoice::class)->handle($dn);
+
+    expect((float) $invoice->subtotal)->toBe(50.0)
+        ->and((float) $invoice->total_value)->toBe(50.0);
+});
