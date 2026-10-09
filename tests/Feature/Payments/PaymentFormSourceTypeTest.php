@@ -202,6 +202,10 @@ test('marking a source payment as exhausted removes it from the over-payment pic
         'source_type' => PaymentSourceType::Cash,
         'amount' => 150,
     ]);
+    $invoice = Document::factory()->invoice()->create([
+        'customer_id' => $customer->id,
+        'total_value' => 100,
+    ]);
 
     Livewire::test('pages::payments.form')
         ->set('customer_id', $customer->id)
@@ -209,7 +213,7 @@ test('marking a source payment as exhausted removes it from the over-payment pic
         ->set('payment_date', now()->format('Y-m-d'))
         ->set('selectedOverPaymentIds', [$source->id])
         ->set('overPaymentExhaustIds', [$source->id])
-        ->call('save', []);
+        ->call('save', [['id' => $invoice->id, 'amount' => 100]]);
 
     expect($source->fresh()->is_exhausted)->toBeTrue();
 
@@ -238,6 +242,8 @@ test('re-saving an over-payment with the same source does not throw and keeps a 
         'amount' => 200,
     ]);
     PaymentDraw::create(['source_payment_id' => $source->id, 'target_payment_id' => $overPayment->id, 'amount' => 200]);
+    $invoice = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 100]);
+    PaymentAllocation::create(['payment_id' => $overPayment->id, 'document_id' => $invoice->id, 'allocated_amount' => 100]);
 
     Livewire::test('pages::payments.form', ['payment' => $overPayment])
         ->set('selectedOverPaymentIds', [$source->id])
@@ -264,6 +270,8 @@ test('switching a payment from over-payment back to cash releases its draws', fu
         'amount' => 200,
     ]);
     PaymentDraw::create(['source_payment_id' => $source->id, 'target_payment_id' => $overPayment->id, 'amount' => 200]);
+    $invoice = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 100]);
+    PaymentAllocation::create(['payment_id' => $overPayment->id, 'document_id' => $invoice->id, 'allocated_amount' => 50]);
 
     Livewire::test('pages::payments.form', ['payment' => $overPayment])
         ->set('paymentMethodSelection', "lookup:{$cashMethod->id}")
@@ -273,6 +281,50 @@ test('switching a payment from over-payment back to cash releases its draws', fu
     expect(PaymentDraw::where('target_payment_id', $overPayment->id)->count())->toBe(0)
         ->and($source->fresh()->remainingBalance())->toBe(200.0);
 });
+
+test('a new payment with no allocation above zero is blocked', function (array $rows) {
+    $customer = Customer::factory()->create();
+    $cashMethod = LookupPaymentMethod::factory()->create();
+    $invoice = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 100]);
+
+    Livewire::test('pages::payments.form')
+        ->set('customer_id', $customer->id)
+        ->set('paymentMethodSelection', "lookup:{$cashMethod->id}")
+        ->set('amount', '100')
+        ->set('payment_date', now()->format('Y-m-d'))
+        ->call('save', array_map(fn ($row) => $row + ['id' => $invoice->id], $rows))
+        ->assertDispatched('toast-show')
+        ->assertNoRedirect();
+
+    expect(Payment::where('customer_id', $customer->id)->count())->toBe(0);
+})->with([
+    'no rows' => [[]],
+    'zero amount row' => [[['amount' => 0]]],
+]);
+
+test('editing a payment so that nothing remains allocated is blocked', function (array $rows) {
+    $customer = Customer::factory()->create();
+    $cashMethod = LookupPaymentMethod::factory()->create();
+    $invoice = Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => 100]);
+    $payment = Payment::factory()->create([
+        'customer_id' => $customer->id,
+        'payment_method_id' => $cashMethod->id,
+        'source_type' => PaymentSourceType::Cash,
+        'amount' => 100,
+    ]);
+    PaymentAllocation::create(['payment_id' => $payment->id, 'document_id' => $invoice->id, 'allocated_amount' => 100]);
+
+    Livewire::test('pages::payments.form', ['payment' => $payment])
+        ->set('notes', 'changed')
+        ->call('save', array_map(fn ($row) => $row + ['id' => $invoice->id], $rows))
+        ->assertDispatched('toast-show')
+        ->assertNoRedirect();
+
+    expect($payment->fresh()->notes)->not->toBe('changed')
+        ->and((float) $payment->allocations()->sum('allocated_amount'))->toBe(100.0);
+})->with([
+    'every row zeroed' => [[['amount' => 0]]],
+]);
 
 test('a payment cannot allocate more than its amount minus what has been drawn from it as an over-payment source', function () {
     $customer = Customer::factory()->create();

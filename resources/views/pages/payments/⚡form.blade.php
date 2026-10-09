@@ -438,6 +438,15 @@ new #[Title('Payment')] class extends Component {
 
         $paymentMethodId = $this->source_type === 'cash' ? $this->resolvedPaymentMethodId() : null;
 
+        [$requestedAllocations] = $this->deriveAllocations($rows);
+        $keepsExistingAllocations = $this->payment !== null && $rows === [] && $this->payment->allocations()->exists();
+
+        if ($requestedAllocations === [] && ! $keepsExistingAllocations) {
+            Flux::toast(variant: 'danger', text: 'Allocate the payment to at least one invoice before saving.');
+
+            return;
+        }
+
         if ($this->payment === null) {
             try {
                 $payment = DB::transaction(function () use ($paymentMethodId, $rows) {
@@ -865,7 +874,8 @@ new #[Title('Payment')] class extends Component {
                 wire:ignore
                 x-data="paymentAllocator({ rows: @js($this->invoiceRows), hasMore: @js($this->hasMoreInvoices) })"
                 x-on:keydown="handleKey($event)"
-                @save-payment-form.window="$wire.save(relevantRows)"
+                @commit-payment-preview.window="commitPreview()"
+                @save-payment-form.window="commitPreview(); $wire.save(relevantRows)"
                 @payment-rows-updated.window="rows = $event.detail.rows.map(r => ({ ...r, amount: r.existing_allocation })); hasMore = $event.detail.hasMore"
                 @payment-rows-appended.window="appendRows($event.detail.rows, $event.detail.hasMore)"
                 @payment-auto-allocated.window="applyAutoAllocation($event.detail.rows, $event.detail.allocations, $event.detail.hasMore)"
@@ -976,7 +986,7 @@ new #[Title('Payment')] class extends Component {
                     >
                         Cancel
                     </flux:button>
-                    <flux:button variant="primary" type="button" @click="$dispatch('save-payment-form')" data-form-nav data-form-submit>
+                    <flux:button variant="primary" type="button" @mousedown="$dispatch('commit-payment-preview')" @click="$dispatch('save-payment-form')" data-form-nav data-form-submit>
                         {{ $payment ? 'Save Changes' : 'Save Payment' }}
                     </flux:button>
                 </div>
