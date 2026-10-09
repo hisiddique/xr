@@ -33,6 +33,14 @@ new class extends Component {
         $this->payout_date = now()->format('Y-m-d');
         $this->nextReference = SupplierPayout::nextNumber();
         $this->hydrateFromDebitNotes();
+
+        if (! $this->supplier_id && request()->filled('supplier_id')) {
+            $supplier = Supplier::withTrashed()->find((int) request('supplier_id'));
+            if ($supplier) {
+                $this->supplier_id = $supplier->id;
+                $this->supplierName = $supplier->typeahead_label;
+            }
+        }
     }
 
     /**
@@ -228,6 +236,12 @@ new class extends Component {
         ]);
 
         $total = array_sum(array_column($rows, 'allocated_amount'));
+        if ($total <= 0) {
+            Flux::toast(variant: 'danger', text: 'Allocate the payout to at least one invoice before confirming.');
+
+            return;
+        }
+
         if ($total > (float) $this->amount + 0.001) {
             Flux::toast(variant: 'danger', text: 'Total allocated exceeds payout amount.');
 
@@ -309,7 +323,7 @@ new class extends Component {
         @keydown.escape="if ($wire.supplier_id) $flux.modal('cancel-payout-confirm').show()"
         @keydown.window="handleKey($event)"
         @do-confirm-allocation.window="$wire.confirmAllocation(rows)"
-        @f2-action="$flux.modal('confirm-allocation').show()"
+        @f2-action="commitPreview(); $flux.modal('confirm-allocation').show()"
     >
         <div class="flex flex-col gap-4">
             <div class="grid gap-4 md:grid-cols-2">
@@ -447,6 +461,7 @@ new class extends Component {
                     type="button"
                     x-show="$wire.supplier_id && rows.length > 0"
                     x-cloak
+                    @mousedown="commitPreview()"
                     @click="$flux.modal('confirm-allocation').show()"
                 >
                     Confirm Allocation

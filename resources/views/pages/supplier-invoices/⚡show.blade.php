@@ -73,6 +73,22 @@ new #[Title('Supplier Invoice')] class extends Component
                         {{ $supplierInvoice->supplier->company_name }} &middot; {{ $supplierInvoice->invoice_date->format('d M Y') }}
                     </p>
                 </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    @can('supplierpayout-create')
+                    @unless($supplierInvoice->isPaid())
+                    <a href="{{ route('supplier-payouts.create', ['supplier_id' => $supplierInvoice->supplier_id]) }}" wire:navigate
+                       class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20 transition-colors hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/20 dark:hover:bg-emerald-500/20">
+                        <flux:icon.banknotes variant="micro" /> Payout
+                    </a>
+                    @endunless
+                    @endcan
+                    @can('supplierdebitnote-create')
+                    <a href="{{ route('supplier-debit-notes.create', ['supplier_id' => $supplierInvoice->supplier_id, 'supplier_invoice_id' => $supplierInvoice->id]) }}" wire:navigate
+                       class="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-1.5 text-sm font-medium text-rose-700 ring-1 ring-inset ring-rose-600/20 transition-colors hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:ring-rose-500/20 dark:hover:bg-rose-500/20">
+                        <flux:icon.document-minus variant="micro" /> Debit Note
+                    </a>
+                    @endcan
+                </div>
             </div>
         </div>
     </div>

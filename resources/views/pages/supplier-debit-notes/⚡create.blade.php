@@ -52,6 +52,13 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
             if ($supplier = Supplier::withTrashed()->find($this->supplier_id)) {
                 $this->supplierName = $supplier->typeahead_label;
             }
+
+            if (request()->filled('supplier_invoice_id')) {
+                $invoiceId = (int) request('supplier_invoice_id');
+                if (collect($this->supplierInvoices)->contains('id', $invoiceId)) {
+                    $this->supplier_invoice_id = $invoiceId;
+                }
+            }
         }
     }
 
