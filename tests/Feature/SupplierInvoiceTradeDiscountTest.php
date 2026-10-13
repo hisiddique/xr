@@ -2,6 +2,8 @@
 
 use App\Models\Setting;
 use App\Models\Supplier;
+use App\Models\SupplierDebitNote;
+use App\Models\SupplierDebitNoteItem;
 use App\Models\SupplierInvoice;
 use App\Models\SupplierInvoiceItem;
 use App\Models\SupplierPayout;
@@ -189,4 +191,35 @@ test('a zero-discount invoice keeps payable equal to gross', function () {
         ->and($invoice->payableTotal)->toBe(1200.0)
         ->and($invoice->outstandingAmount)->toBe(1200.0)
         ->and($invoice->paymentStatus())->toBe(SupplierInvoicePaymentStatus::Unpaid);
+});
+
+test('calculator rounds the trade discount up to the next penny', function () {
+    $totals = app(SupplierInvoiceTotalsCalculator::class)
+        ->calculate([['line_total' => 27.20, 'vat_applicable' => false]], 2, false);
+
+    expect($totals['discount'])->toBe(0.55)
+        ->and($totals['payable'])->toBe(26.65);
+});
+
+test('a debit note re-prices the discounted invoice on the reduced net so the outstanding is 31.98', function () {
+    $calculator = app(SupplierInvoiceTotalsCalculator::class);
+    $lines = [['line_total' => 34.20, 'vat_applicable' => true]];
+    $note = new SupplierDebitNote(['total' => 8.40]);
+    $note->id = 1;
+    $note->setRelation('items', collect([new SupplierDebitNoteItem(['total' => 7.00, 'vat_applicable' => true])]));
+
+    $payable = $calculator->calculate($lines, 2, false)['payable'];
+    $deductions = $calculator->debitNoteDeductions($lines, 2, false, [$note]);
+
+    expect(round($payable - $deductions[1], 2))->toBe(31.98);
+});
+
+test('a debit note keeps its own total when the invoice has no trade discount', function () {
+    $note = new SupplierDebitNote(['total' => 8.40]);
+    $note->id = 1;
+
+    $deductions = app(SupplierInvoiceTotalsCalculator::class)
+        ->debitNoteDeductions([['line_total' => 34.20, 'vat_applicable' => true]], 0, false, [$note]);
+
+    expect($deductions[1])->toBe(8.40);
 });

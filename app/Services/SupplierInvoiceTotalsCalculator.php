@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\Setting;
+use App\Models\SupplierDebitNote;
 use App\Models\SupplierInvoiceItem;
+use App\Support\Money;
 use Illuminate\Support\Collection;
 
 class SupplierInvoiceTotalsCalculator
@@ -35,7 +37,7 @@ class SupplierInvoiceTotalsCalculator
         $gross = round($net + $vat, 2);
 
         $base = $discountOnGross ? $gross : $net;
-        $discount = round($base * $discountPercent / 100, 2);
+        $discount = Money::roundUp($base * $discountPercent / 100);
         $payable = max(0, round($gross - $discount, 2));
 
         return [
@@ -45,5 +47,58 @@ class SupplierInvoiceTotalsCalculator
             'discount' => $discount,
             'payable' => $payable,
         ];
+    }
+
+    /**
+     * Amount each debit note takes off the invoice, in the order given. When the invoice carries a
+     * trade discount on net, the invoice is re-priced on the reduced net (discount first, then VAT)
+     * so the returned goods give back their share of the discount and VAT.
+     *
+     * @param  iterable<int, array{line_total: float|int|string, vat_applicable: bool}>  $lineItems
+     * @param  iterable<int, SupplierDebitNote>  $notes
+     * @return array<int, float>
+     */
+    public function debitNoteDeductions(iterable $lineItems, float $percent, bool $discountOnGross, iterable $notes): array
+    {
+        $deductions = [];
+
+        if ($percent <= 0 || $discountOnGross) {
+            foreach ($notes as $note) {
+                $deductions[$note->id] = (float) $note->total;
+            }
+
+            return $deductions;
+        }
+
+        $rate = (float) Setting::get('vat_rate', 20);
+        $lines = collect($lineItems);
+        $net = (float) $lines->sum(fn ($line) => (float) data_get($line, 'line_total'));
+        $vatNet = (float) $lines->filter(fn ($line) => (bool) data_get($line, 'vat_applicable'))
+            ->sum(fn ($line) => (float) data_get($line, 'line_total'));
+        $previous = $this->calculate($lines, $percent, false)['payable'];
+
+        foreach ($notes as $note) {
+            $net -= (float) $note->items->sum('total');
+            $vatNet -= (float) $note->items->where('vat_applicable', true)->sum('total');
+
+            $current = $this->payableOnReducedNet(max(0.0, $net), max(0.0, $vatNet), $percent, $rate);
+            $deductions[$note->id] = max(0.0, round($previous - $current, 2));
+            $previous = $current;
+        }
+
+        return $deductions;
+    }
+
+    private function payableOnReducedNet(float $net, float $vatNet, float $percent, float $rate): float
+    {
+        if ($net <= 0) {
+            return 0.0;
+        }
+
+        $discount = Money::roundUp($net * $percent / 100);
+        $vatBase = max(0.0, $vatNet - $discount * $vatNet / $net);
+        $vat = Money::roundUp($vatBase * $rate / 100);
+
+        return max(0.0, round($net - $discount + $vat, 2));
     }
 }

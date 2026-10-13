@@ -1302,6 +1302,11 @@ document.addEventListener('alpine:init', () => {
             return row.discount_percent ? v * (row.discount_percent / 100) : v;
         },
 
+        vatRoundedUp(row, rate) {
+            const net = Math.round(this.netValue(row) * 100) / 100;
+            return Math.ceil(Number((net * rate).toFixed(6))) / 100;
+        },
+
         importRows(items) {
             this.rows = items;
             this.$nextTick(() => {
@@ -1631,7 +1636,7 @@ document.addEventListener('alpine:init', () => {
 
         get discountAmount() {
             const base = this.$wire.discountOnGross ? this.grossTotal : this.netTotal;
-            return Math.round(base * this.discountPct / 100 * 100) / 100;
+            return Math.ceil(Number((base * this.discountPct).toFixed(6))) / 100;
         },
 
         get payableTotal() {

@@ -160,19 +160,20 @@ new #[Title('Supplier Invoice')] class extends Component
             return 0.0;
         }
 
-        $available = collect($this->availableDebitNotes)->keyBy('id');
-        $applied = collect($this->appliedDebitNotes)->keyBy('id');
+        $notes = SupplierDebitNote::with('items')->whereIn('id', $this->selectedDebitNoteIds)->get()
+            ->sortBy(fn ($note) => array_search($note->id, $this->selectedDebitNoteIds));
 
-        return (float) collect($this->selectedDebitNoteIds)->sum(function ($id) use ($available, $applied) {
-            if ($available->has($id)) {
-                return (float) $available->get($id)['total'];
-            }
-            if ($applied->has($id)) {
-                return (float) $applied->get($id)['pivot']['applied_amount'];
-            }
+        $lineItems = collect($this->items)->map(fn ($row) => [
+            'line_total' => round((float) ($row['quantity'] ?? 0) * (float) ($row['unit_amount'] ?? 0), 2),
+            'vat_applicable' => (bool) ($row['vat_applicable'] ?? false),
+        ]);
 
-            return 0.0;
-        });
+        return round(array_sum(app(SupplierInvoiceTotalsCalculator::class)->debitNoteDeductions(
+            $lineItems,
+            (float) ($this->tradeDiscount ?: 0),
+            $this->discountOnGross,
+            $notes,
+        )), 2);
     }
 
     public function updatedSupplierId($value): void
@@ -322,14 +323,16 @@ new #[Title('Supplier Invoice')] class extends Component
             $toDetach = $invoice->debitNotes()->pluck('supplier_debit_notes.id')->toArray();
             $invoice->debitNotes()->detach($toDetach);
 
-            foreach ($this->selectedDebitNoteIds as $dnId) {
-                $dn = SupplierDebitNote::find($dnId);
-                if ($dn) {
-                    $invoice->debitNotes()->attach($dnId, [
-                        'applied_amount' => $dn->total,
-                        'applied_at' => now(),
-                    ]);
-                }
+            $notes = SupplierDebitNote::with('items')->whereIn('id', $this->selectedDebitNoteIds)->get()
+                ->sortBy(fn ($note) => array_search($note->id, $this->selectedDebitNoteIds));
+            $deductions = app(SupplierInvoiceTotalsCalculator::class)
+                ->debitNoteDeductions($lineItems, $pct, $this->discountOnGross, $notes);
+
+            foreach ($notes as $dn) {
+                $invoice->debitNotes()->attach($dn->id, [
+                    'applied_amount' => $deductions[$dn->id],
+                    'applied_at' => now(),
+                ]);
             }
         } else {
             $invoice->debitNotes()->detach();
