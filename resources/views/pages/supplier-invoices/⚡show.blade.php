@@ -192,7 +192,6 @@ new #[Title('Supplier Invoice')] class extends Component
                 <thead>
                     <tr class="border-b border-zinc-100 dark:border-white/10">
                         <th class="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Unit Net (£)</th>
-                        <th class="px-4 sm:px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">QTY</th>
                         <th class="px-4 sm:px-6 py-3 text-center text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">VAT</th>
                         <th class="px-4 sm:px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Line Gross (£)</th>
                     </tr>
@@ -201,7 +200,6 @@ new #[Title('Supplier Invoice')] class extends Component
                     @forelse($supplierInvoice->items as $item)
                         <tr>
                             <td class="px-4 sm:px-6 py-3 text-zinc-700 dark:text-zinc-300">{{ number_format((float) $item->unit_amount, 2) }}</td>
-                            <td class="px-4 sm:px-6 py-3 text-right text-zinc-700 dark:text-zinc-300">{{ number_format((float) $item->quantity, 2) }}</td>
                             <td class="px-4 sm:px-6 py-3 text-center">
                                 @if($item->vat_applicable)
                                     <span class="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-400">Yes ({{ rtrim(rtrim(number_format((float) ($supplierInvoice->vat_rate ?? \App\Models\Setting::get('vat_rate', 20)), 2), '0'), '.') }}%)</span>
@@ -213,7 +211,7 @@ new #[Title('Supplier Invoice')] class extends Component
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="4" class="px-4 sm:px-6 py-6 text-center text-sm text-zinc-400">No line items.</td>
+                            <td colspan="3" class="px-4 sm:px-6 py-6 text-center text-sm text-zinc-400">No line items.</td>
                         </tr>
                     @endforelse
                 </tbody>

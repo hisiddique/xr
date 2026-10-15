@@ -627,9 +627,9 @@ new #[Title('Supplier Invoice')] class extends Component
                         <table class="w-full text-sm">
                             <thead class="bg-zinc-50 dark:bg-zinc-800/50">
                                 <tr>
-                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Unit Net (£)</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Line Gross (£)</th>
                                     <th class="w-48 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT</th>
-                                    <th class="w-48 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Line Gross (£)</th>
+                                    <th class="w-48 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Unit Net (£)</th>
                                     <th class="w-10 px-4 py-3"></th>
                                 </tr>
                             </thead>
@@ -639,18 +639,19 @@ new #[Title('Supplier Invoice')] class extends Component
                                         <td class="px-4 py-2.5">
                                             <input
                                                 type="number"
-                                                x-model.number="row.unit_amount"
-                                                x-on:input="row.gross_override = null"
-                                                data-row-details
                                                 step="0.01"
                                                 min="0"
+                                                data-row-details
+                                                :value="grossInputValue(row, $el)"
+                                                x-on:input="setGross(row, $event.target.value)"
+                                                x-on:blur="$el.value = lineGross(row).toFixed(2)"
                                                 class="w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 font-mono text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                             />
                                         </td>
                                         <td class="px-4 py-2.5">
                                             <select
                                                 x-model.boolean="row.vat_applicable"
-                                                x-on:change="row.gross_override = null"
+                                                x-on:change="vatChanged(row)"
                                                 x-on:focus="$el.showPicker?.()"
                                                 class="w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                             >
@@ -660,14 +661,12 @@ new #[Title('Supplier Invoice')] class extends Component
                                         </td>
                                         <td class="px-4 py-2.5 text-right">
                                             <div class="flex items-center justify-end gap-2">
-                                                <span x-show="row.gross_override !== null" class="text-xs font-medium text-violet-600 dark:text-violet-400">edited</span>
+                                                <span x-show="netEdited(row)" class="text-xs font-medium text-violet-600 dark:text-violet-400">edited</span>
                                                 <input
                                                     type="number"
                                                     step="0.01"
                                                     min="0"
-                                                    :value="grossInputValue(row, $el)"
-                                                    x-on:input="setGross(row, $event.target.value)"
-                                                    x-on:blur="$el.value = lineGross(row).toFixed(2)"
+                                                    x-model.number="row.unit_amount"
                                                     class="w-32 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-right font-mono text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                                 />
                                             </div>

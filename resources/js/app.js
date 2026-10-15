@@ -1638,13 +1638,38 @@ document.addEventListener('alpine:init', () => {
             return document.activeElement === el ? el.value : formatted;
         },
 
+        netFromGross(row, gross) {
+            if (!row.vat_applicable) return gross;
+            return Math.ceil(Number((gross * 100 / (1 + this.vatRate / 100)).toFixed(6))) / 100;
+        },
+
+        netEdited(row) {
+            const override = row.gross_override;
+            if (!row.vat_applicable || override === null || override === '' || !Number.isFinite(Number(override))) return false;
+            return this.lineNet(row) !== this.netFromGross(row, Number(override));
+        },
+
         setGross(row, value) {
             const parsed = parseFloat(value);
-            if (value === '' || !Number.isFinite(parsed) || Math.round(parsed * 100) / 100 === this.autoGross(row)) {
+            if (value === '' || !Number.isFinite(parsed)) {
                 row.gross_override = null;
+                row.unit_amount = '';
                 return;
             }
-            row.gross_override = Math.round(parsed * 100) / 100;
+            const gross = Math.round(parsed * 100) / 100;
+            row.unit_amount = this.netFromGross(row, gross);
+            row.gross_override = row.vat_applicable ? gross : null;
+        },
+
+        vatChanged(row) {
+            const override = row.gross_override;
+            const hasGross = override !== null && override !== '' && Number.isFinite(Number(override));
+            if (hasGross) {
+                row.unit_amount = this.netFromGross(row, Number(override));
+                if (!row.vat_applicable) row.gross_override = null;
+            } else if (!row.vat_applicable) {
+                row.gross_override = null;
+            }
         },
 
         get netTotal() {
