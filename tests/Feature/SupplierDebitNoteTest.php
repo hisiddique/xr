@@ -274,6 +274,28 @@ test('commitDebitNote adds VAT for items marked vat_applicable', function () {
     expect($note->items->first()->vat_applicable)->toBeTrue();
 });
 
+test('commitDebitNote rounds the line value and its VAT down to the penny', function () {
+    Setting::updateOrCreate(['key' => 'vat_rate'], ['key' => 'vat_rate', 'value' => '20', 'type' => 'integer']);
+    Setting::flushCache();
+
+    $supplier = Supplier::factory()->create();
+
+    Livewire::test('pages::supplier-debit-notes.create')
+        ->set('supplier_id', $supplier->id)
+        ->set('doc_date', now()->format('Y-m-d'))
+        ->set('items', [
+            debitNoteRow(['quantity' => '1.5', 'price' => '3.33', 'vat_applicable' => true]),
+        ])
+        ->call('commitDebitNote')
+        ->assertHasNoErrors();
+
+    $note = SupplierDebitNote::firstWhere('supplier_id', $supplier->id);
+
+    expect((float) $note->subtotal)->toBe(4.99);
+    expect((float) $note->vat_amount)->toBe(0.99);
+    expect((float) $note->total)->toBe(5.98);
+});
+
 test('commitDebitNote does not add VAT for items not marked vat_applicable', function () {
     $supplier = Supplier::factory()->create();
 

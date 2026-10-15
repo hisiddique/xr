@@ -120,8 +120,8 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
             $discountPercent = $isNote ? 0.0 : (float) ($item['discount_percent'] ?? 0);
             $vatApplicable = ! $isNote && (bool) ($item['vat_applicable'] ?? false);
 
-            $lineValue = $isNote ? 0.0 : round(DocumentTotalsCalculator::lineValue(['quantity' => $qty, 'price' => $price, 'per' => $per]), 2);
-            $net = $isNote ? 0.0 : ($discountPercent > 0 ? round($lineValue * ($discountPercent / 100), 2) : $lineValue);
+            $lineValue = $isNote ? 0.0 : Money::roundDown(DocumentTotalsCalculator::lineValue(['quantity' => $qty, 'price' => $price, 'per' => $per]));
+            $net = $isNote ? 0.0 : ($discountPercent > 0 ? Money::roundDown($lineValue * ($discountPercent / 100)) : $lineValue);
             $itemVat = $vatApplicable ? Money::roundDown($net * $this->vatRate / 100) : 0.0;
 
             $subtotal += $net;
@@ -378,7 +378,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                                 </template>
                                 <template x-if="! row.is_note">
                                     <td class="px-2 py-2.5 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">
-                                        £<span x-text="netValue(row).toFixed(2)">0.00</span>
+                                        £<span x-text="floorNet(row).toFixed(2)">0.00</span>
                                     </td>
                                 </template>
                                 <td class="px-2 py-2.5">
@@ -407,7 +407,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                     <div class="border-t border-zinc-100 pt-3 dark:border-white/[0.06]">
                         <div class="flex justify-between text-sm text-zinc-500 dark:text-zinc-400">
                             <span>Items net subtotal</span>
-                            <span class="font-mono tabular-nums" x-text="'£' + rows.filter(r => !r.is_note).reduce((s, r) => s + netValue(r), 0).toFixed(2)"></span>
+                            <span class="font-mono tabular-nums" x-text="'£' + rows.filter(r => !r.is_note).reduce((s, r) => s + floorNet(r), 0).toFixed(2)"></span>
                         </div>
                         <div class="mt-1 flex justify-between text-sm text-zinc-500 dark:text-zinc-400" x-show="$wire.vatRate > 0 && rows.some(r => !r.is_note && r.vat_applicable)">
                             <span x-text="'VAT (' + $wire.vatRate + '%)'"></span>
@@ -415,7 +415,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                         </div>
                         <div class="mt-2 flex justify-between border-t border-zinc-200 pt-2 dark:border-white/10">
                             <span class="font-semibold text-zinc-900 dark:text-white">Total Debit</span>
-                            <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white" x-text="'£' + (function() { const sub = rows.filter(r => !r.is_note).reduce((s, r) => s + netValue(r), 0); const vat = rows.filter(r => !r.is_note && r.vat_applicable).reduce((s, r) => s + vatForRow(r, $wire.vatRate), 0); return (sub + vat).toFixed(2); })()"></span>
+                            <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white" x-text="'£' + (function() { const sub = rows.filter(r => !r.is_note).reduce((s, r) => s + floorNet(r), 0); const vat = rows.filter(r => !r.is_note && r.vat_applicable).reduce((s, r) => s + vatForRow(r, $wire.vatRate), 0); return (sub + vat).toFixed(2); })()"></span>
                         </div>
                     </div>
                 </div>

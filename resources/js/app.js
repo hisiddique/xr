@@ -1305,9 +1305,13 @@ document.addEventListener('alpine:init', () => {
             return row.discount_percent ? v * (row.discount_percent / 100) : v;
         },
 
+        floorNet(row) {
+            const value = roundCents(this.lineValue(row) * 100);
+            return row.discount_percent ? roundCents(value * row.discount_percent) : value;
+        },
+
         vatForRow(row, rate) {
-            const net = Math.round(this.netValue(row) * 100) / 100;
-            return roundCents(net * rate);
+            return roundCents(this.floorNet(row) * rate);
         },
 
         importRows(items) {
