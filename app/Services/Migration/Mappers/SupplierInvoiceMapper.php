@@ -2,6 +2,7 @@
 
 namespace App\Services\Migration\Mappers;
 
+use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\Services\Migration\BulkEntityMapper;
@@ -63,7 +64,7 @@ class SupplierInvoiceMapper implements BulkEntityMapper
 
     public function updatableColumns(): array
     {
-        return ['supplier_id', 'invoice_date', 'due_date', 'status', 'notes', 'supplier_invoice_no', 'created_by', 'created_at', 'updated_at'];
+        return ['supplier_id', 'invoice_date', 'due_date', 'status', 'notes', 'supplier_invoice_no', 'vat_rate', 'created_by', 'created_at', 'updated_at'];
     }
 
     public function transform(array $legacyRow): ?array
@@ -104,6 +105,8 @@ class SupplierInvoiceMapper implements BulkEntityMapper
             'status' => SupplierInvoiceStatus::Posted->value,
             'notes' => $legacyRow['notes'] ?? null,
             'supplier_invoice_no' => $supplierInvoiceNo,
+            // Fallback: legacy data has no stored VAT rate.
+            'vat_rate' => (float) Setting::get('vat_rate', 20),
             'created_by' => $this->createdBy,
             'created_at' => $createdAt,
             'updated_at' => $updatedAt,

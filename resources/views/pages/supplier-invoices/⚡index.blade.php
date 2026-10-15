@@ -82,8 +82,8 @@ new #[Title('Supplier Invoices')] class extends Component {
     {
         $rate = (float) Setting::get('vat_rate', 20);
 
-        $netExpr = '(SELECT COALESCE(SUM(line_total), 0) FROM supplier_invoice_items WHERE supplier_invoice_id = supplier_invoices.id)';
-        $vatExpr = "(SELECT COALESCE(SUM(CASE WHEN vat_applicable = 1 THEN (CASE WHEN gross_override IS NOT NULL THEN gross_override - line_total ELSE FLOOR(ROUND(line_total * {$rate}, 6)) / 100 END) ELSE 0 END), 0) FROM supplier_invoice_items WHERE supplier_invoice_id = supplier_invoices.id)";
+        $netExpr = '(SELECT COALESCE(SUM(line_total), 0) FROM supplier_invoice_items WHERE supplier_invoice_id = supplier_invoices.id AND deleted_at IS NULL)';
+        $vatExpr = "(SELECT COALESCE(SUM(CASE WHEN vat_applicable = 1 THEN COALESCE(vat_amount, (CASE WHEN gross_override IS NOT NULL THEN gross_override - line_total ELSE FLOOR(ROUND(line_total * {$rate}, 6)) / 100 END)) ELSE 0 END), 0) FROM supplier_invoice_items WHERE supplier_invoice_id = supplier_invoices.id AND deleted_at IS NULL)";
         $grossExpr = "({$netExpr} + {$vatExpr})";
         $payableExpr = "({$grossExpr} - supplier_invoices.discount_amount)";
         $outstandingExpr = "({$payableExpr}"

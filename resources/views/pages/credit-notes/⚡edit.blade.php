@@ -35,7 +35,7 @@ new #[Title('Edit Credit Note')] class extends Component {
         $this->assigned_to = $this->document->assigned_to ?? $this->document->created_by;
         $this->assigneeName = $this->document->assignee?->name ?? $this->document->creator?->name ?? '';
         $this->vatRegistered = (bool) $this->document->customer->vat_registered;
-        $this->vatRate = (float) \App\Models\Setting::get('vat_rate', 20);
+        $this->vatRate = $this->document->vat_rate !== null ? (float) $this->document->vat_rate : (float) \App\Models\Setting::get('vat_rate', 20);
         $this->creditBalance = \App\Models\Document::availableCreditForCustomer($this->document->customer_id);
         $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
         $this->items = $this->document->items->map(fn ($item) => [
@@ -63,7 +63,7 @@ new #[Title('Edit Credit Note')] class extends Component {
             'assigned_to' => 'nullable|integer|exists:users,id',
         ]);
 
-        $totals = \App\Services\DocumentTotalsCalculator::creditNoteTotal(collect($this->items), $this->document->customer);
+        $totals = \App\Services\DocumentTotalsCalculator::creditNoteTotal(collect($this->items), $this->document->customer, $this->document->vat_rate !== null ? (float) $this->document->vat_rate : null);
 
         $this->document->update([
             'doc_date' => $this->doc_date,
@@ -74,6 +74,7 @@ new #[Title('Edit Credit Note')] class extends Component {
             'trade_discount' => 0,
             'discount_amount' => 0,
             'vat_amount' => $totals['vat'],
+            'vat_rate' => $totals['vat_rate'],
             'total_value' => $totals['total'],
         ]);
 

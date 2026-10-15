@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Support\Money;
+use App\Services\SupplierInvoiceTotalsCalculator;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -21,6 +21,7 @@ class SupplierInvoiceItem extends Model
         'vat_applicable',
         'line_total',
         'gross_override',
+        'vat_amount',
         'sort_order',
     ];
 
@@ -32,6 +33,7 @@ class SupplierInvoiceItem extends Model
             'vat_applicable' => 'boolean',
             'line_total' => 'decimal:2',
             'gross_override' => 'decimal:2',
+            'vat_amount' => 'decimal:2',
             'sort_order' => 'integer',
         ];
     }
@@ -44,13 +46,13 @@ class SupplierInvoiceItem extends Model
 
         $net = (float) $this->line_total;
 
-        if ($this->gross_override !== null) {
-            return round((float) $this->gross_override - $net, 2);
+        if ($this->vat_amount !== null) {
+            return (float) $this->vat_amount;
         }
 
-        $rate = (float) Setting::get('vat_rate', 20);
+        $rate = (float) (($this->relationLoaded('supplierInvoice') ? $this->supplierInvoice?->vat_rate : null) ?? Setting::get('vat_rate', 20));
 
-        return Money::roundDown($net * $rate / 100);
+        return SupplierInvoiceTotalsCalculator::lineVat($net, true, $rate, $this->gross_override);
     }
 
     public function getLineGrossAttribute(): float

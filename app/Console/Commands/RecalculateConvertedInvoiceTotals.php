@@ -48,7 +48,7 @@ class RecalculateConvertedInvoiceTotals extends Command
                         'quantity' => $item->quantity,
                         'price' => $item->price,
                         'per' => $item->per,
-                    ]), $customer);
+                    ]), $customer, $invoice->vat_rate !== null ? (float) $invoice->vat_rate : null);
 
                     if (abs($totals['subtotal'] - (float) $invoice->subtotal) <= 0.005) {
                         continue;
@@ -96,6 +96,7 @@ class RecalculateConvertedInvoiceTotals extends Command
                 'subtotal' => $row['totals']['subtotal'],
                 'discount_amount' => $row['totals']['discount_amount'],
                 'vat_amount' => $row['totals']['vat'],
+                'vat_rate' => $row['totals']['vat_rate'],
                 'total_value' => $row['totals']['total'],
             ]);
         }

@@ -2,12 +2,14 @@
 
 namespace App\Services\Migration\Mappers;
 
+use App\Models\Setting;
 use App\Models\SupplierInvoice;
 use App\Models\SupplierInvoiceItem;
 use App\Services\Migration\BulkEntityMapper;
 use App\Services\Migration\DuplicateStrategy;
 use App\Services\Migration\MapOutcome;
 use App\Services\Migration\Support\LegacyDate;
+use App\Services\SupplierInvoiceTotalsCalculator;
 use Illuminate\Support\Facades\DB;
 
 class SupplierInvoiceItemMapper implements BulkEntityMapper
@@ -56,7 +58,7 @@ class SupplierInvoiceItemMapper implements BulkEntityMapper
 
     public function updatableColumns(): array
     {
-        return ['supplier_invoice_id', 'product_code', 'quantity', 'unit_amount', 'vat_applicable', 'line_total', 'sort_order', 'created_at', 'updated_at'];
+        return ['supplier_invoice_id', 'product_code', 'quantity', 'unit_amount', 'vat_applicable', 'vat_amount', 'line_total', 'sort_order', 'created_at', 'updated_at'];
     }
 
     public function transform(array $legacyRow): ?array
@@ -78,6 +80,10 @@ class SupplierInvoiceItemMapper implements BulkEntityMapper
         $createdAt = LegacyDate::parse($legacyRow['createddate'] ?? null) ?? now();
         $updatedAt = LegacyDate::parse($legacyRow['modifieddate'] ?? null) ?? $createdAt;
 
+        $vatApplicable = false;
+        $lineTotal = (float) ($legacyRow['value'] ?? 0);
+        $rate = (float) Setting::get('vat_rate', 20);
+
         return [
             'legacy_uid' => $legacyRow['uid'],
             'supplier_invoice_id' => $supplierInvoiceId,
@@ -85,7 +91,8 @@ class SupplierInvoiceItemMapper implements BulkEntityMapper
             'quantity' => $legacyRow['qty'] ?? 1,
             'unit_amount' => $legacyRow['price'] ?? 0,
             // No reliable legacy line-level VAT signal exists; default to non-applicable rather than guess.
-            'vat_applicable' => false,
+            'vat_applicable' => $vatApplicable,
+            'vat_amount' => SupplierInvoiceTotalsCalculator::lineVat($lineTotal, $vatApplicable, $rate),
             'line_total' => $legacyRow['value'] ?? 0,
             'sort_order' => (int) ($legacyRow['seqno'] ?? 0),
             'created_at' => $createdAt,

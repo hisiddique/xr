@@ -64,7 +64,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
         );
 
         $customer = Customer::findOrFail($this->customer_id);
-        $totals = (new DocumentTotalsCalculator())->calculate(collect($this->items), $customer);
+        $totals = (new DocumentTotalsCalculator())->calculate(collect($this->items), $customer, $this->document->vat_rate !== null ? (float) $this->document->vat_rate : null);
 
         $this->document->update([
             'customer_id' => $this->customer_id,
@@ -74,6 +74,7 @@ new #[Title('Edit Delivery Note')] class extends Component {
             'trade_discount' => $totals['discount'],
             'discount_amount' => $totals['discount_amount'],
             'vat_amount' => $totals['vat'],
+            'vat_rate' => $totals['vat_rate'],
             'total_value' => $totals['total'],
             'show_pricing' => $this->show_pricing,
             'assigned_to' => $this->assigned_to,

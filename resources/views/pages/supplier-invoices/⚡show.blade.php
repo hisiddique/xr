@@ -204,7 +204,7 @@ new #[Title('Supplier Invoice')] class extends Component
                             <td class="px-4 sm:px-6 py-3 text-right text-zinc-700 dark:text-zinc-300">{{ number_format((float) $item->quantity, 2) }}</td>
                             <td class="px-4 sm:px-6 py-3 text-center">
                                 @if($item->vat_applicable)
-                                    <span class="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-400">Yes (20%)</span>
+                                    <span class="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-400">Yes ({{ rtrim(rtrim(number_format((float) ($supplierInvoice->vat_rate ?? \App\Models\Setting::get('vat_rate', 20)), 2), '0'), '.') }}%)</span>
                                 @else
                                     <span class="text-xs text-zinc-400">No</span>
                                 @endif
@@ -229,7 +229,7 @@ new #[Title('Supplier Invoice')] class extends Component
                     <dd class="font-mono font-medium text-zinc-900 dark:text-white">£{{ number_format($supplierInvoice->netTotal, 2) }}</dd>
                 </div>
                 <div class="flex items-center justify-between gap-4">
-                    <dt class="text-sm text-zinc-600 dark:text-zinc-400">Calculated VAT Input Pool Element (20%)</dt>
+                    <dt class="text-sm text-zinc-600 dark:text-zinc-400">Calculated VAT Input Pool Element ({{ rtrim(rtrim(number_format((float) ($supplierInvoice->vat_rate ?? \App\Models\Setting::get('vat_rate', 20)), 2), '0'), '.') }}%)</dt>
                     <dd class="font-mono font-medium text-zinc-900 dark:text-white">£{{ number_format($supplierInvoice->vatTotal, 2) }}</dd>
                 </div>
                 @if($supplierInvoice->discountTotal > 0)

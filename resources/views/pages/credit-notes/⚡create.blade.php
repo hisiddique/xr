@@ -171,6 +171,7 @@ new #[Title('New Credit Note')] class extends Component {
             'trade_discount'      => 0,
             'discount_amount'     => 0,
             'vat_amount'          => $totals['vat'],
+            'vat_rate'            => $totals['vat_rate'],
             'total_value'         => $totals['total'],
             'show_pricing'        => true,
             'status'              => DocumentStatus::Active,

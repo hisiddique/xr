@@ -12,9 +12,9 @@ class DocumentTotalsCalculator
      * Calculate document totals from line items and customer discount.
      *
      * @param  Collection<int, array{quantity?: float|string, price?: float|string, per?: string|null, is_note?: bool}>  $items
-     * @return array{subtotal: float, discount: float, discount_amount: float, vat: float, total: float}
+     * @return array{subtotal: float, discount: float, discount_amount: float, vat: float, total: float, vat_rate: float}
      */
-    public function calculate(Collection $items, Customer $customer): array
+    public function calculate(Collection $items, Customer $customer, ?float $vatRate = null): array
     {
         $subtotal = $items->sum(function (array $item) {
             if (! empty($item['is_note'])) {
@@ -28,7 +28,7 @@ class DocumentTotalsCalculator
         $discountAmount = round($subtotal * ($discountPercent / 100), 2);
         $afterDiscount = $subtotal - $discountAmount;
 
-        $vatRate = (float) Setting::get('vat_rate', 20);
+        $vatRate ??= (float) Setting::get('vat_rate', 20);
         $vatAmount = $customer->vat_registered ? round($afterDiscount * ($vatRate / 100), 2) : 0.0;
 
         $total = $afterDiscount + $vatAmount;
@@ -39,6 +39,7 @@ class DocumentTotalsCalculator
             'discount_amount' => $discountAmount,
             'vat' => round($vatAmount, 2),
             'total' => round($total, 2),
+            'vat_rate' => $vatRate,
         ];
     }
 
@@ -46,9 +47,9 @@ class DocumentTotalsCalculator
      * @param  Collection<int, array{quantity?: float|string, price?: float|string, per?: string|null, discount_percent?: float|string, is_note?: bool}>  $items
      *
      * `discount_percent` is a % reduction applied to line value (0/null = no reduction, full line value used).
-     * @return array{subtotal: float, vat: float, total: float}
+     * @return array{subtotal: float, vat: float, total: float, vat_rate: float}
      */
-    public static function creditNoteTotal(Collection $items, Customer $customer): array
+    public static function creditNoteTotal(Collection $items, Customer $customer, ?float $vatRate = null): array
     {
         $subtotal = $items->sum(function (array $item) {
             if (! empty($item['is_note'])) {
@@ -63,13 +64,14 @@ class DocumentTotalsCalculator
         });
 
         $subtotal = round($subtotal, 2);
-        $vatRate = (float) Setting::get('vat_rate', 20);
+        $vatRate ??= (float) Setting::get('vat_rate', 20);
         $vatAmount = $customer->vat_registered ? round($subtotal * ($vatRate / 100), 2) : 0.0;
 
         return [
             'subtotal' => $subtotal,
             'vat' => $vatAmount,
             'total' => round($subtotal + $vatAmount, 2),
+            'vat_rate' => $vatRate,
         ];
     }
 

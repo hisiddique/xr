@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\SupplierDebitNoteStatus;
+use App\Support\Money;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -24,6 +25,7 @@ class SupplierDebitNote extends Model
         'notes',
         'subtotal',
         'vat_amount',
+        'vat_rate',
         'total',
         'status',
         'created_by',
@@ -61,6 +63,7 @@ class SupplierDebitNote extends Model
             'doc_date' => 'date',
             'subtotal' => 'decimal:2',
             'vat_amount' => 'decimal:2',
+            'vat_rate' => 'decimal:2',
             'total' => 'decimal:2',
             'status' => SupplierDebitNoteStatus::class,
         ];
@@ -105,10 +108,22 @@ class SupplierDebitNote extends Model
 
     public function effectiveVatRate(): float
     {
-        $vatApplicableSubtotal = (float) $this->items->where('vat_applicable', true)->sum('total');
+        if ($this->vat_rate !== null) {
+            return (float) $this->vat_rate;
+        }
+
+        $vatApplicableItems = $this->items->where('vat_applicable', true);
+        $vatApplicableSubtotal = (float) $vatApplicableItems->sum('total');
 
         if ($vatApplicableSubtotal <= 0) {
             return 0.0;
+        }
+
+        $configuredRate = (float) Setting::get('vat_rate', 20);
+        $flooredVat = $vatApplicableItems->sum(fn ($item) => Money::roundDown((float) $item->total * $configuredRate / 100));
+
+        if (abs($flooredVat - (float) $this->vat_amount) < 0.005) {
+            return $configuredRate;
         }
 
         return round(((float) $this->vat_amount / $vatApplicableSubtotal) * 100, 4);

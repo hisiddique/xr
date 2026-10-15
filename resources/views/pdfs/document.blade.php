@@ -389,7 +389,7 @@
                                         </tr>
                                     @endif
                                     <tr>
-                                        <td class="l">VAT @ {{ number_format((float) \App\Models\Setting::get('vat_rate', 20), 2) }}%</td>
+                                        <td class="l">VAT @ {{ number_format((float) ($document->vat_rate ?? \App\Models\Setting::get('vat_rate', 20)), 2) }}%</td>
                                         <td class="v">£{{ number_format($document->vat_amount, 2) }}</td>
                                     </tr>
                                     <tr class="grand">
@@ -484,7 +484,7 @@
                                 </tr>
                                 @if($document->vat_amount > 0)
                                     <tr>
-                                        <td class="l">VAT @ {{ number_format((float) \App\Models\Setting::get('vat_rate', 20), 2) }}%</td>
+                                        <td class="l">VAT @ {{ number_format((float) ($document->vat_rate ?? \App\Models\Setting::get('vat_rate', 20)), 2) }}%</td>
                                         <td class="v">£{{ number_format($document->vat_amount, 2) }}</td>
                                     </tr>
                                 @endif
@@ -521,7 +521,7 @@
                                     </tr>
                                 @endif
                                 <tr>
-                                    <td class="l">VAT @ {{ number_format((float) \App\Models\Setting::get('vat_rate', 20), 2) }}%</td>
+                                    <td class="l">VAT @ {{ number_format((float) ($document->vat_rate ?? \App\Models\Setting::get('vat_rate', 20)), 2) }}%</td>
                                     <td class="v">£{{ number_format($document->vat_amount, 2) }}</td>
                                 </tr>
                                 <tr class="grand">

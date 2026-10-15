@@ -22,6 +22,7 @@ class SupplierDebitNoteItem extends Model
         'discount_percent',
         'line_value',
         'vat_applicable',
+        'vat_amount',
         'total',
         'sort_order',
     ];
@@ -35,6 +36,7 @@ class SupplierDebitNoteItem extends Model
             'discount_percent' => 'decimal:2',
             'line_value' => 'decimal:2',
             'vat_applicable' => 'boolean',
+            'vat_amount' => 'decimal:2',
             'total' => 'decimal:2',
             'sort_order' => 'integer',
         ];

@@ -31,7 +31,7 @@ class SupplierPurchasingReportService
 
     protected const NET_EXPR = '(select coalesce(sum(sii.line_total),0) from supplier_invoice_items sii where sii.supplier_invoice_id = supplier_invoices.id and sii.deleted_at is null)';
 
-    protected const VAT_EXPR = '(select coalesce(sum(case when sii.vat_applicable then (case when sii.gross_override is not null then sii.gross_override - sii.line_total else floor(round(sii.line_total * ?, 6)) / 100 end) else 0 end),0) from supplier_invoice_items sii where sii.supplier_invoice_id = supplier_invoices.id and sii.deleted_at is null)';
+    protected const VAT_EXPR = '(select coalesce(sum(case when sii.vat_applicable then coalesce(sii.vat_amount, (case when sii.gross_override is not null then sii.gross_override - sii.line_total else floor(round(sii.line_total * ?, 6)) / 100 end)) else 0 end),0) from supplier_invoice_items sii where sii.supplier_invoice_id = supplier_invoices.id and sii.deleted_at is null)';
 
     protected const GROSS_EXPR = '('.self::NET_EXPR.' + '.self::VAT_EXPR.')';
 

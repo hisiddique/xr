@@ -36,7 +36,7 @@ new #[Title('Edit Debit Note')] class extends Component {
         $this->doc_date = $this->debitNote->doc_date->format('Y-m-d');
         $this->notes = $this->debitNote->notes ?? '';
         $this->isApplied = $this->debitNote->isApplied();
-        $this->vatRate = (float) Setting::get('vat_rate', 20);
+        $this->vatRate = (float) ($this->debitNote->vat_rate ?? Setting::get('vat_rate', 20));
         $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
         $this->items = $this->debitNote->items->map(fn ($item) => [
             'id' => $item->id,
@@ -71,6 +71,7 @@ new #[Title('Edit Debit Note')] class extends Component {
         $this->debitNote->update([
             'doc_date' => $this->doc_date,
             'notes' => $this->notes ?: null,
+            'vat_rate' => $this->vatRate,
         ]);
 
         if (! $this->isApplied) {
@@ -102,6 +103,7 @@ new #[Title('Edit Debit Note')] class extends Component {
                     'discount_percent' => $discountPercent,
                     'line_value' => $lineValue,
                     'vat_applicable' => $vatApplicable,
+                    'vat_amount' => $itemVat,
                     'total' => $net,
                     'sort_order' => $idx,
                 ];

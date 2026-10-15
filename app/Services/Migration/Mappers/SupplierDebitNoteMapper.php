@@ -2,6 +2,7 @@
 
 namespace App\Services\Migration\Mappers;
 
+use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\SupplierDebitNote;
 use App\Services\Migration\BulkEntityMapper;
@@ -70,6 +71,7 @@ class SupplierDebitNoteMapper implements BulkEntityMapper
             'notes',
             'subtotal',
             'total',
+            'vat_rate',
             'status',
             'created_by',
             'reference',
@@ -118,6 +120,8 @@ class SupplierDebitNoteMapper implements BulkEntityMapper
             'notes' => $legacyRow['notes'] ?? null,
             'subtotal' => $legacyRow['goods'] ?? 0,
             'total' => $legacyRow['value'] ?? 0,
+            // Fallback: legacy data has no stored VAT rate.
+            'vat_rate' => (float) Setting::get('vat_rate', 20),
             'status' => SupplierDebitNoteStatus::Committed->value,
             'created_by' => $this->createdBy,
             'reference' => $reference,

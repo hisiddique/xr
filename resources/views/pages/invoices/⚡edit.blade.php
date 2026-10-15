@@ -61,7 +61,7 @@ new #[Title('Edit Invoice')] class extends Component {
 
         $customer = $this->document->customer;
         $calculator = new DocumentTotalsCalculator();
-        $totals = $calculator->calculate(collect($this->items), $customer);
+        $totals = $calculator->calculate(collect($this->items), $customer, $this->document->vat_rate !== null ? (float) $this->document->vat_rate : null);
 
         $this->document->update([
             'doc_date' => $this->doc_date,
@@ -71,6 +71,7 @@ new #[Title('Edit Invoice')] class extends Component {
             'trade_discount' => $totals['discount'],
             'discount_amount' => $totals['discount_amount'],
             'vat_amount' => $totals['vat'],
+            'vat_rate' => $totals['vat_rate'],
             'total_value' => $totals['total'],
         ]);
 

@@ -6,6 +6,7 @@ use App\DocumentStatus;
 use App\DocumentType;
 use App\Models\Customer;
 use App\Models\Document;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\Migration\BulkEntityMapper;
 use App\Services\Migration\DuplicateStrategy;
@@ -181,7 +182,7 @@ class DocumentMapper implements BulkEntityMapper, ReportsExcludedRows
     {
         return [
             'customer_id', 'type', 'order_no', 'doc_date', 'subtotal', 'total_value',
-            'vat_amount', 'discount_amount', 'trade_discount', 'show_pricing', 'print_count',
+            'vat_amount', 'vat_rate', 'discount_amount', 'trade_discount', 'show_pricing', 'print_count',
             'status', 'notes', 'doc_number', 'created_by', 'deleted_at', 'assigned_to',
             'created_at', 'updated_at',
         ];
@@ -249,6 +250,8 @@ class DocumentMapper implements BulkEntityMapper, ReportsExcludedRows
             'subtotal' => $goods,
             'total_value' => $value,
             'vat_amount' => max(0, $value - $goods),
+            // Fallback: legacy data has no stored VAT rate.
+            'vat_rate' => (float) Setting::get('vat_rate', 20),
             'discount_amount' => 0,
             'trade_discount' => 0,
             'show_pricing' => true,

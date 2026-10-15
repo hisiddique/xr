@@ -10,15 +10,28 @@ use Illuminate\Support\Collection;
 
 class SupplierInvoiceTotalsCalculator
 {
+    public static function lineVat(float $net, bool $vatApplicable, float $rate, mixed $grossOverride = null): float
+    {
+        if (! $vatApplicable) {
+            return 0.0;
+        }
+
+        if (is_numeric($grossOverride)) {
+            return round((float) $grossOverride - $net, 2);
+        }
+
+        return Money::roundDown($net * $rate / 100);
+    }
+
     /**
      * Calculate supplier invoice totals from line items and a trade-discount percentage.
      *
      * @param  Collection<int, SupplierInvoiceItem>|iterable  $items
      * @return array{net: float, vat: float, gross: float, discount: float, payable: float}
      */
-    public function calculate(iterable $items, float $discountPercent, bool $discountOnGross): array
+    public function calculate(iterable $items, float $discountPercent, bool $discountOnGross, ?float $vatRate = null): array
     {
-        $rate = (float) Setting::get('vat_rate', 20);
+        $rate = $vatRate ?? (float) Setting::get('vat_rate', 20);
 
         $net = 0.0;
         $vat = 0.0;
@@ -28,10 +41,10 @@ class SupplierInvoiceTotalsCalculator
             $net += $lineTotal;
 
             if (data_get($item, 'vat_applicable')) {
-                $override = data_get($item, 'gross_override');
-                $vat += $override !== null && $override !== ''
-                    ? round((float) $override - $lineTotal, 2)
-                    : Money::roundDown($lineTotal * $rate / 100);
+                $snapshot = data_get($item, 'vat_amount');
+                $vat += $snapshot !== null && $snapshot !== ''
+                    ? (float) $snapshot
+                    : self::lineVat($lineTotal, true, $rate, data_get($item, 'gross_override'));
             }
         }
 
@@ -61,7 +74,7 @@ class SupplierInvoiceTotalsCalculator
      * @param  iterable<int, SupplierDebitNote>  $notes
      * @return array<int, float>
      */
-    public function debitNoteDeductions(iterable $lineItems, float $percent, bool $discountOnGross, iterable $notes): array
+    public function debitNoteDeductions(iterable $lineItems, float $percent, bool $discountOnGross, iterable $notes, ?float $vatRate = null): array
     {
         $deductions = [];
 
@@ -73,12 +86,12 @@ class SupplierInvoiceTotalsCalculator
             return $deductions;
         }
 
-        $rate = (float) Setting::get('vat_rate', 20);
+        $rate = $vatRate ?? (float) Setting::get('vat_rate', 20);
         $lines = collect($lineItems);
         $net = (float) $lines->sum(fn ($line) => (float) data_get($line, 'line_total'));
         $vatNet = (float) $lines->filter(fn ($line) => (bool) data_get($line, 'vat_applicable'))
             ->sum(fn ($line) => (float) data_get($line, 'line_total'));
-        $previous = $this->calculate($lines, $percent, false)['payable'];
+        $previous = $this->calculate($lines, $percent, false, $rate)['payable'];
 
         foreach ($notes as $note) {
             $net -= (float) $note->items->sum('total');

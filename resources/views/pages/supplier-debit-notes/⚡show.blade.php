@@ -2,6 +2,7 @@
 
 use App\Models\SupplierDebitNote;
 use App\Models\SupplierDebitNoteItem;
+use App\Support\Money;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
@@ -25,19 +26,17 @@ new #[Title('Supplier Debit Note')] class extends Component {
     #[Computed]
     public function effectiveVatRate(): float
     {
-        $vatApplicableSubtotal = (float) $this->debitNote->items->where('vat_applicable', true)->sum('total');
-
-        if ($vatApplicableSubtotal <= 0) {
-            return 0.0;
-        }
-
-        return round(((float) $this->debitNote->vat_amount / $vatApplicableSubtotal) * 100, 4);
+        return $this->debitNote->effectiveVatRate();
     }
 
     public function itemVat(SupplierDebitNoteItem $item): float
     {
+        if ($item->vat_applicable && $item->vat_amount !== null) {
+            return (float) $item->vat_amount;
+        }
+
         return $item->vat_applicable
-            ? round((float) $item->total * $this->effectiveVatRate / 100, 2)
+            ? Money::roundDown(round((float) $item->total * $this->effectiveVatRate / 100, 4))
             : 0.0;
     }
 

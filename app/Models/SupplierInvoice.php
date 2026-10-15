@@ -29,6 +29,7 @@ class SupplierInvoice extends Model
         'trade_discount',
         'discount_amount',
         'discount_on_gross',
+        'vat_rate',
         'notes',
         'attachments',
         'created_by',
@@ -72,6 +73,7 @@ class SupplierInvoice extends Model
             'trade_discount' => 'decimal:2',
             'discount_amount' => 'decimal:2',
             'discount_on_gross' => 'boolean',
+            'vat_rate' => 'decimal:2',
             'attachments' => 'array',
         ];
     }

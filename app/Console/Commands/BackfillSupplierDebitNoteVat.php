@@ -91,7 +91,7 @@ class BackfillSupplierDebitNoteVat extends Command
                 $oldTotal = (float) $note->total;
                 $newTotal = round((float) $note->subtotal + $vatAmount, 2);
 
-                $note->update(['vat_amount' => $vatAmount, 'total' => $newTotal]);
+                $note->update(['vat_amount' => $vatAmount, 'vat_rate' => $vatRate, 'total' => $newTotal]);
 
                 foreach ($note->appliedInvoices as $invoice) {
                     if (abs((float) $invoice->pivot->applied_amount - $oldTotal) < 0.001) {

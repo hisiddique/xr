@@ -59,7 +59,7 @@ new #[Title('Supplier Invoice')] class extends Component
 
     public function mount(): void
     {
-        $this->vatRate = (float) Setting::get('vat_rate', 20);
+        $this->vatRate = (float) ($this->supplierInvoice?->vat_rate ?? Setting::get('vat_rate', 20));
 
         if ($this->supplierInvoice) {
             $this->supplierInvoice->load(['supplier', 'items', 'overhead']);
@@ -175,6 +175,7 @@ new #[Title('Supplier Invoice')] class extends Component
             (float) ($this->tradeDiscount ?: 0),
             $this->discountOnGross,
             $notes,
+            $this->vatRate,
         )), 2);
     }
 
@@ -245,13 +246,17 @@ new #[Title('Supplier Invoice')] class extends Component
         foreach ($this->items as $i => $row) {
             $qty = (float) ($row['quantity'] ?? 0);
             $unit = (float) ($row['unit_amount'] ?? 0);
+            $vatApplicable = (bool) ($row['vat_applicable'] ?? false);
+            $grossOverride = $vatApplicable && is_numeric($row['gross_override'] ?? null) ? round((float) $row['gross_override'], 2) : null;
+            $lineTotal = round($qty * $unit, 2);
             $invoice->items()->create([
                 'product_code' => null,
                 'quantity' => $qty,
                 'unit_amount' => $unit,
-                'vat_applicable' => (bool) ($row['vat_applicable'] ?? false),
-                'gross_override' => ($row['vat_applicable'] ?? false) && is_numeric($row['gross_override'] ?? null) ? round((float) $row['gross_override'], 2) : null,
-                'line_total' => round($qty * $unit, 2),
+                'vat_applicable' => $vatApplicable,
+                'gross_override' => $grossOverride,
+                'line_total' => $lineTotal,
+                'vat_amount' => $vatApplicable ? SupplierInvoiceTotalsCalculator::lineVat($lineTotal, true, $this->vatRate, $grossOverride) : 0.0,
                 'sort_order' => $i,
             ]);
         }
@@ -264,8 +269,9 @@ new #[Title('Supplier Invoice')] class extends Component
             'vat_applicable' => (bool) ($row['vat_applicable'] ?? false),
             'gross_override' => ($row['vat_applicable'] ?? false) && is_numeric($row['gross_override'] ?? null) ? round((float) $row['gross_override'], 2) : null,
         ]);
-        $totals = app(SupplierInvoiceTotalsCalculator::class)->calculate($lineItems, $pct, $this->discountOnGross);
+        $totals = app(SupplierInvoiceTotalsCalculator::class)->calculate($lineItems, $pct, $this->discountOnGross, $this->vatRate);
         $invoice->update([
+            'vat_rate' => $this->vatRate,
             'trade_discount' => $pct,
             'discount_amount' => $totals['discount'],
             'discount_on_gross' => $this->discountOnGross,
@@ -330,7 +336,7 @@ new #[Title('Supplier Invoice')] class extends Component
             $notes = SupplierDebitNote::with('items')->whereIn('id', $this->selectedDebitNoteIds)->get()
                 ->sortBy(fn ($note) => array_search($note->id, $this->selectedDebitNoteIds));
             $deductions = app(SupplierInvoiceTotalsCalculator::class)
-                ->debitNoteDeductions($lineItems, $pct, $this->discountOnGross, $notes);
+                ->debitNoteDeductions($lineItems, $pct, $this->discountOnGross, $notes, $this->vatRate);
 
             foreach ($notes as $dn) {
                 $invoice->debitNotes()->attach($dn->id, [
@@ -648,7 +654,7 @@ new #[Title('Supplier Invoice')] class extends Component
                                                 x-on:focus="$el.showPicker?.()"
                                                 class="w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                             >
-                                                <option value="true">Yes (20%)</option>
+                                                <option value="true">Yes ({{ rtrim(rtrim(number_format($vatRate, 2), '0'), '.') }}%)</option>
                                                 <option value="false">No</option>
                                             </select>
                                         </td>

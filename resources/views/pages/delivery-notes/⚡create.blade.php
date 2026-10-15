@@ -122,6 +122,7 @@ new #[Title('New Delivery Note')] class extends Component {
             'trade_discount' => $totals['discount'],
             'discount_amount' => $totals['discount_amount'],
             'vat_amount' => $totals['vat'],
+            'vat_rate' => $totals['vat_rate'],
             'total_value' => $totals['total'],
             'show_pricing' => $this->show_pricing,
             'created_by' => Auth::id(),

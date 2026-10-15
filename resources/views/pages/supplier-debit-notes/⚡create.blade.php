@@ -79,7 +79,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
 
         return SupplierInvoice::where('supplier_id', $this->supplier_id)
             ->whereRaw('
-                (SELECT COALESCE(SUM(line_total), 0) FROM supplier_invoice_items WHERE supplier_invoice_id = supplier_invoices.id)
+                (SELECT COALESCE(SUM(line_total), 0) FROM supplier_invoice_items WHERE supplier_invoice_id = supplier_invoices.id AND deleted_at IS NULL)
                 - COALESCE(supplier_invoices.discount_amount, 0)
                 - (SELECT COALESCE(SUM(allocated_amount), 0) FROM supplier_payout_allocations WHERE supplier_invoice_id = supplier_invoices.id)
                 - (SELECT COALESCE(SUM(applied_amount), 0) FROM supplier_invoice_debit_notes WHERE supplier_invoice_id = supplier_invoices.id)
@@ -136,6 +136,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                 'discount_percent' => $discountPercent,
                 'line_value' => $lineValue,
                 'vat_applicable' => $vatApplicable,
+                'vat_amount' => $itemVat,
                 'total' => $net,
                 'sort_order' => $idx,
             ];
@@ -151,6 +152,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                 'doc_date' => $this->doc_date,
                 'supplier_invoice_id' => $this->supplier_invoice_id ?: null,
                 'notes' => $this->notes ?: null,
+                'vat_rate' => $this->vatRate,
                 'subtotal' => $subtotal,
                 'vat_amount' => $vatAmount,
                 'total' => $total,
@@ -166,10 +168,11 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                 $dn->load('items');
                 $priorNotes = $invoice->debitNotes->push($dn);
                 $deductions = app(SupplierInvoiceTotalsCalculator::class)->debitNoteDeductions(
-                    $invoice->items->map(fn ($item) => ['line_total' => $item->line_total, 'vat_applicable' => $item->vat_applicable, 'gross_override' => $item->gross_override]),
+                    $invoice->items->map(fn ($item) => ['line_total' => $item->line_total, 'vat_applicable' => $item->vat_applicable, 'vat_amount' => $item->vat_amount, 'gross_override' => $item->gross_override]),
                     (float) $invoice->trade_discount,
                     (bool) $invoice->discount_on_gross,
                     $priorNotes,
+                    $invoice->vat_rate !== null ? (float) $invoice->vat_rate : null,
                 );
 
                 $dn->appliedInvoices()->attach($this->supplier_invoice_id, [
