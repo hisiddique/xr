@@ -1,3 +1,6 @@
+// Keep in step with App\Support\Money::round(); takes a value already in pence.
+const roundCents = (cents) => Math.round(Number(cents.toFixed(6))) / 100;
+
 // Truncate number inputs to 2 decimal places on every keystroke. Registered
 // on the capture phase so it runs before Livewire's own wire:model listener
 // reads the (still untrimmed) value off the element.
@@ -1302,9 +1305,9 @@ document.addEventListener('alpine:init', () => {
             return row.discount_percent ? v * (row.discount_percent / 100) : v;
         },
 
-        vatRoundedUp(row, rate) {
+        vatForRow(row, rate) {
             const net = Math.round(this.netValue(row) * 100) / 100;
-            return Math.ceil(Number((net * rate).toFixed(6))) / 100;
+            return roundCents(net * rate);
         },
 
         importRows(items) {
@@ -1626,6 +1629,11 @@ document.addEventListener('alpine:init', () => {
             return row.vat_applicable ? Math.round((this.lineGross(row) - this.lineNet(row)) * 100) / 100 : 0;
         },
 
+        grossInputValue(row, el) {
+            const formatted = this.lineGross(row).toFixed(2);
+            return document.activeElement === el ? el.value : formatted;
+        },
+
         setGross(row, value) {
             const parsed = parseFloat(value);
             if (value === '' || !Number.isFinite(parsed) || Math.round(parsed * 100) / 100 === this.autoGross(row)) {
@@ -1653,7 +1661,7 @@ document.addEventListener('alpine:init', () => {
 
         get discountAmount() {
             const base = this.$wire.discountOnGross ? this.grossTotal : this.netTotal;
-            return Math.ceil(Number((base * this.discountPct).toFixed(6))) / 100;
+            return roundCents(base * this.discountPct);
         },
 
         get payableTotal() {

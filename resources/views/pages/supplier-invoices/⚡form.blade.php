@@ -648,8 +648,8 @@ new #[Title('Supplier Invoice')] class extends Component
                                                 x-on:focus="$el.showPicker?.()"
                                                 class="w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                             >
-                                                <option :value="true">Yes (20%)</option>
-                                                <option :value="false">No</option>
+                                                <option value="true">Yes (20%)</option>
+                                                <option value="false">No</option>
                                             </select>
                                         </td>
                                         <td class="px-4 py-2.5 text-right">
@@ -659,7 +659,7 @@ new #[Title('Supplier Invoice')] class extends Component
                                                     type="number"
                                                     step="0.01"
                                                     min="0"
-                                                    :value="document.activeElement === $el ? $el.value : lineGross(row).toFixed(2)"
+                                                    :value="grossInputValue(row, $el)"
                                                     x-on:input="setGross(row, $event.target.value)"
                                                     x-on:blur="$el.value = lineGross(row).toFixed(2)"
                                                     class="w-32 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-right font-mono text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"

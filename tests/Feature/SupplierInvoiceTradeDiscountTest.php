@@ -193,15 +193,15 @@ test('a zero-discount invoice keeps payable equal to gross', function () {
         ->and($invoice->paymentStatus())->toBe(SupplierInvoicePaymentStatus::Unpaid);
 });
 
-test('calculator rounds the trade discount up to the next penny', function () {
+test('calculator rounds the trade discount to the nearest penny', function () {
     $totals = app(SupplierInvoiceTotalsCalculator::class)
         ->calculate([['line_total' => 27.20, 'vat_applicable' => false]], 2, false);
 
-    expect($totals['discount'])->toBe(0.55)
-        ->and($totals['payable'])->toBe(26.65);
+    expect($totals['discount'])->toBe(0.54)
+        ->and($totals['payable'])->toBe(26.66);
 });
 
-test('a debit note re-prices the discounted invoice on the reduced net so the outstanding is 31.98', function () {
+test('a debit note re-prices the discounted invoice on the reduced net, discount before VAT', function () {
     $calculator = app(SupplierInvoiceTotalsCalculator::class);
     $lines = [['line_total' => 34.20, 'vat_applicable' => true]];
     $note = new SupplierDebitNote(['total' => 8.40]);
@@ -211,7 +211,7 @@ test('a debit note re-prices the discounted invoice on the reduced net so the ou
     $payable = $calculator->calculate($lines, 2, false)['payable'];
     $deductions = $calculator->debitNoteDeductions($lines, 2, false, [$note]);
 
-    expect(round($payable - $deductions[1], 2))->toBe(31.98);
+    expect(round($payable - $deductions[1], 2))->toBe(31.99);
 });
 
 test('a manual line gross override replaces the calculated vat on that line only', function () {

@@ -88,7 +88,7 @@ new #[Title('Edit Debit Note')] class extends Component {
 
                 $lineValue = $isNote ? 0.0 : round(DocumentTotalsCalculator::lineValue(['quantity' => $qty, 'price' => $price, 'per' => $per]), 2);
                 $net = $isNote ? 0.0 : ($discountPercent > 0 ? round($lineValue * ($discountPercent / 100), 2) : $lineValue);
-                $itemVat = $vatApplicable ? Money::roundUp($net * $this->vatRate / 100) : 0.0;
+                $itemVat = $vatApplicable ? Money::round($net * $this->vatRate / 100) : 0.0;
 
                 $subtotal += $net;
                 $vatAmount += $itemVat;
@@ -337,11 +337,11 @@ new #[Title('Edit Debit Note')] class extends Component {
                         </div>
                         <div class="mt-1 flex justify-between text-sm text-zinc-500 dark:text-zinc-400" x-show="$wire.vatRate > 0 && rows.some(r => !r.is_note && r.vat_applicable)">
                             <span x-text="'VAT (' + $wire.vatRate + '%)'"></span>
-                            <span class="font-mono tabular-nums" x-text="'£' + rows.filter(r => !r.is_note && r.vat_applicable).reduce((s, r) => s + vatRoundedUp(r, $wire.vatRate), 0).toFixed(2)"></span>
+                            <span class="font-mono tabular-nums" x-text="'£' + rows.filter(r => !r.is_note && r.vat_applicable).reduce((s, r) => s + vatForRow(r, $wire.vatRate), 0).toFixed(2)"></span>
                         </div>
                         <div class="mt-2 flex justify-between border-t border-zinc-200 pt-2 dark:border-white/10">
                             <span class="font-semibold text-zinc-900 dark:text-white">Total Debit</span>
-                            <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white" x-text="'£' + (function() { const sub = rows.filter(r => !r.is_note).reduce((s, r) => s + netValue(r), 0); const vat = rows.filter(r => !r.is_note && r.vat_applicable).reduce((s, r) => s + vatRoundedUp(r, $wire.vatRate), 0); return (sub + vat).toFixed(2); })()"></span>
+                            <span class="font-mono tabular-nums font-semibold text-zinc-900 dark:text-white" x-text="'£' + (function() { const sub = rows.filter(r => !r.is_note).reduce((s, r) => s + netValue(r), 0); const vat = rows.filter(r => !r.is_note && r.vat_applicable).reduce((s, r) => s + vatForRow(r, $wire.vatRate), 0); return (sub + vat).toFixed(2); })()"></span>
                         </div>
                     </div>
                 </div>
