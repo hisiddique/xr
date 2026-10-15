@@ -214,6 +214,27 @@ test('a debit note re-prices the discounted invoice on the reduced net so the ou
     expect(round($payable - $deductions[1], 2))->toBe(31.98);
 });
 
+test('a manual line gross override replaces the calculated vat on that line only', function () {
+    $totals = app(SupplierInvoiceTotalsCalculator::class)->calculate([
+        ['line_total' => 10.03, 'vat_applicable' => true, 'gross_override' => 12.05],
+        ['line_total' => 10.00, 'vat_applicable' => true, 'gross_override' => null],
+    ], 0, false);
+
+    expect($totals['vat'])->toBe(4.02)
+        ->and($totals['gross'])->toBe(24.05);
+});
+
+test('an invoice item with a gross override reports its own vat and gross', function () {
+    $supplier = Supplier::factory()->create();
+    $invoice = SupplierInvoice::factory()->create(['supplier_id' => $supplier->id]);
+    $invoice->items()->create(['quantity' => 1, 'unit_amount' => 10.03, 'vat_applicable' => true, 'line_total' => 10.03, 'gross_override' => 12.05, 'sort_order' => 0]);
+    $invoice->load('items');
+
+    expect($invoice->items->first()->line_gross)->toBe(12.05)
+        ->and($invoice->vatTotal)->toBe(2.02)
+        ->and($invoice->grossTotal)->toBe(12.05);
+});
+
 test('a debit note keeps its own total when the invoice has no trade discount', function () {
     $note = new SupplierDebitNote(['total' => 8.40]);
     $note->id = 1;

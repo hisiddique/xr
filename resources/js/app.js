@@ -1594,9 +1594,9 @@ document.addEventListener('alpine:init', () => {
 
     // ─── Supplier Invoice Line Form Component ───────────────────
     window.Alpine.data('supplierInvoiceLineForm', (initialRows = [], vatRate = 20) => ({
-        rows: initialRows.length ? initialRows : [{ product_code: '', quantity: 1, unit_amount: '', vat_applicable: true }],
+        rows: initialRows.length ? initialRows : [{ product_code: '', quantity: 1, unit_amount: '', vat_applicable: true, gross_override: null }],
         vatRate,
-        _rowDefault: { product_code: '', quantity: 1, unit_amount: '', vat_applicable: true },
+        _rowDefault: { product_code: '', quantity: 1, unit_amount: '', vat_applicable: true, gross_override: null },
         _rowCells: 'input, select',
 
         init() {
@@ -1609,9 +1609,30 @@ document.addEventListener('alpine:init', () => {
             return Math.round((parseFloat(row.quantity) || 0) * (parseFloat(row.unit_amount) || 0) * 100) / 100;
         },
 
-        lineGross(row) {
+        autoGross(row) {
             const net = this.lineNet(row);
             return row.vat_applicable ? Math.round((net + net * this.vatRate / 100) * 100) / 100 : net;
+        },
+
+        lineGross(row) {
+            const override = row.gross_override;
+            if (row.vat_applicable && override !== null && override !== '' && Number.isFinite(Number(override))) {
+                return Math.round(Number(override) * 100) / 100;
+            }
+            return this.autoGross(row);
+        },
+
+        lineVat(row) {
+            return row.vat_applicable ? Math.round((this.lineGross(row) - this.lineNet(row)) * 100) / 100 : 0;
+        },
+
+        setGross(row, value) {
+            const parsed = parseFloat(value);
+            if (value === '' || !Number.isFinite(parsed) || Math.round(parsed * 100) / 100 === this.autoGross(row)) {
+                row.gross_override = null;
+                return;
+            }
+            row.gross_override = Math.round(parsed * 100) / 100;
         },
 
         get netTotal() {
@@ -1619,11 +1640,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         get vatTotal() {
-            return Math.round(
-                this.rows
-                    .filter(r => r.vat_applicable)
-                    .reduce((s, r) => s + this.lineNet(r) * this.vatRate / 100, 0)
-                * 100) / 100;
+            return Math.round(this.rows.reduce((s, r) => s + this.lineVat(r), 0) * 100) / 100;
         },
 
         get grossTotal() {

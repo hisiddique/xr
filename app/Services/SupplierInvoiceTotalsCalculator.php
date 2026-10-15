@@ -28,7 +28,10 @@ class SupplierInvoiceTotalsCalculator
             $net += $lineTotal;
 
             if (data_get($item, 'vat_applicable')) {
-                $vat += round($lineTotal * $rate / 100, 2);
+                $override = data_get($item, 'gross_override');
+                $vat += $override !== null && $override !== ''
+                    ? round((float) $override - $lineTotal, 2)
+                    : round($lineTotal * $rate / 100, 2);
             }
         }
 

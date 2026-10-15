@@ -140,11 +140,7 @@ class SupplierInvoice extends Model
 
     public function getVatTotalAttribute(): float
     {
-        $rate = (float) Setting::get('vat_rate', 20);
-
-        return (float) $this->items
-            ->filter(fn ($item) => $item->vat_applicable)
-            ->sum(fn ($item) => round((float) $item->line_total * $rate / 100, 2));
+        return (float) $this->items->sum(fn ($item) => $item->line_vat);
     }
 
     public function getGrossTotalAttribute(): float

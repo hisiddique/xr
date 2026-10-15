@@ -166,7 +166,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                 $dn->load('items');
                 $priorNotes = $invoice->debitNotes->push($dn);
                 $deductions = app(SupplierInvoiceTotalsCalculator::class)->debitNoteDeductions(
-                    $invoice->items->map(fn ($item) => ['line_total' => $item->line_total, 'vat_applicable' => $item->vat_applicable]),
+                    $invoice->items->map(fn ($item) => ['line_total' => $item->line_total, 'vat_applicable' => $item->vat_applicable, 'gross_override' => $item->gross_override]),
                     (float) $invoice->trade_discount,
                     (bool) $invoice->discount_on_gross,
                     $priorNotes,

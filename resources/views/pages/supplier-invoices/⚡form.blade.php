@@ -89,11 +89,12 @@ new #[Title('Supplier Invoice')] class extends Component
                 'quantity' => (float) $item->quantity,
                 'unit_amount' => (float) $item->unit_amount,
                 'vat_applicable' => (bool) $item->vat_applicable,
+                'gross_override' => $item->gross_override !== null ? (float) $item->gross_override : null,
             ])->toArray();
             $this->selectedDebitNoteIds = $this->supplierInvoice->debitNotes()->pluck('supplier_debit_notes.id')->toArray();
         } else {
             $this->invoice_date = now()->format('Y-m-d');
-            $this->items = [['product_code' => '', 'quantity' => 1, 'unit_amount' => '', 'vat_applicable' => true]];
+            $this->items = [['product_code' => '', 'quantity' => 1, 'unit_amount' => '', 'vat_applicable' => true, 'gross_override' => null]];
 
             if (request()->filled('supplier_id')) {
                 $this->supplier_id = (int) request('supplier_id');
@@ -166,6 +167,7 @@ new #[Title('Supplier Invoice')] class extends Component
         $lineItems = collect($this->items)->map(fn ($row) => [
             'line_total' => round((float) ($row['quantity'] ?? 0) * (float) ($row['unit_amount'] ?? 0), 2),
             'vat_applicable' => (bool) ($row['vat_applicable'] ?? false),
+            'gross_override' => ($row['vat_applicable'] ?? false) && is_numeric($row['gross_override'] ?? null) ? round((float) $row['gross_override'], 2) : null,
         ]);
 
         return round(array_sum(app(SupplierInvoiceTotalsCalculator::class)->debitNoteDeductions(
@@ -248,6 +250,7 @@ new #[Title('Supplier Invoice')] class extends Component
                 'quantity' => $qty,
                 'unit_amount' => $unit,
                 'vat_applicable' => (bool) ($row['vat_applicable'] ?? false),
+                'gross_override' => ($row['vat_applicable'] ?? false) && is_numeric($row['gross_override'] ?? null) ? round((float) $row['gross_override'], 2) : null,
                 'line_total' => round($qty * $unit, 2),
                 'sort_order' => $i,
             ]);
@@ -259,6 +262,7 @@ new #[Title('Supplier Invoice')] class extends Component
         $lineItems = collect($this->items)->map(fn ($row) => [
             'line_total' => round((float) ($row['quantity'] ?? 0) * (float) ($row['unit_amount'] ?? 0), 2),
             'vat_applicable' => (bool) ($row['vat_applicable'] ?? false),
+            'gross_override' => ($row['vat_applicable'] ?? false) && is_numeric($row['gross_override'] ?? null) ? round((float) $row['gross_override'], 2) : null,
         ]);
         $totals = app(SupplierInvoiceTotalsCalculator::class)->calculate($lineItems, $pct, $this->discountOnGross);
         $invoice->update([
@@ -630,6 +634,7 @@ new #[Title('Supplier Invoice')] class extends Component
                                             <input
                                                 type="number"
                                                 x-model.number="row.unit_amount"
+                                                x-on:input="row.gross_override = null"
                                                 data-row-details
                                                 step="0.01"
                                                 min="0"
@@ -639,6 +644,7 @@ new #[Title('Supplier Invoice')] class extends Component
                                         <td class="px-4 py-2.5">
                                             <select
                                                 x-model.boolean="row.vat_applicable"
+                                                x-on:change="row.gross_override = null"
                                                 x-on:focus="$el.showPicker?.()"
                                                 class="w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                             >
@@ -647,7 +653,18 @@ new #[Title('Supplier Invoice')] class extends Component
                                             </select>
                                         </td>
                                         <td class="px-4 py-2.5 text-right">
-                                            <span class="font-mono text-sm" x-text="'£' + lineGross(row).toFixed(2)"></span>
+                                            <div class="flex items-center justify-end gap-2">
+                                                <span x-show="row.gross_override !== null" class="text-xs font-medium text-violet-600 dark:text-violet-400">edited</span>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0"
+                                                    :value="document.activeElement === $el ? $el.value : lineGross(row).toFixed(2)"
+                                                    x-on:input="setGross(row, $event.target.value)"
+                                                    x-on:blur="$el.value = lineGross(row).toFixed(2)"
+                                                    class="w-32 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-right font-mono text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                                />
+                                            </div>
                                         </td>
                                         <td class="px-4 py-2.5">
                                             <flux:button size="xs" variant="ghost" icon="x-mark" type="button" x-on:click="remove(i)" x-show="rows.length > 1" data-row-remove />

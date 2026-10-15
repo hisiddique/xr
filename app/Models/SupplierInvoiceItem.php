@@ -19,6 +19,7 @@ class SupplierInvoiceItem extends Model
         'unit_amount',
         'vat_applicable',
         'line_total',
+        'gross_override',
         'sort_order',
     ];
 
@@ -29,19 +30,31 @@ class SupplierInvoiceItem extends Model
             'unit_amount' => 'decimal:2',
             'vat_applicable' => 'boolean',
             'line_total' => 'decimal:2',
+            'gross_override' => 'decimal:2',
             'sort_order' => 'integer',
         ];
     }
 
-    public function getLineGrossAttribute(): float
+    public function getLineVatAttribute(): float
     {
-        $net = (float) $this->line_total;
         if (! $this->vat_applicable) {
-            return $net;
+            return 0.0;
         }
+
+        $net = (float) $this->line_total;
+
+        if ($this->gross_override !== null) {
+            return round((float) $this->gross_override - $net, 2);
+        }
+
         $rate = (float) Setting::get('vat_rate', 20);
 
-        return round($net + $net * $rate / 100, 2);
+        return round($net * $rate / 100, 2);
+    }
+
+    public function getLineGrossAttribute(): float
+    {
+        return round((float) $this->line_total + $this->line_vat, 2);
     }
 
     public function supplierInvoice(): BelongsTo
