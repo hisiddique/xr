@@ -1614,7 +1614,7 @@ document.addEventListener('alpine:init', () => {
 
         autoGross(row) {
             const net = this.lineNet(row);
-            return row.vat_applicable ? Math.round((net + net * this.vatRate / 100) * 100) / 100 : net;
+            return row.vat_applicable ? Math.round((net + roundCents(net * this.vatRate)) * 100) / 100 : net;
         },
 
         lineGross(row) {

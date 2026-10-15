@@ -31,7 +31,7 @@ class SupplierInvoiceTotalsCalculator
                 $override = data_get($item, 'gross_override');
                 $vat += $override !== null && $override !== ''
                     ? round((float) $override - $lineTotal, 2)
-                    : round($lineTotal * $rate / 100, 2);
+                    : Money::roundDown($lineTotal * $rate / 100);
             }
         }
 

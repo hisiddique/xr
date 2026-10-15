@@ -218,6 +218,14 @@ test('a debit note re-prices the discounted invoice on the reduced net, discount
     expect(round($payable - $deductions[1], 2))->toBe(31.99);
 });
 
+test('line vat is rounded down to the penny', function () {
+    $totals = app(SupplierInvoiceTotalsCalculator::class)
+        ->calculate([['line_total' => 10.03, 'vat_applicable' => true]], 0, false);
+
+    expect($totals['vat'])->toBe(2.0)
+        ->and($totals['gross'])->toBe(12.03);
+});
+
 test('a manual line gross override replaces the calculated vat on that line only', function () {
     $totals = app(SupplierInvoiceTotalsCalculator::class)->calculate([
         ['line_total' => 10.03, 'vat_applicable' => true, 'gross_override' => 12.05],

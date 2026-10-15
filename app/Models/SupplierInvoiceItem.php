@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Money;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -49,7 +50,7 @@ class SupplierInvoiceItem extends Model
 
         $rate = (float) Setting::get('vat_rate', 20);
 
-        return round($net * $rate / 100, 2);
+        return Money::roundDown($net * $rate / 100);
     }
 
     public function getLineGrossAttribute(): float
