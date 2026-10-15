@@ -193,13 +193,17 @@ test('a zero-discount invoice keeps payable equal to gross', function () {
         ->and($invoice->paymentStatus())->toBe(SupplierInvoicePaymentStatus::Unpaid);
 });
 
-test('calculator rounds the trade discount to the nearest penny', function () {
+test('calculator rounds the trade discount down to the penny', function (float $net, float $discount, float $payable) {
     $totals = app(SupplierInvoiceTotalsCalculator::class)
-        ->calculate([['line_total' => 27.20, 'vat_applicable' => false]], 2, false);
+        ->calculate([['line_total' => $net, 'vat_applicable' => false]], 2, false);
 
-    expect($totals['discount'])->toBe(0.54)
-        ->and($totals['payable'])->toBe(26.66);
-});
+    expect($totals['discount'])->toBe($discount)
+        ->and($totals['payable'])->toBe($payable);
+})->with([
+    'below half a penny' => [27.20, 0.54, 26.66],
+    'exactly half a penny' => [27.25, 0.54, 26.71],
+    'above half a penny' => [27.29, 0.54, 26.75],
+]);
 
 test('a debit note re-prices the discounted invoice on the reduced net, discount before VAT', function () {
     $calculator = app(SupplierInvoiceTotalsCalculator::class);

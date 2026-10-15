@@ -1,5 +1,5 @@
-// Keep in step with App\Support\Money::round(); takes a value already in pence.
-const roundCents = (cents) => Math.round(Number(cents.toFixed(6))) / 100;
+// Keep in step with App\Support\Money::roundDown(); takes a value already in pence.
+const roundCents = (cents) => Math.floor(Number(cents.toFixed(6))) / 100;
 
 // Truncate number inputs to 2 decimal places on every keystroke. Registered
 // on the capture phase so it runs before Livewire's own wire:model listener

@@ -88,7 +88,7 @@ new #[Title('Edit Debit Note')] class extends Component {
 
                 $lineValue = $isNote ? 0.0 : round(DocumentTotalsCalculator::lineValue(['quantity' => $qty, 'price' => $price, 'per' => $per]), 2);
                 $net = $isNote ? 0.0 : ($discountPercent > 0 ? round($lineValue * ($discountPercent / 100), 2) : $lineValue);
-                $itemVat = $vatApplicable ? Money::round($net * $this->vatRate / 100) : 0.0;
+                $itemVat = $vatApplicable ? Money::roundDown($net * $this->vatRate / 100) : 0.0;
 
                 $subtotal += $net;
                 $vatAmount += $itemVat;

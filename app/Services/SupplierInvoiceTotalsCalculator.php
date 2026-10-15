@@ -40,7 +40,7 @@ class SupplierInvoiceTotalsCalculator
         $gross = round($net + $vat, 2);
 
         $base = $discountOnGross ? $gross : $net;
-        $discount = Money::round($base * $discountPercent / 100);
+        $discount = Money::roundDown($base * $discountPercent / 100);
         $payable = max(0, round($gross - $discount, 2));
 
         return [
@@ -98,9 +98,9 @@ class SupplierInvoiceTotalsCalculator
             return 0.0;
         }
 
-        $discount = Money::round($net * $percent / 100);
+        $discount = Money::roundDown($net * $percent / 100);
         $vatBase = max(0.0, $vatNet - $discount * $vatNet / $net);
-        $vat = Money::round($vatBase * $rate / 100);
+        $vat = Money::roundDown($vatBase * $rate / 100);
 
         return max(0.0, round($net - $discount + $vat, 2));
     }
