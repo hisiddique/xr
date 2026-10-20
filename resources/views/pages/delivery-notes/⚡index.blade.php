@@ -142,6 +142,10 @@ new #[Title('Delivery Notes')] class extends Component
 
     protected function applyCustomSort(Builder $query, string $column, string $direction): ?Builder
     {
+        if ($column === 'doc_number') {
+            return $query->orderByNumberPart($direction);
+        }
+
         if ($column === 'assignee') {
             return $query->orderBy(
                 User::select('name')->whereColumn('users.id', 'documents.assigned_to'),

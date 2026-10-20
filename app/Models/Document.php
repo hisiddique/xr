@@ -120,6 +120,18 @@ class Document extends Model
         return $query->where('type', DocumentType::CreditNote);
     }
 
+    public function scopeOrderByNumberPart(Builder $query, string $direction = 'asc'): Builder
+    {
+        $direction = strtolower($direction) === 'desc' ? 'desc' : 'asc';
+
+        $int = $query->getConnection()->getDriverName() === 'sqlite' ? 'INTEGER' : 'UNSIGNED';
+        $rest = "SUBSTR(doc_number, INSTR(doc_number, '-') + 1)";
+
+        return $query
+            ->orderByRaw("CAST({$rest} AS {$int}) {$direction}")
+            ->orderByRaw("CASE WHEN INSTR({$rest}, '-') > 0 THEN CAST(SUBSTR({$rest}, INSTR({$rest}, '-') + 1) AS {$int}) ELSE 0 END {$direction}");
+    }
+
     /**
      * The invoice this credit note is raised against.
      */
