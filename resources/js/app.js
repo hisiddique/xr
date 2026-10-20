@@ -1639,7 +1639,11 @@ document.addEventListener('alpine:init', () => {
 
         grossInputValue(row, el) {
             if (document.activeElement === el) return el.value;
-            return this.isBlankLine(row) ? '' : this.lineGross(row).toFixed(2);
+            return this.formatGross(row);
+        },
+
+        formatGross(row) {
+            return this.isBlankLine(row) ? '' : this.lineGross(row);
         },
 
         netFromGross(row, gross) {
