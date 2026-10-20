@@ -584,6 +584,12 @@ new #[Title('Delivery Notes')] class extends Component
                                         @can('deliverynote-edit')
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('delivery-notes.edit', $note)" wire:navigate data-row-action="edit" />
                                         @endcan
+                                        @can('deliverynote-create')
+                                        <form method="POST" action="{{ route('delivery-notes.clone', $note) }}" class="inline">
+                                            @csrf
+                                            <flux:button type="submit" size="xs" variant="ghost" icon="document-duplicate" title="{{ __('Clone') }}" data-row-action="clone" />
+                                        </form>
+                                        @endcan
                                         <span x-data="{ printed: {{ $note->print_count > 0 ? 'true' : 'false' }} }">
                                             <flux:button
                                                 size="xs"

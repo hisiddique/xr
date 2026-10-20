@@ -1633,9 +1633,13 @@ document.addEventListener('alpine:init', () => {
             return row.vat_applicable ? Math.round((this.lineGross(row) - this.lineNet(row)) * 100) / 100 : 0;
         },
 
+        isBlankLine(row) {
+            return (row.unit_amount === '' || row.unit_amount === null) && (row.gross_override === null || row.gross_override === '');
+        },
+
         grossInputValue(row, el) {
-            const formatted = this.lineGross(row).toFixed(2);
-            return document.activeElement === el ? el.value : formatted;
+            if (document.activeElement === el) return el.value;
+            return this.isBlankLine(row) ? '' : this.lineGross(row).toFixed(2);
         },
 
         netFromGross(row, gross) {

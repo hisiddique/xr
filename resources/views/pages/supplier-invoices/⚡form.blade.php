@@ -644,7 +644,7 @@ new #[Title('Supplier Invoice')] class extends Component
                                                 data-row-details
                                                 :value="grossInputValue(row, $el)"
                                                 x-on:input="setGross(row, $event.target.value)"
-                                                x-on:blur="$el.value = lineGross(row).toFixed(2)"
+                                                x-on:blur="$el.value = isBlankLine(row) ? '' : lineGross(row).toFixed(2)"
                                                 class="w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 font-mono text-sm text-zinc-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                             />
                                         </td>

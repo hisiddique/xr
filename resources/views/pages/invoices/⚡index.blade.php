@@ -555,6 +555,10 @@ new #[Title('Invoices')] class extends Component
                                             @endcan
                                             @can('invoice-edit')
                                             <flux:button size="xs" variant="ghost" icon="pencil" :href="route('invoices.edit', $invoice)" wire:navigate data-row-action="edit" />
+                                            <form method="POST" action="{{ route('invoices.clone', $invoice) }}" class="inline">
+                                                @csrf
+                                                <flux:button type="submit" size="xs" variant="ghost" icon="document-duplicate" title="{{ __('Clone') }}" data-row-action="clone" />
+                                            </form>
                                             @endcan
                                             <flux:button size="xs" variant="ghost" icon="arrow-down-tray" :href="route('documents.pdf.download', $invoice)" data-row-action="download" />
                                             <span x-data="{ printed: {{ $invoice->print_count > 0 ? 'true' : 'false' }} }">
