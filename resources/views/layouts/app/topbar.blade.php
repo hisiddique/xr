@@ -238,7 +238,7 @@
                         @endcanany
 
                         {{-- Operations dropdown --}}
-                        @canany(['statementdispatch-view', 'export-index', 'settings-archive', 'settings-legacyMigration'])
+                        @canany(['statementdispatch-view', 'export-index', 'settings-archive', 'settings-legacyMigration', 'settings-troubleshooting'])
                         <flux:dropdown>
                             <button
                                 type="button"
@@ -268,6 +268,9 @@
                                 @endcan
                                 @can('settings-legacyMigration')
                                 <flux:menu.item :href="route('settings.legacy-migration')" icon="circle-stack" wire:navigate>Legacy Migration</flux:menu.item>
+                                @endcan
+                                @can('settings-troubleshooting')
+                                <flux:menu.item :href="route('settings.troubleshooting')" icon="wrench-screwdriver" wire:navigate>Troubleshooting</flux:menu.item>
                                 @endcan
                             </flux:menu>
                         </flux:dropdown>
@@ -865,7 +868,7 @@
                                 </a>
                             </li>
                             @endcan
-                            @canany(['statementdispatch-view', 'export-index', 'settings-archive', 'settings-legacyMigration'])
+                            @canany(['statementdispatch-view', 'export-index', 'settings-archive', 'settings-legacyMigration', 'settings-troubleshooting'])
                             <li class="pt-2">
                                 <p class="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Operations</p>
                             </li>
@@ -946,6 +949,22 @@
                                 >
                                     <flux:icon.circle-stack class="size-5 shrink-0" />
                                     Legacy Migration
+                                </a>
+                            </li>
+                            @endcan
+                            @can('settings-troubleshooting')
+                            <li>
+                                <a
+                                    href="{{ route('settings.troubleshooting') }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('settings.troubleshooting'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('settings.troubleshooting'),
+                                    ])
+                                >
+                                    <flux:icon.wrench-screwdriver class="size-5 shrink-0" />
+                                    Troubleshooting
                                 </a>
                             </li>
                             @endcan

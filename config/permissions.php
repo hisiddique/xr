@@ -121,7 +121,7 @@ return [
             ],
             'settings' => [
                 'label' => 'Settings',
-                'actions' => ['crm', 'legacyMigration', 'archive'],
+                'actions' => ['crm', 'legacyMigration', 'archive', 'troubleshooting'],
             ],
         ],
     ],
