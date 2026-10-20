@@ -1942,6 +1942,19 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 
+    window.Alpine.data('cloneConfirm', () => ({
+        url: '',
+        number: '',
+        label: '',
+
+        open(detail) {
+            this.url = detail.url;
+            this.number = detail.number;
+            this.label = detail.label;
+            this.$flux.modal('clone-confirm').show();
+        },
+    }));
+
     window.Alpine.data('exitConfirmNav', (modalName = 'exit-confirm') => ({
         selected: 0,
 

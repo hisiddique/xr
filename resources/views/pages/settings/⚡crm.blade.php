@@ -35,6 +35,8 @@ new #[Title('CRM Settings')] class extends Component {
     public string $dn_start_number = '1';
     public string $cn_start_number = '1';
     public string $app_font_size = '18';
+    public bool $clone_invoices_enabled = true;
+    public bool $clone_delivery_notes_enabled = true;
     public $logo = null;
 
     public function mount(): void
@@ -63,6 +65,8 @@ new #[Title('CRM Settings')] class extends Component {
         $this->dn_start_number = (string) Setting::get('dn_start_number', '1');
         $this->cn_start_number = (string) Setting::get('cn_start_number', '1');
         $this->app_font_size = (string) Setting::get('app_font_size', 18);
+        $this->clone_invoices_enabled = (bool) Setting::get('clone_invoices_enabled', true);
+        $this->clone_delivery_notes_enabled = (bool) Setting::get('clone_delivery_notes_enabled', true);
     }
 
     public function save(): void
@@ -132,6 +136,8 @@ new #[Title('CRM Settings')] class extends Component {
         Setting::set('dn_start_number', $this->dn_start_number, 'integer');
         Setting::set('cn_start_number', $this->cn_start_number, 'integer');
         Setting::set('app_font_size', $this->app_font_size, 'integer');
+        Setting::set('clone_invoices_enabled', $this->clone_invoices_enabled ? '1' : '0', 'boolean');
+        Setting::set('clone_delivery_notes_enabled', $this->clone_delivery_notes_enabled ? '1' : '0', 'boolean');
 
         $this->dispatch('font-size-saved', size: (int) $this->app_font_size);
 
@@ -292,6 +298,13 @@ new #[Title('CRM Settings')] class extends Component {
                     &middot;
                     {{ strtoupper($inv_prefix).'-'.str_pad($dn_start_number ?: '1', (int) $number_padding, '0', STR_PAD_LEFT) }}
                 </p>
+                <flux:fieldset>
+                    <flux:legend>{{ __('Allow Cloning') }}</flux:legend>
+                    <div class="flex flex-wrap gap-x-8 gap-y-3">
+                        <flux:switch wire:model="clone_invoices_enabled" :label="__('Invoice')" />
+                        <flux:switch wire:model="clone_delivery_notes_enabled" :label="__('Delivery note')" />
+                    </div>
+                </flux:fieldset>
             </div>
         </div>
 

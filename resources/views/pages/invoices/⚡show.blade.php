@@ -107,12 +107,9 @@ new #[Title('Invoice')] class extends Component
                         View PDF
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">p</kbd>
                     </flux:button>
-                    @can('invoice-edit')
-                    <form method="POST" action="{{ route('invoices.clone', $document) }}" class="inline">
-                        @csrf
-                        <flux:button type="submit" variant="ghost" icon="document-duplicate" size="sm">Clone</flux:button>
-                    </form>
-                    @endcan
+                    @if(auth()->user()->can('invoice-edit') && \App\Models\Setting::get('clone_invoices_enabled', true))
+                    <flux:button type="button" variant="ghost" icon="document-duplicate" size="sm" x-on:click="$dispatch('clone-confirm', { url: '{{ route('invoices.clone', $document) }}', number: '{{ $document->doc_number }}', label: 'invoice' })">Clone</flux:button>
+                    @endif
                     <flux:button
                         variant="primary"
                         icon="envelope"
@@ -319,5 +316,7 @@ new #[Title('Invoice')] class extends Component
     </div>
 
     <livewire:pages::documents.email-modal :document="$document" :key="'email-'.$document->id" />
+
+    <x-ui.clone-confirm-modal />
 
 </div>

@@ -559,10 +559,9 @@ new #[Title('Invoices')] class extends Component
                                             @endcan
                                             @can('invoice-edit')
                                             <flux:button size="xs" variant="ghost" icon="pencil" :href="route('invoices.edit', $invoice)" wire:navigate data-row-action="edit" />
-                                            <form method="POST" action="{{ route('invoices.clone', $invoice) }}" class="inline">
-                                                @csrf
-                                                <flux:button type="submit" size="xs" variant="ghost" icon="document-duplicate" title="{{ __('Clone') }}" data-row-action="clone" />
-                                            </form>
+                                            @if(\App\Models\Setting::get('clone_invoices_enabled', true))
+                                            <flux:button type="button" size="xs" variant="ghost" icon="document-duplicate" title="{{ __('Clone') }}" data-row-action="clone" x-on:click="$dispatch('clone-confirm', { url: '{{ route('invoices.clone', $invoice) }}', number: '{{ $invoice->doc_number }}', label: 'invoice' })" />
+                                            @endif
                                             @endcan
                                             <flux:button size="xs" variant="ghost" icon="arrow-down-tray" :href="route('documents.pdf.download', $invoice)" data-row-action="download" />
                                             <span x-data="{ printed: {{ $invoice->print_count > 0 ? 'true' : 'false' }} }">
@@ -670,5 +669,7 @@ new #[Title('Invoices')] class extends Component
             :autoOpen="true"
             :key="'email-'.$emailingDocumentId" />
     @endif
+
+    <x-ui.clone-confirm-modal />
 
 </div>

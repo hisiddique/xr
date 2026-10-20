@@ -52,6 +52,65 @@ test('cloning an invoice picks a sequence free in both the delivery note and inv
         ->and(Document::deliveryNotes()->pluck('doc_number')->all())->toContain('DN-0098');
 });
 
+test('cloning an invoice is blocked when invoice cloning is disabled', function () {
+    $user = User::factory()->admin()->create(['email_verified_at' => now()]);
+    $source = Document::factory()->invoice()
+        ->for(Customer::factory()->create(), 'customer')
+        ->has(DocumentItem::factory(), 'items')
+        ->create();
+    Setting::set('clone_invoices_enabled', '0', 'boolean');
+
+    $response = $this->actingAs($user)->post(route('invoices.clone', $source));
+
+    $response->assertSessionHas('error', 'Cloning invoices is disabled.');
+    expect(Document::invoices()->count())->toBe(1)
+        ->and(Document::deliveryNotes()->count())->toBe(0);
+});
+
+test('cloning a delivery note is blocked when delivery note cloning is disabled', function () {
+    $user = User::factory()->admin()->create(['email_verified_at' => now()]);
+    $source = Document::factory()->deliveryNote()
+        ->for(Customer::factory()->create(), 'customer')
+        ->has(DocumentItem::factory(), 'items')
+        ->create();
+    Setting::set('clone_delivery_notes_enabled', '0', 'boolean');
+
+    $response = $this->actingAs($user)->post(route('delivery-notes.clone', $source));
+
+    $response->assertSessionHas('error', 'Cloning delivery notes is disabled.');
+    expect(Document::deliveryNotes()->count())->toBe(1);
+});
+
+test('cloning a delivery note flashes the clone message and source number', function () {
+    $user = User::factory()->admin()->create(['email_verified_at' => now()]);
+    $source = Document::factory()->deliveryNote()
+        ->for(Customer::factory()->create(), 'customer')
+        ->has(DocumentItem::factory(), 'items')
+        ->create();
+
+    $response = $this->actingAs($user)->post(route('delivery-notes.clone', $source));
+
+    $clone = Document::deliveryNotes()->where('id', '!=', $source->id)->sole();
+
+    $response->assertSessionHas('success', "Delivery note {$clone->doc_number} cloned from {$source->doc_number}.")
+        ->assertSessionHas('cloned_from', $source->doc_number);
+});
+
+test('cloning an invoice flashes the clone message and source number', function () {
+    $user = User::factory()->admin()->create(['email_verified_at' => now()]);
+    $source = Document::factory()->invoice()
+        ->for(Customer::factory()->create(), 'customer')
+        ->has(DocumentItem::factory(), 'items')
+        ->create();
+
+    $response = $this->actingAs($user)->post(route('invoices.clone', $source));
+
+    $clone = Document::invoices()->where('id', '!=', $source->id)->sole();
+
+    $response->assertSessionHas('success', "Invoice {$clone->doc_number} cloned from {$source->doc_number}.")
+        ->assertSessionHas('cloned_from', $source->doc_number);
+});
+
 test('cloning an invoice creates a paired delivery note and a new invoice with the same sequence', function () {
     $user = User::factory()->admin()->create(['email_verified_at' => now()]);
     $source = Document::factory()->invoice()

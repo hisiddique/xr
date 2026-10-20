@@ -21,6 +21,7 @@ new #[Title('Edit Invoice')] class extends Component {
     public array $users = [];
     public bool $emailAfterSave = false;
     public ?string $conversionNotice = null;
+    public ?string $clonedFrom = null;
 
     public function mount(): void
     {
@@ -42,6 +43,8 @@ new #[Title('Edit Invoice')] class extends Component {
         if (session()->has('success')) {
             $this->conversionNotice = session('success');
         }
+
+        $this->clonedFrom = session('cloned_from');
     }
 
     public function save(): void
@@ -134,7 +137,7 @@ new #[Title('Edit Invoice')] class extends Component {
     @endif
 
     <x-ui.page-header
-        :title="'Edit: '.$document->doc_number"
+        :title="($this->clonedFrom ? 'Clone: ' : 'Edit: ').$document->doc_number"
         subtitle="Update the invoice details and line items."
     >
         <x-slot:action>
