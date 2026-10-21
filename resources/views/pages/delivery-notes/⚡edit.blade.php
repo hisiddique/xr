@@ -23,8 +23,6 @@ new #[Title('Edit Delivery Note')] class extends Component {
     public array $items = [];
     public array $units = [];
     public array $users = [];
-    public ?string $conversionNotice = null;
-    public ?string $clonedFrom = null;
 
     public function mount(): void
     {
@@ -45,12 +43,6 @@ new #[Title('Edit Delivery Note')] class extends Component {
         ])->toArray();
         $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
         $this->users = \App\Models\User::orderBy('name')->get(['id', 'name', 'status'])->toArray();
-
-        if (session()->has('success')) {
-            $this->conversionNotice = session('success');
-        }
-
-        $this->clonedFrom = session('cloned_from');
     }
 
     public function save(): void
@@ -114,25 +106,8 @@ new #[Title('Edit Delivery Note')] class extends Component {
 
 <div class="flex flex-col gap-4">
 
-    @if($this->conversionNotice)
-        <div
-            x-data="{ show: true }"
-            x-show="show"
-            class="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-500/20 dark:bg-emerald-500/10"
-        >
-            <flux:icon.check-circle class="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            <span class="flex-1 text-sm text-emerald-800 dark:text-emerald-300">{{ $this->conversionNotice }}</span>
-            <button
-                type="button"
-                x-on:click="show = false"
-                class="text-emerald-500 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-200"
-                aria-label="Dismiss"
-            >&times;</button>
-        </div>
-    @endif
-
     <x-ui.page-header
-        :title="($this->clonedFrom ? 'Clone: ' : 'Edit: ').$document->doc_number"
+        :title="'Edit: '.$document->doc_number"
         subtitle="Update the delivery note details and line items."
     >
         <x-slot:action>

@@ -1,7 +1,5 @@
 <?php
 
-use App\Http\Controllers\CloneDeliveryNoteController;
-use App\Http\Controllers\CloneInvoiceController;
 use App\Http\Controllers\ConvertDeliveryNoteController;
 use App\Http\Controllers\CustomerOutstandingExportController;
 use App\Http\Controllers\CustomerStatementController;
@@ -48,13 +46,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('delivery-notes/{document}/edit', 'pages::delivery-notes.edit')->name('delivery-notes.edit')->middleware('can:deliverynote-edit');
     Route::livewire('delivery-notes/{document}', 'pages::delivery-notes.show')->name('delivery-notes.show')->middleware('can:deliverynote-show');
     Route::post('delivery-notes/{document}/convert', ConvertDeliveryNoteController::class)->name('delivery-notes.convert')->middleware('can:deliverynote-convert');
-    Route::post('delivery-notes/{document}/clone', CloneDeliveryNoteController::class)->name('delivery-notes.clone')->middleware('can:deliverynote-create');
+    Route::livewire('delivery-notes/{document}/clone', 'pages::delivery-notes.create')->name('delivery-notes.clone')->middleware('can:deliverynote-create');
 
     // Invoices
     Route::livewire('invoices', 'pages::invoices.index')->name('invoices.index')->middleware('can:invoice-index');
     Route::livewire('invoices/{document}/edit', 'pages::invoices.edit')->name('invoices.edit')->middleware('can:invoice-edit');
     Route::livewire('invoices/{document}', 'pages::invoices.show')->name('invoices.show')->middleware('can:invoice-show');
-    Route::post('invoices/{document}/clone', CloneInvoiceController::class)->name('invoices.clone')->middleware('can:invoice-edit');
+    Route::livewire('invoices/{document}/clone', 'pages::invoices.clone')->name('invoices.clone')->middleware('can:invoice-edit');
 
     // Document Search
     Route::livewire('document-search', 'pages::document-search.index')->name('document-search.index')->middleware('can:documentsearch-index');

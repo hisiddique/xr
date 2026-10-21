@@ -6,6 +6,7 @@ use App\DocumentStatus;
 use App\DocumentType;
 use App\Models\Document;
 use App\Services\DocumentNumberGenerator;
+use App\Services\DocumentTotalsCalculator;
 use DomainException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -14,31 +15,45 @@ class CloneInvoice
 {
     public function __construct(
         private DocumentNumberGenerator $numberGenerator,
+        private DocumentTotalsCalculator $totalsCalculator,
     ) {}
 
     /**
-     * Clone an invoice together with a fresh paired delivery note.
+     * Create a paired delivery note and invoice from the submitted clone form.
+     *
+     * @param  array{doc_date: string, order_no?: string|null, assigned_to?: int|string|null}  $attributes
+     * @param  array<int, array{details?: string|null, is_note?: bool, quantity?: float|string, price?: float|string, per?: string|null}>  $items
      *
      * @throws DomainException
      */
-    public function handle(Document $source): Document
+    public function handle(Document $source, array $attributes, array $items): Document
     {
         if ($source->type !== DocumentType::Invoice) {
             throw new DomainException('Only invoices can be cloned.');
         }
 
-        return DB::transaction(function () use ($source) {
-            $source->loadMissing('items');
-
+        return DB::transaction(function () use ($source, $attributes, $items) {
             $createdBy = Auth::id() ?? $source->created_by;
 
-            $money = [
-                'subtotal' => $source->subtotal,
-                'trade_discount' => $source->trade_discount,
-                'discount_amount' => $source->discount_amount,
-                'vat_amount' => $source->vat_amount,
-                'vat_rate' => $source->vat_rate,
-                'total_value' => $source->total_value,
+            $totals = $this->totalsCalculator->calculate(
+                collect($items),
+                $source->customer,
+                $source->vat_rate !== null ? (float) $source->vat_rate : null,
+            );
+
+            $shared = [
+                'customer_id' => $source->customer_id,
+                'doc_date' => $attributes['doc_date'],
+                'order_no' => ($attributes['order_no'] ?? null) ?: null,
+                'show_pricing' => true,
+                'created_by' => $createdBy,
+                'assigned_to' => $attributes['assigned_to'] ?? null,
+                'subtotal' => $totals['subtotal'],
+                'trade_discount' => $totals['discount'],
+                'discount_amount' => $totals['discount_amount'],
+                'vat_amount' => $totals['vat'],
+                'vat_rate' => $totals['vat_rate'],
+                'total_value' => $totals['total'],
             ];
 
             $sequence = max(
@@ -55,51 +70,49 @@ class CloneInvoice
 
             /** @var Document $deliveryNote */
             $deliveryNote = Document::create([
-                'customer_id' => $source->customer_id,
+                ...$shared,
                 'type' => DocumentType::DeliveryNote,
                 'doc_number' => $this->numberGenerator->numberForConversion('DN', $sequence),
-                'doc_date' => now()->toDateString(),
-                'order_no' => $source->order_no,
-                'show_pricing' => true,
                 'status' => DocumentStatus::Converted,
-                'created_by' => $createdBy,
-                'assigned_to' => $source->assigned_to,
-                ...$money,
             ]);
-            $this->copyItems($source, $deliveryNote);
+            $this->createItems($deliveryNote, $items);
 
             /** @var Document $invoice */
             $invoice = Document::create([
-                'customer_id' => $source->customer_id,
+                ...$shared,
                 'type' => DocumentType::Invoice,
                 'doc_number' => $this->numberGenerator->numberForConversion('INV', $sequence),
-                'doc_date' => now()->toDateString(),
-                'order_no' => $source->order_no,
-                'show_pricing' => true,
                 'status' => DocumentStatus::Active,
-                'created_by' => $createdBy,
-                'assigned_to' => $source->assigned_to,
                 'converted_from_id' => $deliveryNote->id,
-                ...$money,
             ]);
-            $this->copyItems($source, $invoice);
+            $this->createItems($invoice, $items);
 
             return $invoice;
         });
     }
 
-    private function copyItems(Document $source, Document $target): void
+    /**
+     * @param  array<int, array<string, mixed>>  $items
+     */
+    private function createItems(Document $target, array $items): void
     {
-        foreach ($source->items as $item) {
+        foreach ($items as $item) {
+            $isNote = ! empty($item['is_note']);
+            $quantity = $isNote ? 0 : (float) ($item['quantity'] ?? 0);
+            $price = $isNote ? 0 : (float) ($item['price'] ?? 0);
+            $per = $isNote ? null : (($item['per'] ?? null) ?: null);
+
             $target->items()->create([
-                'details' => $item->details,
-                'is_note' => $item->is_note,
-                'quantity' => $item->quantity,
-                'price' => $item->price,
-                'per' => $item->per,
-                'line_value' => $item->line_value,
-                'discount_percent' => $item->discount_percent,
-                'net_value' => $item->net_value,
+                'details' => $item['details'] ?? null,
+                'is_note' => $isNote,
+                'quantity' => $quantity,
+                'price' => $price,
+                'per' => $per,
+                'line_value' => $isNote ? 0 : round(DocumentTotalsCalculator::lineValue([
+                    'quantity' => $quantity,
+                    'price' => $price,
+                    'per' => $per,
+                ]), 2),
             ]);
         }
     }

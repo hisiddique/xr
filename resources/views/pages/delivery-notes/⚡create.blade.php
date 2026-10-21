@@ -1,9 +1,11 @@
 <?php
 
+use App\DocumentType;
 use App\Livewire\Concerns\ValidatesDocumentItems;
 use App\Models\Customer;
 use App\Models\Document;
 use App\Models\LookupUnit;
+use App\Models\Setting;
 use App\Services\DocumentNumberGenerator;
 use App\Services\DocumentTotalsCalculator;
 use Flux\Flux;
@@ -23,8 +25,10 @@ new #[Title('New Delivery Note')] class extends Component {
     public array $items = [];
     public array $units = [];
     public array $users = [];
+    public ?string $clonedFrom = null;
+    public ?int $cloneSourceId = null;
 
-    public function mount(): void
+    public function mount(?Document $document = null): void
     {
         $this->doc_date = now()->format('Y-m-d');
         $this->assigned_to = Auth::id();
@@ -35,7 +39,29 @@ new #[Title('New Delivery Note')] class extends Component {
         $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
         $this->users = \App\Models\User::orderBy('name')->get(['id', 'name', 'status'])->toArray();
 
-        // Pre-select customer from query string
+        if ($document?->exists) {
+            abort_unless($document->type === DocumentType::DeliveryNote, 404);
+            abort_unless(Setting::get('clone_delivery_notes_enabled', true), 403);
+
+            $this->clonedFrom = $document->doc_number;
+            $this->cloneSourceId = $document->id;
+            $this->customer_id = $document->customer_id;
+            $this->customerName = $document->customer?->typeahead_label ?? '';
+            $this->order_no = $document->order_no ?? '';
+            $this->assigned_to = $document->assigned_to;
+            $this->assigneeName = $document->assignee?->name ?? '';
+            $this->show_pricing = (bool) $document->show_pricing;
+            $this->items = $document->items->map(fn ($item) => [
+                'details' => $item->details,
+                'is_note' => (bool) $item->is_note,
+                'quantity' => (string) $item->quantity,
+                'price' => (string) $item->price,
+                'per' => $item->per ?? '',
+            ])->values()->toArray();
+
+            return;
+        }
+
         if (request()->has('customer_id')) {
             $this->customer_id = (int) request('customer_id');
             if ($customer = Customer::find($this->customer_id)) {
@@ -68,12 +94,21 @@ new #[Title('New Delivery Note')] class extends Component {
         }
         $document = $this->persistDocument();
 
-        Flux::toast(
-            heading: __('Delivery Note Created'),
-            text: __('Delivery note :number was created successfully.', ['number' => $document->doc_number]),
-            variant: 'success',
-            duration: 0,
-        );
+        if ($this->clonedFrom) {
+            Flux::toast(
+                heading: __('Delivery Note Cloned'),
+                text: __('Delivery note :number cloned from :source.', ['number' => $document->doc_number, 'source' => $this->clonedFrom]),
+                variant: 'success',
+                duration: 0,
+            );
+        } else {
+            Flux::toast(
+                heading: __('Delivery Note Created'),
+                text: __('Delivery note :number was created successfully.', ['number' => $document->doc_number]),
+                variant: 'success',
+                duration: 0,
+            );
+        }
 
         $target = match ($action) {
             'print', 'email', 'emailprint' => route('delivery-notes.show', ['document' => $document, 'do' => $action]),
@@ -152,11 +187,11 @@ new #[Title('New Delivery Note')] class extends Component {
 <div class="flex flex-col gap-4">
 
     <x-ui.page-header
-        title="New Delivery Note"
-        subtitle="Create a delivery document for a customer."
+        :title="$clonedFrom ? 'Clone: '.$clonedFrom : 'New Delivery Note'"
+        :subtitle="$clonedFrom ? 'Review the copy, then submit to create a new delivery note.' : 'Create a delivery document for a customer.'"
     >
         <x-slot:action>
-            <flux:button variant="ghost" icon="arrow-left" :href="route('delivery-notes.index')" wire:navigate>
+            <flux:button variant="ghost" icon="arrow-left" :href="$cloneSourceId ? route('delivery-notes.show', $cloneSourceId) : route('delivery-notes.index')" wire:navigate>
                 Back
             </flux:button>
         </x-slot:action>
@@ -165,7 +200,7 @@ new #[Title('New Delivery Note')] class extends Component {
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
 
     <form
-        x-data="lineItemForm(@js($items), @js($this->units), '{{ route('delivery-notes.index') }}')"
+        x-data="lineItemForm(@js($items), @js($this->units), '{{ $cloneSourceId ? route('delivery-notes.show', $cloneSourceId) : route('delivery-notes.index') }}')"
         x-on:submit.prevent="submit()"
         x-on:keydown="handleKey($event)"
         x-on:fkey-add-note.window="addNote()"
@@ -312,7 +347,7 @@ new #[Title('New Delivery Note')] class extends Component {
 
         {{-- Form actions --}}
         <div class="flex items-center justify-end gap-3 rounded-2xl border border-zinc-200/70 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.06)] dark:border-white/10 dark:bg-zinc-900">
-            <x-ui.back-button :fallback="route('delivery-notes.index')" confirm data-form-nav />
+            <x-ui.back-button :fallback="$cloneSourceId ? route('delivery-notes.show', $cloneSourceId) : route('delivery-notes.index')" confirm data-form-nav />
             <flux:button variant="primary" type="submit" data-form-nav>Create Delivery Note</flux:button>
         </div>
     </form>
