@@ -151,6 +151,7 @@ new #[Title('Document Search')] class extends Component
             ->when($this->dateFrom, fn ($q) => $q->whereHas('document', fn ($q) => $q->whereDate('doc_date', '>=', $this->dateFrom)))
             ->when($this->dateTo, fn ($q) => $q->whereHas('document', fn ($q) => $q->whereDate('doc_date', '<=', $this->dateTo)))
             ->with(['document.customer', 'document.assignee'])
+            ->when($term !== '', fn ($q) => Search::rankStartsWithFirst($q, $term, ['details']))
             ->orderByDesc('id')
             ->paginate($this->perPage);
     }

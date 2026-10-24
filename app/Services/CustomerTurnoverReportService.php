@@ -136,7 +136,9 @@ class CustomerTurnoverReportService
         $includeOutstanding = ! empty($filters['includeOutstanding']);
         $search = trim((string) ($filters['search'] ?? ''));
 
-        if ($search !== '' && ! in_array($column, ['company_name', 'invoice_count', 'total', 'outstanding'], true)) {
+        $isDefaultSort = $column === 'total' && $direction === 'desc';
+
+        if ($search !== '' && ($isDefaultSort || ! in_array($column, ['company_name', 'invoice_count', 'total', 'outstanding'], true))) {
             Search::rankStartsWithFirst($query, $search, ['company_name', 'reference']);
         }
 

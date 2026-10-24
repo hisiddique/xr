@@ -2,7 +2,12 @@
 
 use App\Models\Customer;
 use App\Models\Document;
+use App\Models\DocumentItem;
+use App\Models\Supplier;
+use App\Models\SupplierInvoice;
 use App\Models\User;
+use App\Services\CustomerTurnoverReportService;
+use App\Services\SupplierPurchasingReportService;
 use App\Support\Search;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -75,4 +80,68 @@ test('typeahead returns starts-with matches first, then contains matches', funct
         ->instance()->suggestions;
 
     expect(collect($labels)->pluck('label')->all())->toBe(['Acme Ltd', 'Big Acme']);
+});
+
+test('customer column filters match anywhere but list starts-with matches first', function () {
+    $this->actingAs(User::factory()->admin()->create(['email_verified_at' => now()]));
+
+    Customer::factory()->create(['company_name' => 'Ordchard Plumbing']);
+    Customer::factory()->create(['company_name' => 'Redcroft Forge']);
+    Customer::factory()->create(['company_name' => 'DCS Construction']);
+    Customer::factory()->create(['company_name' => 'DC Brickwork']);
+    Customer::factory()->create(['company_name' => 'Unrelated']);
+
+    $names = Livewire\Livewire::test('pages::customers.index')
+        ->set('filters.company', 'dc')
+        ->instance()->customers->pluck('company_name')->all();
+
+    expect(array_slice($names, 0, 2))->toEqualCanonicalizing(['DCS Construction', 'DC Brickwork'])
+        ->and($names)->toContain('Ordchard Plumbing', 'Redcroft Forge')
+        ->and($names)->not->toContain('Unrelated');
+});
+
+test('turnover report search lists starts-with matches first on the default sort and keeps an explicit sort', function () {
+    $service = app(CustomerTurnoverReportService::class);
+
+    foreach (['Zed Acme' => 500, 'Acme Zulu' => 100, 'Acme Alpha' => 50] as $name => $total) {
+        $customer = Customer::factory()->create(['company_name' => $name]);
+        Document::factory()->invoice()->create(['customer_id' => $customer->id, 'total_value' => $total, 'doc_date' => now()]);
+    }
+
+    $names = fn (array $filters) => $service->customersQuery($filters)->pluck('company_name')->all();
+
+    expect($names(['search' => 'acme', 'sortColumn' => 'total', 'sortDirection' => 'desc']))->toBe(['Acme Zulu', 'Acme Alpha', 'Zed Acme'])
+        ->and($names(['search' => 'acme', 'sortColumn' => 'total', 'sortDirection' => 'asc']))->toBe(['Acme Alpha', 'Acme Zulu', 'Zed Acme'])
+        ->and($names(['search' => 'acme', 'sortColumn' => 'company_name', 'sortDirection' => 'asc']))->toBe(['Acme Alpha', 'Acme Zulu', 'Zed Acme']);
+});
+
+test('supplier purchasing report lists starts-with suppliers and invoices first on the default sort', function () {
+    $service = app(SupplierPurchasingReportService::class);
+
+    foreach (['Zed Acme', 'Acme Zulu', 'Acme Alpha'] as $name) {
+        $supplier = Supplier::factory()->create(['company_name' => $name]);
+        SupplierInvoice::factory()->create(['supplier_id' => $supplier->id, 'status' => 'posted']);
+    }
+
+    $names = fn (array $filters) => $service->suppliersQuery($filters)->get()->pluck('company_name')->all();
+
+    expect($names(['search' => 'acme']))->toBe(['Acme Alpha', 'Acme Zulu', 'Zed Acme'])
+        ->and($names(['search' => 'acme', 'sortBy' => 'company_name', 'sortDirection' => 'desc']))->toBe(['Zed Acme', 'Acme Zulu', 'Acme Alpha']);
+});
+
+test('document search lists details that start with the term first', function () {
+    $this->actingAs(User::factory()->admin()->create(['email_verified_at' => now()]));
+    $customer = Customer::factory()->create();
+    $document = Document::factory()->invoice()->create(['customer_id' => $customer->id]);
+
+    foreach (['Large Widget', 'Widget Small', 'Widget Large'] as $details) {
+        DocumentItem::factory()->create(['document_id' => $document->id, 'details' => $details, 'is_note' => false]);
+    }
+
+    $details = Livewire\Livewire::test('pages::document-search.index')
+        ->set('search', 'widget')
+        ->instance()->items()->pluck('details')->all();
+
+    expect(array_slice($details, 0, 2))->toEqualCanonicalizing(['Widget Small', 'Widget Large'])
+        ->and($details[2])->toBe('Large Widget');
 });

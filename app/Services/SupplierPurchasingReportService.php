@@ -169,14 +169,25 @@ class SupplierPurchasingReportService
             ? $filters['sortBy']
             : 'company_name';
         $sortDirection = ($filters['sortDirection'] ?? 'asc') === 'desc' ? 'desc' : 'asc';
+        $search = trim((string) ($filters['search'] ?? ''));
+        $isDefaultSort = $sortBy === 'company_name' && $sortDirection === 'asc';
 
         $query = Supplier::query()
             ->whereHas('supplierInvoices', fn ($q) => $this->applyFilters($q, $filters))
             ->when($filters['supplierId'] ?? null, fn ($q, $id) => $q->where('id', $id))
-            ->with(['supplierInvoices' => function ($q) use ($filters, $sortBy, $sortDirection) {
+            ->with(['supplierInvoices' => function ($q) use ($filters, $sortBy, $sortDirection, $search) {
                 $this->applyFilters($q, $filters)->with(['items', 'payoutAllocations', 'debitNotes']);
+
+                if ($search !== '' && $sortBy === 'company_name') {
+                    Search::rankStartsWithFirst($q->getQuery(), $search, ['supplier_invoice_no', 'supplier_ref_invoice_no']);
+                }
+
                 $this->applyInvoiceSort($q, $sortBy, $sortDirection);
             }]);
+
+        if ($search !== '' && $isDefaultSort) {
+            Search::rankStartsWithFirst($query, $search, ['company_name', 'reference']);
+        }
 
         return $sortBy === 'company_name'
             ? $query->orderBy('company_name', $sortDirection)

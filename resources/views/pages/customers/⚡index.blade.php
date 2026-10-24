@@ -61,7 +61,21 @@ new #[Title('Customers')] class extends Component {
             ->when($this->filters['email'], fn ($q, $v) => Search::filter($q, $v, ['email_1']))
             ->when($this->filters['contact'], fn ($q, $v) => Search::filter($q, $v, ['first_name', 'last_name', 'title.name']))
             ->when($this->filters['vat'] !== '', fn ($q) => $q->where('vat_registered', (bool) $this->filters['vat']))
-            ->when($this->search !== '' && $this->sortColumn === '', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['company_name', 'reference', 'email_1']));
+            ->when($this->search !== '' && $this->sortColumn === '', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['company_name', 'reference', 'email_1']))
+            ->when($this->sortColumn === '', function ($q) {
+                $filterColumns = [
+                    'reference' => ['reference'],
+                    'company' => ['company_name'],
+                    'email' => ['email_1'],
+                    'contact' => ['first_name', 'last_name', 'title.name'],
+                ];
+
+                foreach ($filterColumns as $key => $columns) {
+                    if ($this->filters[$key] !== '') {
+                        Search::rankStartsWithFirst($q, $this->filters[$key], $columns);
+                    }
+                }
+            });
 
         return $this->sortColumn === ''
             ? $this->applySort($query)->latest('id')->paginate($this->perPage)

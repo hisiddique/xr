@@ -58,7 +58,14 @@ new #[Title('Suppliers')] class extends Component {
             ->when($this->filters['reference'], fn ($q, $v) => Search::filter($q, $v, ['reference']))
             ->when($this->filters['company'], fn ($q, $v) => Search::filter($q, $v, ['company_name']))
             ->when($this->filters['vat'] !== '', fn ($q) => $q->where('vat_applied', (bool) $this->filters['vat']))
-            ->when($this->search !== '' && $this->sortColumn === '', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['company_name', 'reference']));
+            ->when($this->search !== '' && $this->sortColumn === '', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['company_name', 'reference']))
+            ->when($this->sortColumn === '', function ($q) {
+                foreach (['reference' => 'reference', 'company' => 'company_name'] as $key => $column) {
+                    if ($this->filters[$key] !== '') {
+                        Search::rankStartsWithFirst($q, $this->filters[$key], [$column]);
+                    }
+                }
+            });
 
         return $this->sortColumn === ''
             ? $this->applySort($query)->latest('id')->paginate($this->perPage)
