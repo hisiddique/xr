@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\SupplierDebitNote;
+use App\Support\Search;
 use App\Traits\WithPerPage;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -86,15 +87,12 @@ new #[Title('Supplier Debit Notes')] class extends Component {
     public function debitNotes()
     {
         return SupplierDebitNote::with(['supplier', 'supplierInvoice'])
-            ->when($this->search, fn ($q) => $q->where(fn ($q2) =>
-                $q2->where('reference', 'like', '%'.$this->search.'%')
-                   ->orWhereHas('supplier', fn ($s) => $s->where('company_name', 'like', '%'.$this->search.'%'))
-                   ->orWhereHas('supplierInvoice', fn ($i) => $i->where('supplier_ref_invoice_no', 'like', '%'.$this->search.'%'))
-            ))
+            ->when($this->search, fn ($q) => Search::filter($q, $this->search, ['reference', 'supplier.company_name', 'supplierInvoice.supplier_ref_invoice_no']))
             ->when($this->dateFrom, fn ($q) => $q->whereDate('doc_date', '>=', $this->dateFrom))
             ->when($this->dateTo, fn ($q) => $q->whereDate('doc_date', '<=', $this->dateTo))
             ->when($this->amountMin !== '', fn ($q) => $q->where('total', '>=', $this->amountMin))
             ->when($this->amountMax !== '', fn ($q) => $q->where('total', '<=', $this->amountMax))
+            ->when($this->search !== '' && $this->sortBy === 'reference' && $this->sortDir === 'desc', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['reference', 'supplier.company_name', 'supplierInvoice.supplier_ref_invoice_no']))
             ->orderBy($this->sortBy, $this->sortDir)
             ->paginate($this->perPage);
     }

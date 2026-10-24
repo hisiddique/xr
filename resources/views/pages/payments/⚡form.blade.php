@@ -8,6 +8,7 @@ use App\Models\Payment;
 use App\Models\PaymentDraw;
 use App\PaymentSourceType;
 use App\Services\PaymentAllocator;
+use App\Support\Search;
 use Flux\Flux;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -134,9 +135,8 @@ new #[Title('Payment')] class extends Component {
             return;
         }
 
-        $matches = Document::where('customer_id', $customerId)
-            ->where('type', 'INV')
-            ->where('doc_number', 'like', "%{$term}%")
+        $matches = Search::filter(Document::where('customer_id', $customerId)->where('type', 'INV'), $term, ['doc_number'])
+            ->tap(fn ($q) => Search::rankStartsWithFirst($q, $term, ['doc_number']))
             ->limit(50)
             ->pluck('id');
 

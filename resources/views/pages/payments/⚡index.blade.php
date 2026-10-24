@@ -2,6 +2,7 @@
 
 use App\Livewire\Concerns\WithSorting;
 use App\Models\Payment;
+use App\Support\Search;
 use App\Traits\WithPerPage;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Contracts\Database\Eloquent\Builder;
@@ -86,11 +87,8 @@ new #[Title('Payments')] class extends Component
         return Payment::query()
             ->with(['customer', 'paymentMethod'])
             ->withSum('allocations', 'allocated_amount')
-            ->when($this->search, fn ($q) => $q->where(function ($q) {
-                $q->where('reference', 'like', "%{$this->search}%")
-                    ->orWhere('payment_reference', 'like', "%{$this->search}%")
-                    ->orWhereHas('customer', fn ($q) => $q->where('company_name', 'like', "%{$this->search}%")->orWhere('reference', 'like', "%{$this->search}%"));
-            }))
+            ->when($this->search, fn ($q) => Search::filter($q, $this->search, ['reference', 'payment_reference', 'customer.company_name', 'customer.reference']))
+            ->when($this->search !== '' && $this->sortColumn === '', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['reference', 'payment_reference', 'customer.company_name', 'customer.reference']))
             ->when($this->dateFrom, fn ($q) => $q->where('payment_date', '>=', $this->dateFrom))
             ->when($this->dateTo, fn ($q) => $q->where('payment_date', '<=', $this->dateTo))
             ->when($this->amountMin, fn ($q) => $q->where('amount', '>=', $this->amountMin))

@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Search;
 use Illuminate\Support\Facades\Cache;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Modelable;
@@ -71,17 +72,36 @@ new class extends Component {
             $cacheKey,
             $this->cacheTtl,
             function () use ($modelClass, $column, $valueColumn, $searchColumns, $labelAccessor, $useAccessor, $limit, $term): array {
-                $query = $modelClass::query()
-                    ->where(function ($q) use ($searchColumns, $term): void {
+                $columns = $useAccessor ? ['*'] : [$valueColumn, $column];
+
+                $prefixQuery = $modelClass::query();
+                $grammar = $prefixQuery->getQuery()->getGrammar();
+                $prefixPattern = Search::startsWith($term);
+
+                $results = $prefixQuery
+                    ->where(function ($q) use ($searchColumns, $grammar, $prefixPattern): void {
                         foreach ($searchColumns as $col) {
-                            $q->orWhere($col, 'like', "%{$term}%");
+                            $q->orWhereRaw(
+                                $grammar->wrap($q->getModel()->qualifyColumn($col))." like ? escape '!'",
+                                [$prefixPattern],
+                            );
                         }
                     })
-                    ->orderByRaw("CASE WHEN {$column} LIKE ? THEN 0 ELSE 1 END", [$term.'%'])
                     ->orderBy($column)
-                    ->limit($limit);
+                    ->limit($limit)
+                    ->get($columns);
 
-                $results = $useAccessor ? $query->get() : $query->get([$valueColumn, $column]);
+                $remaining = $limit - $results->count();
+
+                if ($remaining > 0) {
+                    $rest = Search::filter($modelClass::query(), $term, $searchColumns)
+                        ->when($results->isNotEmpty(), fn ($q) => $q->whereNotIn($valueColumn, $results->pluck($valueColumn)->all()))
+                        ->orderBy($column)
+                        ->limit($remaining)
+                        ->get($columns);
+
+                    $results = $results->concat($rest);
+                }
 
                 return $results->map(fn ($m): array => [
                     'id' => $m->{$valueColumn},

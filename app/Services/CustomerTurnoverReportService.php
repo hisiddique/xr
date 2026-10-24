@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Customer;
+use App\Support\Search;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -111,13 +112,9 @@ class CustomerTurnoverReportService
             ->whereHas('invoices', fn ($q) => $this->applyPeriod($q, $filters))
             ->when($filters['customerId'] ?? null, fn ($q, $id) => $q->where('customers.id', $id))
             ->when($search !== '', function ($q) use ($search, $filters) {
-                $like = '%'.$this->escapeLike($search).'%';
-
-                $q->where(function ($q) use ($like, $filters) {
-                    $q->where('company_name', 'like', $like)
-                        ->orWhere('reference', 'like', $like)
-                        ->orWhereHas('invoices', fn ($q) => $this->applyPeriod($q, $filters)
-                            ->where('doc_number', 'like', $like));
+                $q->where(function ($q) use ($search, $filters) {
+                    Search::filter($q, $search, ['company_name', 'reference']);
+                    $q->orWhereHas('invoices', fn ($q) => Search::filter($this->applyPeriod($q, $filters), $search, ['doc_number']));
                 });
             })
             ->tap(fn ($q) => $this->applyTotalRange($q, $filters));
@@ -137,6 +134,11 @@ class CustomerTurnoverReportService
         $column = (string) ($filters['sortColumn'] ?? '');
         $direction = strtolower((string) ($filters['sortDirection'] ?? '')) === 'asc' ? 'asc' : 'desc';
         $includeOutstanding = ! empty($filters['includeOutstanding']);
+        $search = trim((string) ($filters['search'] ?? ''));
+
+        if ($search !== '' && ! in_array($column, ['company_name', 'invoice_count', 'total', 'outstanding'], true)) {
+            Search::rankStartsWithFirst($query, $search, ['company_name', 'reference']);
+        }
 
         $query = match ($column) {
             'company_name' => $query->orderBy('company_name', $direction),

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Customer;
 use App\Models\Document;
+use App\Support\Search;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use League\Csv\Writer as CsvWriter;
@@ -76,16 +77,13 @@ class CustomerOutstandingReportService
             ->whereHas('invoices', fn ($q) => $this->applyOutstandingFilters($q, $filters))
             ->when($filters['customerId'] ?? null, fn ($q, $id) => $q->where('id', $id))
             ->when($search !== '', function ($q) use ($search, $filters) {
-                $like = '%'.$this->escapeLike($search).'%';
-
-                $q->where(function ($q) use ($like, $filters) {
-                    $q->where('company_name', 'like', $like)
-                        ->orWhere('reference', 'like', $like)
-                        ->orWhereHas('invoices', fn ($q) => $this->applyOutstandingFilters($q, $filters)
-                            ->where('doc_number', 'like', $like));
+                $q->where(function ($q) use ($search, $filters) {
+                    Search::filter($q, $search, ['company_name', 'reference']);
+                    $q->orWhereHas('invoices', fn ($q) => Search::filter($this->applyOutstandingFilters($q, $filters), $search, ['doc_number']));
                 });
             })
             ->with(['invoices' => fn ($q) => $this->applyOutstandingFilters($q, $filters)->with('writeOffs.writtenOffBy')->orderByDesc('doc_date')->orderByDesc('doc_number')])
+            ->when($search !== '', fn ($q) => Search::rankStartsWithFirst($q, $search, ['company_name', 'reference']))
             ->orderBy('company_name');
     }
 

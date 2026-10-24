@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Role;
+use App\Support\Search;
 use Flux\Flux;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -33,10 +34,8 @@ new #[Title('Roles')] class extends Component {
     {
         return Role::query()
             ->withCount('users')
-            ->when($this->search, fn ($q) => $q->where(function ($q) {
-                $q->where('name', 'like', "%{$this->search}%")
-                    ->orWhere('slug', 'like', "%{$this->search}%");
-            }))
+            ->when($this->search, fn ($q) => Search::filter($q, $this->search, ['name', 'slug']))
+            ->when($this->search !== '', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['name', 'slug']))
             ->orderByDesc('is_system')
             ->orderBy('name')
             ->paginate(15);

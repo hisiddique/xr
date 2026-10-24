@@ -2,6 +2,7 @@
 
 use App\Livewire\Concerns\WithSorting;
 use App\Models\SupplierPayout;
+use App\Support\Search;
 use App\Traits\WithPerPage;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -92,14 +93,12 @@ new #[Title('Supplier Payouts')] class extends Component {
     public function payouts()
     {
         return SupplierPayout::with(['supplier', 'allocations'])
-            ->when($this->search, fn ($q) => $q->where(fn ($q2) =>
-                $q2->where('reference', 'like', '%'.$this->search.'%')
-                   ->orWhereHas('supplier', fn ($s) => $s->where('company_name', 'like', '%'.$this->search.'%'))
-            ))
+            ->when($this->search, fn ($q) => Search::filter($q, $this->search, ['reference', 'supplier.company_name']))
             ->when($this->dateFrom, fn ($q) => $q->whereDate('payout_date', '>=', $this->dateFrom))
             ->when($this->dateTo, fn ($q) => $q->whereDate('payout_date', '<=', $this->dateTo))
             ->when($this->amountMin !== '', fn ($q) => $q->where('amount', '>=', $this->amountMin))
             ->when($this->amountMax !== '', fn ($q) => $q->where('amount', '<=', $this->amountMax))
+            ->when($this->search !== '' && $this->sortColumn === '', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['reference', 'supplier.company_name']))
             ->tap(fn ($q) => $this->applySort($q))
             ->when($this->sortColumn === '', fn ($q) => $q->orderByDesc('payout_date')->orderByDesc('reference'))
             ->paginate($this->perPage);

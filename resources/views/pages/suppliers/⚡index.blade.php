@@ -2,6 +2,7 @@
 
 use App\Livewire\Concerns\WithSorting;
 use App\Models\Supplier;
+use App\Support\Search;
 use App\Traits\WithPerPage;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -53,13 +54,11 @@ new #[Title('Suppliers')] class extends Component {
     public function suppliers()
     {
         $query = Supplier::query()
-            ->when($this->search, fn ($q) => $q->where(function ($sub) {
-                $sub->where('company_name', 'like', "%{$this->search}%")
-                    ->orWhere('reference', 'like', "%{$this->search}%");
-            }))
-            ->when($this->filters['reference'], fn ($q, $v) => $q->where('reference', 'like', "%{$v}%"))
-            ->when($this->filters['company'], fn ($q, $v) => $q->where('company_name', 'like', "%{$v}%"))
-            ->when($this->filters['vat'] !== '', fn ($q) => $q->where('vat_applied', (bool) $this->filters['vat']));
+            ->when($this->search, fn ($q) => Search::filter($q, $this->search, ['company_name', 'reference']))
+            ->when($this->filters['reference'], fn ($q, $v) => Search::filter($q, $v, ['reference']))
+            ->when($this->filters['company'], fn ($q, $v) => Search::filter($q, $v, ['company_name']))
+            ->when($this->filters['vat'] !== '', fn ($q) => $q->where('vat_applied', (bool) $this->filters['vat']))
+            ->when($this->search !== '' && $this->sortColumn === '', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['company_name', 'reference']));
 
         return $this->sortColumn === ''
             ? $this->applySort($query)->latest('id')->paginate($this->perPage)

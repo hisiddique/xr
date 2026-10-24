@@ -4,6 +4,7 @@ use App\DocumentType;
 use App\Models\Customer;
 use App\Models\Document;
 use App\Models\DocumentItem;
+use App\Support\Search;
 use App\Traits\WithPerPage;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -93,10 +94,14 @@ new #[Title('Document Search')] class extends Component
             return collect();
         }
 
-        return Document::query()
+        $query = Document::query()
             ->invoices()
-            ->where('customer_id', $this->customerId)
-            ->where('doc_number', 'like', "%{$term}%")
+            ->where('customer_id', $this->customerId);
+
+        Search::filter($query, $term, ['doc_number']);
+        Search::rankStartsWithFirst($query, $term, ['doc_number']);
+
+        return $query
             ->when(! empty($this->invoiceIds), fn ($q) => $q->whereNotIn('id', $this->invoiceIds))
             ->orderByDesc('doc_date')
             ->limit(10)
@@ -136,7 +141,7 @@ new #[Title('Document Search')] class extends Component
 
         return DocumentItem::query()
             ->where('is_note', false)
-            ->when($term !== '', fn ($q) => $q->where('details', 'like', "%{$term}%"))
+            ->when($term !== '', fn ($q) => Search::filter($q, $term, ['details']))
             ->whereHas('document', fn ($q) => $q->whereIn('type', [
                 DocumentType::DeliveryNote,
                 DocumentType::Invoice,

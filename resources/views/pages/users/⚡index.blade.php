@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Support\Search;
 use App\UserRole;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -31,11 +32,9 @@ new #[Title('Users')] class extends Component {
     public function users()
     {
         return User::query()
-            ->when($this->search, fn ($q) => $q->where(function ($q) {
-                $q->where('name', 'like', "%{$this->search}%")
-                    ->orWhere('email', 'like', "%{$this->search}%");
-            }))
+            ->when($this->search, fn ($q) => Search::filter($q, $this->search, ['name', 'email']))
             ->when($this->role, fn ($q) => $q->where('role', $this->role))
+            ->when($this->search !== '', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['name', 'email']))
             ->latest()
             ->paginate(15);
     }

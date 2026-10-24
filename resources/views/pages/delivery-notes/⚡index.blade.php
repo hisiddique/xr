@@ -10,6 +10,7 @@ use App\Traits\WithPerPage;
 use App\Models\DocumentEmailLog;
 use App\Models\User;
 use App\Services\DocumentEmailService;
+use App\Support\Search;
 use Flux\Flux;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -335,10 +336,8 @@ new #[Title('Delivery Notes')] class extends Component
                     ->latest('id')
                     ->limit(1),
             ])
-            ->when($this->search, fn ($q) => $q->where(function ($q) {
-                $q->where('doc_number', 'like', "%{$this->search}%")
-                    ->orWhereHas('customer', fn ($q) => $q->where('company_name', 'like', "%{$this->search}%"));
-            }))
+            ->when($this->search, fn ($q) => Search::filter($q, $this->search, ['doc_number', 'customer.company_name']))
+            ->when($this->search !== '' && $this->sortColumn === '', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['doc_number', 'customer.company_name']))
             ->when($this->status, fn ($q) => $q->where('status', $this->status))
             ->when($this->dateFrom !== '', fn ($q) => $q->whereDate('doc_date', '>=', $this->dateFrom))
             ->when($this->dateTo !== '', fn ($q) => $q->whereDate('doc_date', '<=', $this->dateTo))

@@ -4,6 +4,7 @@ use App\Livewire\Concerns\WithSorting;
 use App\Models\Setting;
 use App\Models\SupplierInvoice;
 use App\Models\SupplierInvoiceItem;
+use App\Support\Search;
 use App\Traits\WithPerPage;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Livewire\Attributes\Computed;
@@ -116,10 +117,7 @@ new #[Title('Supplier Invoices')] class extends Component {
     public function supplierInvoices()
     {
         return SupplierInvoice::with(['supplier', 'items', 'payoutAllocations', 'debitNotes'])
-            ->when($this->search, function ($q) {
-                $q->where('supplier_invoice_no', 'like', "%{$this->search}%")
-                    ->orWhereHas('supplier', fn ($q) => $q->where('company_name', 'like', "%{$this->search}%"));
-            })
+            ->when($this->search, fn ($q) => Search::filter($q, $this->search, ['supplier_invoice_no', 'supplier.company_name']))
             ->when($this->dateFrom !== '', fn ($q) => $q->whereDate('invoice_date', '>=', $this->dateFrom))
             ->when($this->dateTo !== '', fn ($q) => $q->whereDate('invoice_date', '<=', $this->dateTo))
             ->when($this->amountMin !== '' && is_numeric($this->amountMin), fn ($q) => $q->where(
@@ -134,6 +132,7 @@ new #[Title('Supplier Invoices')] class extends Component {
                 '<=',
                 (float) $this->amountMax
             ))
+            ->when($this->search !== '' && $this->sortColumn === '', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['supplier_invoice_no', 'supplier.company_name']))
             ->tap(fn ($q) => $this->applySort($q))
             ->when($this->sortColumn === '', fn ($q) => $q->orderByDesc('supplier_invoice_no'))
             ->paginate($this->perPage);

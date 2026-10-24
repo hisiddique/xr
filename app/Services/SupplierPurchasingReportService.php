@@ -6,6 +6,7 @@ use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\SupplierInvoiceStatus;
+use App\Support\Search;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use League\Csv\Writer as CsvWriter;
@@ -69,16 +70,12 @@ class SupplierPurchasingReportService
             ->when($filters['supplierId'] ?? null, fn ($q, $id) => $q->where('supplier_id', $id))
             ->when($filters['dateFrom'] ?? '', fn ($q, $date) => $q->whereDate('invoice_date', '>=', $date))
             ->when($filters['dateTo'] ?? '', fn ($q, $date) => $q->whereDate('invoice_date', '<=', $date))
-            ->when($search !== '', function ($q) use ($search) {
-                $like = '%'.$this->escapeLike($search).'%';
-
-                $q->where(function ($q2) use ($like) {
-                    $q2->where('supplier_invoice_no', 'like', $like)
-                        ->orWhere('supplier_ref_invoice_no', 'like', $like)
-                        ->orWhereHas('supplier', fn ($q3) => $q3->where('company_name', 'like', $like)
-                            ->orWhere('reference', 'like', $like));
-                });
-            })
+            ->when($search !== '', fn ($q) => Search::filter($q, $search, [
+                'supplier_invoice_no',
+                'supplier_ref_invoice_no',
+                'supplier.company_name',
+                'supplier.reference',
+            ]))
             ->when(is_numeric($filters['amountMin'] ?? null), fn ($q) => $q->whereRaw(self::GROSS_EXPR.' >= CAST(? AS REAL)', [$vatRate, (float) $filters['amountMin']]))
             ->when(is_numeric($filters['amountMax'] ?? null), fn ($q) => $q->whereRaw(self::GROSS_EXPR.' <= CAST(? AS REAL)', [$vatRate, (float) $filters['amountMax']]))
             ->when($paidStatuses !== [], function ($q) use ($paidStatuses, $vatRate) {

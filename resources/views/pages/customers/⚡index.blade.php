@@ -2,6 +2,7 @@
 
 use App\Livewire\Concerns\WithSorting;
 use App\Models\Customer;
+use App\Support\Search;
 use App\Traits\WithPerPage;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -54,20 +55,13 @@ new #[Title('Customers')] class extends Component {
     public function customers()
     {
         $query = Customer::query()
-            ->when($this->search, fn ($q) => $q->where(function ($sub) {
-                $sub->where('company_name', 'like', "%{$this->search}%")
-                    ->orWhere('reference', 'like', "%{$this->search}%")
-                    ->orWhere('email_1', 'like', "%{$this->search}%");
-            }))
-            ->when($this->filters['reference'], fn ($q, $v) => $q->where('reference', 'like', "%{$v}%"))
-            ->when($this->filters['company'], fn ($q, $v) => $q->where('company_name', 'like', "%{$v}%"))
-            ->when($this->filters['email'], fn ($q, $v) => $q->where('email_1', 'like', "%{$v}%"))
-            ->when($this->filters['contact'], fn ($q, $v) => $q->where(function ($sub) use ($v) {
-                $sub->where('first_name', 'like', "%{$v}%")
-                    ->orWhere('last_name', 'like', "%{$v}%")
-                    ->orWhereHas('title', fn ($t) => $t->where('name', 'like', "%{$v}%"));
-            }))
-            ->when($this->filters['vat'] !== '', fn ($q) => $q->where('vat_registered', (bool) $this->filters['vat']));
+            ->when($this->search, fn ($q) => Search::filter($q, $this->search, ['company_name', 'reference', 'email_1']))
+            ->when($this->filters['reference'], fn ($q, $v) => Search::filter($q, $v, ['reference']))
+            ->when($this->filters['company'], fn ($q, $v) => Search::filter($q, $v, ['company_name']))
+            ->when($this->filters['email'], fn ($q, $v) => Search::filter($q, $v, ['email_1']))
+            ->when($this->filters['contact'], fn ($q, $v) => Search::filter($q, $v, ['first_name', 'last_name', 'title.name']))
+            ->when($this->filters['vat'] !== '', fn ($q) => $q->where('vat_registered', (bool) $this->filters['vat']))
+            ->when($this->search !== '' && $this->sortColumn === '', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['company_name', 'reference', 'email_1']));
 
         return $this->sortColumn === ''
             ? $this->applySort($query)->latest('id')->paginate($this->perPage)
