@@ -57,5 +57,12 @@
             </tr>
         </tbody>
     </table>
+<script type="text/php">
+if (isset($pdf)) {
+    $font = $fontMetrics->getFont("DejaVu Sans", "normal");
+    $text = "Page {PAGE_NUM} of {PAGE_COUNT}";
+    $pdf->page_text($pdf->get_width() - 28 - 56, 14, $text, $font, 8, [0.42, 0.45, 0.5]);
+}
+</script>
 </body>
 </html>
