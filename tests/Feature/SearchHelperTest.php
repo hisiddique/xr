@@ -173,3 +173,34 @@ test('clearing a column filter on customers and suppliers does not error', funct
         }
     }
 });
+
+test('typeahead ranks name matches, then reference matches, then contains matches', function () {
+    foreach ([
+        ['Fairview Lifting', 'FLG'],
+        ['Flat Roofing', 'FLAT'],
+        ['Flowdrill UK', 'FLOWDRILL'],
+        ['City Electrical', 'CITY EFL'],
+        ['Masplas Flexible', 'MASPLAS'],
+    ] as [$name, $reference]) {
+        Supplier::factory()->create(['company_name' => $name, 'reference' => $reference]);
+    }
+
+    $labels = Livewire\Livewire::test('pages::ui.typeahead', [
+        'model' => Supplier::class,
+        'column' => 'company_name',
+        'searchColumns' => ['company_name', 'reference'],
+        'minChars' => 2,
+    ])->set('search', 'fl')->instance()->suggestions;
+
+    expect(collect($labels)->pluck('label')->all())->toBe(['Flat Roofing', 'Flowdrill UK', 'Fairview Lifting', 'City Electrical', 'Masplas Flexible']);
+});
+
+test('typeahead with a single search column does not match unrelated rows', function () {
+    Customer::factory()->create(['company_name' => 'Acme Ltd']);
+    Customer::factory()->create(['company_name' => 'Unrelated']);
+
+    $labels = Livewire\Livewire::test('pages::ui.typeahead', ['model' => Customer::class, 'column' => 'company_name', 'minChars' => 3])
+        ->set('search', 'acm')->instance()->suggestions;
+
+    expect(collect($labels)->pluck('label')->all())->toBe(['Acme Ltd']);
+});

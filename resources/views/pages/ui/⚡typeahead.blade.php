@@ -74,33 +74,43 @@ new class extends Component {
             function () use ($modelClass, $column, $valueColumn, $searchColumns, $labelAccessor, $useAccessor, $limit, $term): array {
                 $columns = $useAccessor ? ['*'] : [$valueColumn, $column];
 
-                $prefixQuery = $modelClass::query();
-                $grammar = $prefixQuery->getQuery()->getGrammar();
+                $grammar = $modelClass::query()->getQuery()->getGrammar();
                 $prefixPattern = Search::startsWith($term);
-
-                $results = $prefixQuery
-                    ->where(function ($q) use ($searchColumns, $grammar, $prefixPattern): void {
-                        foreach ($searchColumns as $col) {
+                $startsWith = function ($query, array $cols) use ($grammar, $prefixPattern) {
+                    return $query->where(function ($q) use ($cols, $grammar, $prefixPattern): void {
+                        foreach ($cols as $col) {
                             $q->orWhereRaw(
                                 $grammar->wrap($q->getModel()->qualifyColumn($col))." like ? escape '!'",
                                 [$prefixPattern],
                             );
                         }
-                    })
-                    ->orderBy($column)
-                    ->limit($limit)
-                    ->get($columns);
+                    });
+                };
 
-                $remaining = $limit - $results->count();
+                $otherColumns = array_values(array_diff($searchColumns, [$column]));
 
-                if ($remaining > 0) {
-                    $rest = Search::filter($modelClass::query(), $term, $searchColumns)
+                $tiers = array_values(array_filter([
+                    fn ($q) => $startsWith($q, [$column]),
+                    $otherColumns !== [] ? fn ($q) => $startsWith($q, $otherColumns) : null,
+                    fn ($q) => Search::filter($q, $term, $searchColumns),
+                ]));
+
+                $results = collect();
+
+                foreach ($tiers as $tier) {
+                    $remaining = $limit - $results->count();
+
+                    if ($remaining <= 0) {
+                        break;
+                    }
+
+                    $found = $tier($modelClass::query())
                         ->when($results->isNotEmpty(), fn ($q) => $q->whereNotIn($valueColumn, $results->pluck($valueColumn)->all()))
                         ->orderBy($column)
                         ->limit($remaining)
                         ->get($columns);
 
-                    $results = $results->concat($rest);
+                    $results = $results->concat($found);
                 }
 
                 return $results->map(fn ($m): array => [
