@@ -79,7 +79,7 @@ test('submitting the invoice clone creates a paired delivery note and invoice wi
     Document::factory()->deliveryNote()->for($customer, 'customer')->create(['doc_number' => 'DN-0061']);
     Document::factory()->invoice()->for($customer, 'customer')->create(['doc_number' => 'INV-0062']);
     $source = Document::factory()->invoice()->for($customer, 'customer')
-        ->has(DocumentItem::factory()->count(2), 'items')
+        ->has(DocumentItem::factory()->count(2)->state(['per' => 'each']), 'items')
         ->create(['doc_number' => 'INV-0097']);
 
     Livewire::actingAs(cloneAdmin())
