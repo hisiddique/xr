@@ -92,7 +92,7 @@ test('a saved debit note keeps its vat rate and line vat when the settings rate 
     $note = SupplierDebitNote::firstWhere('supplier_id', $supplier->id)->load('items');
 
     expect((float) $note->vat_rate)->toBe(20.0)
-        ->and((float) $note->items->first()->vat_amount)->toBe(0.99)
+        ->and((float) $note->items->first()->vat_amount)->toBe(0.83)
         ->and($note->effectiveVatRate())->toBe(20.0);
 });
 

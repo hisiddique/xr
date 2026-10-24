@@ -26,6 +26,7 @@ class SupplierDebitNote extends Model
         'subtotal',
         'vat_amount',
         'vat_rate',
+        'vat_inclusive',
         'total',
         'status',
         'created_by',
@@ -64,6 +65,7 @@ class SupplierDebitNote extends Model
             'subtotal' => 'decimal:2',
             'vat_amount' => 'decimal:2',
             'vat_rate' => 'decimal:2',
+            'vat_inclusive' => 'boolean',
             'total' => 'decimal:2',
             'status' => SupplierDebitNoteStatus::class,
         ];

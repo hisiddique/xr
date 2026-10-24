@@ -24,6 +24,53 @@ class SupplierInvoiceTotalsCalculator
     }
 
     /**
+     * Splits a VAT-inclusive amount into net and VAT; VAT is rounded to the penny and net is the remainder.
+     *
+     * @return array{net: float, vat: float}
+     */
+    public static function splitInclusive(float $gross, bool $vatApplicable, float $rate): array
+    {
+        $gross = round($gross, 2);
+
+        if (! $vatApplicable) {
+            return ['net' => $gross, 'vat' => 0.0];
+        }
+
+        $vat = Money::round($gross * $rate / (100 + $rate));
+
+        return ['net' => round($gross - $vat, 2), 'vat' => $vat];
+    }
+
+    /**
+     * Net and VAT of one debit-note line. A VAT-inclusive note treats the line value as gross, extracts the VAT,
+     * then takes the discount off the net only (VAT is unchanged). A legacy note treats the line value as net,
+     * the discount % as a percentage credit of it, and adds VAT on top. A manual net or VAT
+     * override replaces the calculated figure on its own (VAT is ignored when the line has no VAT).
+     *
+     * @return array{net: float, vat: float}
+     */
+    public static function debitNoteLine(float $lineValue, float $discountPercent, bool $vatApplicable, bool $inclusive, float $rate, ?float $netOverride = null, ?float $vatOverride = null): array
+    {
+        if ($inclusive) {
+            $line = self::splitInclusive($lineValue, $vatApplicable, $rate);
+            $line['net'] = round($line['net'] - Money::round($line['net'] * $discountPercent / 100), 2);
+        } else {
+            $net = $discountPercent > 0 ? Money::roundDown($lineValue * $discountPercent / 100) : $lineValue;
+            $line = ['net' => $net, 'vat' => $vatApplicable ? Money::roundDown($net * $rate / 100) : 0.0];
+        }
+
+        if ($netOverride !== null) {
+            $line['net'] = round($netOverride, 2);
+        }
+
+        if ($vatOverride !== null && $vatApplicable) {
+            $line['vat'] = round($vatOverride, 2);
+        }
+
+        return $line;
+    }
+
+    /**
      * Calculate supplier invoice totals from line items and a trade-discount percentage.
      *
      * @param  Collection<int, SupplierInvoiceItem>|iterable  $items
@@ -67,8 +114,9 @@ class SupplierInvoiceTotalsCalculator
 
     /**
      * Amount each debit note takes off the invoice, in the order given. When the invoice carries a
-     * trade discount on net, the invoice is re-priced on the reduced net (discount first, then VAT)
-     * so the returned goods give back their share of the discount and VAT.
+     * trade discount on net, the invoice is re-priced before and after each note with the same formula
+     * (discount on net, VAT on the undiscounted net) so the returned goods give back their share of
+     * the discount and VAT without a pricing-method shift landing on the first note.
      *
      * @param  iterable<int, array{line_total: float|int|string, vat_applicable: bool}>  $lineItems
      * @param  iterable<int, SupplierDebitNote>  $notes
@@ -89,15 +137,25 @@ class SupplierInvoiceTotalsCalculator
         $rate = $vatRate ?? (float) Setting::get('vat_rate', 20);
         $lines = collect($lineItems);
         $net = (float) $lines->sum(fn ($line) => (float) data_get($line, 'line_total'));
-        $vatNet = (float) $lines->filter(fn ($line) => (bool) data_get($line, 'vat_applicable'))
-            ->sum(fn ($line) => (float) data_get($line, 'line_total'));
-        $previous = $this->calculate($lines, $percent, false, $rate)['payable'];
+        $vat = (float) $lines->filter(fn ($line) => (bool) data_get($line, 'vat_applicable'))
+            ->sum(function ($line) use ($rate) {
+                $snapshot = data_get($line, 'vat_amount');
+
+                return $snapshot !== null && $snapshot !== ''
+                    ? (float) $snapshot
+                    : self::lineVat((float) data_get($line, 'line_total'), true, $rate, data_get($line, 'gross_override'));
+            });
+        $previous = $this->payableFor($net, $vat, $percent);
 
         foreach ($notes as $note) {
             $net -= (float) $note->items->sum('total');
-            $vatNet -= (float) $note->items->where('vat_applicable', true)->sum('total');
+            $vat -= (float) $note->items->where('vat_applicable', true)->sum(
+                fn ($item) => $item->vat_amount !== null
+                    ? (float) $item->vat_amount
+                    : Money::roundDown((float) $item->total * $rate / 100)
+            );
 
-            $current = $this->payableOnReducedNet(max(0.0, $net), max(0.0, $vatNet), $percent, $rate);
+            $current = $this->payableFor(max(0.0, $net), max(0.0, $vat), $percent);
             $deductions[$note->id] = max(0.0, round($previous - $current, 2));
             $previous = $current;
         }
@@ -105,16 +163,12 @@ class SupplierInvoiceTotalsCalculator
         return $deductions;
     }
 
-    private function payableOnReducedNet(float $net, float $vatNet, float $percent, float $rate): float
+    private function payableFor(float $net, float $vat, float $percent): float
     {
         if ($net <= 0) {
             return 0.0;
         }
 
-        $discount = Money::roundDown($net * $percent / 100);
-        $vatBase = max(0.0, $vatNet - $discount * $vatNet / $net);
-        $vat = Money::roundDown($vatBase * $rate / 100);
-
-        return max(0.0, round($net - $discount + $vat, 2));
+        return max(0.0, round($net - Money::roundDown($net * $percent / 100) + $vat, 2));
     }
 }

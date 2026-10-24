@@ -1101,6 +1101,21 @@ document.addEventListener('alpine:init', () => {
         _lineDefault: { details: '', quantity: '', price: '', per: '', is_note: false, ...(defaults.line || {}) },
         _noteDefault: { details: '', quantity: '0', price: '', per: '', is_note: true, ...(defaults.note || {}) },
 
+        applyDefaultDiscount(percent) {
+            const next = percent === null || percent === undefined || percent === '' ? null : Number(percent);
+            const previous = this._lineDefault.discount_percent ?? null;
+
+            this.rows.forEach((row) => {
+                if (row.is_note) return;
+                const current = row.discount_percent === '' ? null : row.discount_percent;
+                if (current === null || current === undefined || Number(current) === Number(previous)) {
+                    row.discount_percent = next;
+                }
+            });
+
+            this._lineDefault.discount_percent = next;
+        },
+
         init() {
             this.$nextTick(() => {
                 this.$el.querySelector('input:not([type=hidden]):not([type=file]), textarea, select')?.focus();
@@ -1305,13 +1320,82 @@ document.addEventListener('alpine:init', () => {
             return row.discount_percent ? v * (row.discount_percent / 100) : v;
         },
 
-        floorNet(row) {
+        _inclusiveGross(row) {
+            return roundCents(this.lineValue(row) * 100);
+        },
+
+        _inclusiveVat(row, rate) {
+            if (!row.vat_applicable) return 0;
+            const gross = this._inclusiveGross(row);
+            return Math.round(Number((gross * 100 * rate / (100 + rate)).toFixed(6))) / 100;
+        },
+
+        _overrideValue(value) {
+            if (value === null || value === undefined || value === '') return null;
+            const n = Number(value);
+            return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+        },
+
+        calculatedNet(row) {
+            if (defaults.vatInclusive) {
+                const gross = this._inclusiveGross(row);
+                const rate = Number(this.$wire?.vatRate ?? 0);
+                const net = Math.round((gross - this._inclusiveVat(row, rate)) * 100) / 100;
+                const discount = row.discount_percent
+                    ? Math.round(Number((net * row.discount_percent).toFixed(6))) / 100
+                    : 0;
+                return Math.round((net - discount) * 100) / 100;
+            }
             const value = roundCents(this.lineValue(row) * 100);
             return row.discount_percent ? roundCents(value * row.discount_percent) : value;
         },
 
+        calculatedVat(row, rate = Number(this.$wire?.vatRate ?? 0)) {
+            if (defaults.vatInclusive) {
+                return this._inclusiveVat(row, Number(rate));
+            }
+            return roundCents(this.calculatedNet(row) * rate);
+        },
+
+        floorNet(row) {
+            if (defaults.netVatOverrides) {
+                const override = this._overrideValue(row.net_override);
+                if (override !== null) return override;
+            }
+            return this.calculatedNet(row);
+        },
+
         vatForRow(row, rate) {
-            return roundCents(this.floorNet(row) * rate);
+            if (defaults.netVatOverrides && row.vat_applicable) {
+                const override = this._overrideValue(row.vat_override);
+                if (override !== null) return override;
+            }
+            return this.calculatedVat(row, rate);
+        },
+
+        netEdited(row) {
+            const override = this._overrideValue(row.net_override);
+            return override !== null && override !== this.calculatedNet(row);
+        },
+
+        vatEdited(row) {
+            if (!row.vat_applicable) return false;
+            const override = this._overrideValue(row.vat_override);
+            return override !== null && override !== this.calculatedVat(row);
+        },
+
+        displayAmount(amount, el) {
+            return el === document.activeElement ? el.value : Number(amount).toFixed(2);
+        },
+
+        setNet(row, value) {
+            const next = this._overrideValue(value);
+            row.net_override = next === null || next === this.calculatedNet(row) ? null : next;
+        },
+
+        setVat(row, value) {
+            const next = this._overrideValue(value);
+            row.vat_override = next === null || next === this.calculatedVat(row) ? null : next;
         },
 
         importRows(items) {

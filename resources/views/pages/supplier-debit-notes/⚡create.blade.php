@@ -39,11 +39,13 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
 
     public float $vatRate = 20.0;
 
+    public ?float $tradeDiscount = null;
+
     public function mount(): void
     {
         $this->doc_date = now()->format('Y-m-d');
         $this->items = [
-            ['id' => null, 'details' => '', 'quantity' => '', 'price' => '', 'per' => '', 'is_note' => false, 'discount_percent' => null, 'vat_applicable' => true],
+            ['id' => null, 'details' => '', 'quantity' => '', 'price' => '', 'per' => '', 'is_note' => false, 'discount_percent' => null, 'vat_applicable' => true, 'net_override' => null, 'vat_override' => null],
         ];
         $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
         $this->nextReference = SupplierDebitNote::nextNumber();
@@ -53,6 +55,8 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
             $this->supplier_id = (int) request('supplier_id');
             if ($supplier = Supplier::withTrashed()->find($this->supplier_id)) {
                 $this->supplierName = $supplier->typeahead_label;
+                $this->tradeDiscount = $this->tradeDiscountFor($supplier);
+                $this->items[0]['discount_percent'] = $this->tradeDiscount;
             }
 
             if (request()->filled('supplier_invoice_id')) {
@@ -68,6 +72,17 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
     {
         $this->supplier_invoice_id = null;
         unset($this->supplierInvoices);
+
+        $supplier = $this->supplier_id ? Supplier::withTrashed()->find($this->supplier_id) : null;
+        $this->tradeDiscount = $supplier ? $this->tradeDiscountFor($supplier) : null;
+        $this->dispatch('debit-note-discount-default', percent: $this->tradeDiscount);
+    }
+
+    private function tradeDiscountFor(Supplier $supplier): ?float
+    {
+        $discount = (float) $supplier->trade_discount;
+
+        return $discount > 0 ? $discount : null;
     }
 
     #[Computed]
@@ -94,7 +109,8 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
     {
         $this->items = array_values(array_filter($this->items, fn ($i) => trim((string) ($i['details'] ?? '')) !== ''
             || (float) ($i['quantity'] ?? 0) > 0
-            || (float) ($i['discount_percent'] ?? 0) > 0
+            || (float) ($i['price'] ?? 0) > 0
+            || trim((string) ($i['per'] ?? '')) !== ''
         ));
 
         $this->validate(
@@ -104,6 +120,8 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                 'supplier_invoice_id' => 'nullable|integer|exists:supplier_invoices,id',
                 'notes' => 'nullable|string|max:1000',
                 'items.*.vat_applicable' => 'boolean',
+                'items.*.net_override' => 'nullable|numeric|min:0',
+                'items.*.vat_override' => 'nullable|numeric|min:0',
             ] + $this->documentItemRules(),
             $this->documentItemMessages(),
         );
@@ -121,8 +139,11 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
             $vatApplicable = ! $isNote && (bool) ($item['vat_applicable'] ?? false);
 
             $lineValue = $isNote ? 0.0 : Money::roundDown(DocumentTotalsCalculator::lineValue(['quantity' => $qty, 'price' => $price, 'per' => $per]));
-            $net = $isNote ? 0.0 : ($discountPercent > 0 ? Money::roundDown($lineValue * ($discountPercent / 100)) : $lineValue);
-            $itemVat = $vatApplicable ? Money::roundDown($net * $this->vatRate / 100) : 0.0;
+            $netOverride = $isNote || ($item['net_override'] ?? '') === '' ? null : (float) $item['net_override'];
+            $vatOverride = $isNote || ($item['vat_override'] ?? '') === '' ? null : (float) $item['vat_override'];
+            ['net' => $net, 'vat' => $itemVat] = $isNote
+                ? ['net' => 0.0, 'vat' => 0.0]
+                : SupplierInvoiceTotalsCalculator::debitNoteLine($lineValue, $discountPercent, $vatApplicable, true, (float) $this->vatRate, $netOverride, $vatOverride);
 
             $subtotal += $net;
             $vatAmount += $itemVat;
@@ -136,6 +157,8 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                 'discount_percent' => $discountPercent,
                 'line_value' => $lineValue,
                 'vat_applicable' => $vatApplicable,
+                'net_override' => $netOverride,
+                'vat_override' => $vatApplicable ? $vatOverride : null,
                 'vat_amount' => $itemVat,
                 'total' => $net,
                 'sort_order' => $idx,
@@ -153,6 +176,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                 'supplier_invoice_id' => $this->supplier_invoice_id ?: null,
                 'notes' => $this->notes ?: null,
                 'vat_rate' => $this->vatRate,
+                'vat_inclusive' => true,
                 'subtotal' => $subtotal,
                 'vat_amount' => $vatAmount,
                 'total' => $total,
@@ -206,7 +230,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
         $this->supplier_invoice_id = null;
         $this->notes = '';
         $this->items = [
-            ['id' => null, 'details' => '', 'quantity' => '', 'price' => '', 'per' => '', 'is_note' => false, 'discount_percent' => null, 'vat_applicable' => true],
+            ['id' => null, 'details' => '', 'quantity' => '', 'price' => '', 'per' => '', 'is_note' => false, 'discount_percent' => null, 'vat_applicable' => true, 'net_override' => null, 'vat_override' => null],
         ];
         unset($this->supplierInvoices);
         $this->dispatch('debit-note-items-reset');
@@ -229,12 +253,13 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
 
     <form
-        x-data="lineItemForm(@js($items), @js($this->units), '{{ route('supplier-debit-notes.index') }}', { line: { discount_percent: null, vat_applicable: true } })"
+        x-data="lineItemForm(@js($items), @js($this->units), '{{ route('supplier-debit-notes.index') }}', { vatInclusive: true, netVatOverrides: true, line: { discount_percent: @js($tradeDiscount), vat_applicable: true, net_override: null, vat_override: null } })"
         x-on:submit.prevent="$wire.set('items', rows, false).then(() => $flux.modal('confirm-commit-debit-note').show())"
         x-on:keydown="handleKey($event)"
         x-on:exit-confirm-discard.window="cancel()"
         x-on:exit-confirm-save.window="$wire.set('items', rows, false).then(() => $wire.commitDebitNote(false))"
-        @debit-note-items-reset.window="rows = [{ id: null, details: '', quantity: '', price: '', per: '', is_note: false, discount_percent: null, vat_applicable: true }]"
+        @debit-note-items-reset.window="rows = [{ id: null, details: '', quantity: '', price: '', per: '', is_note: false, discount_percent: _lineDefault.discount_percent, vat_applicable: true, net_override: null, vat_override: null }]"
+        @debit-note-discount-default.window="applyDefaultDiscount($event.detail.percent)"
         class="flex min-w-0 flex-1 flex-col gap-4"
     >
 
@@ -305,13 +330,14 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                             <th class="w-20 px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT</th>
                             <th class="w-24 px-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Disc %</th>
                             <th class="w-28 px-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Net Value</th>
+                            <th class="w-28 px-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT Val.</th>
                             <th class="w-8 px-2 py-3"></th>
                         </tr>
                     </thead>
                     <tbody x-ref="rowsBody" class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                         <template x-for="(row, i) in rows" :key="i">
                             <tr :data-row-idx="i" :class="row.is_note ? 'bg-amber-50/50 dark:bg-amber-500/5' : ''">
-                                <td class="px-2 py-2.5" :colspan="row.is_note ? 7 : 1">
+                                <td class="px-2 py-2.5" :colspan="row.is_note ? 8 : 1">
                                     <div class="flex items-center gap-2">
                                         <flux:icon.chat-bubble-left x-show="row.is_note" class="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
                                         <input
@@ -380,8 +406,24 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                                     </td>
                                 </template>
                                 <template x-if="! row.is_note">
-                                    <td class="px-2 py-2.5 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">
-                                        £<span x-text="floorNet(row).toFixed(2)">0.00</span>
+                                    <td class="px-2 py-2.5">
+                                        <input type="number" min="0" step="0.01"
+                                            :value="displayAmount(floorNet(row), $el)"
+                                            @input="setNet(row, $event.target.value)"
+                                            @blur="$el.value = floorNet(row).toFixed(2)"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-right text-sm font-semibold tabular-nums text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white" />
+                                        <span x-show="netEdited(row)" class="mt-0.5 block text-right text-xs text-amber-600 dark:text-amber-400">edited</span>
+                                    </td>
+                                </template>
+                                <template x-if="! row.is_note">
+                                    <td class="px-2 py-2.5">
+                                        <input type="number" min="0" step="0.01"
+                                            :disabled="! row.vat_applicable"
+                                            :value="row.vat_applicable ? displayAmount(vatForRow(row, $wire.vatRate), $el) : ''"
+                                            @input="setVat(row, $event.target.value)"
+                                            @blur="$el.value = row.vat_applicable ? vatForRow(row, $wire.vatRate).toFixed(2) : ''"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-right text-sm font-semibold tabular-nums text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none disabled:opacity-50 dark:border-white/10 dark:bg-zinc-800 dark:text-white" />
+                                        <span x-show="vatEdited(row)" class="mt-0.5 block text-right text-xs text-amber-600 dark:text-amber-400">edited</span>
                                     </td>
                                 </template>
                                 <td class="px-2 py-2.5">

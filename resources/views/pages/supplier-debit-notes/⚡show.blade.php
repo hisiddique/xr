@@ -61,13 +61,7 @@ new #[Title('Supplier Debit Note')] class extends Component {
         <flux:button variant="ghost" icon="arrow-left" size="sm" :href="route('supplier-debit-notes.index')" wire:navigate>Back</flux:button>
         <div class="flex items-center gap-2">
             @can('supplierdebitnote-edit')
-            @if($debitNote->isApplied())
-                <flux:tooltip content="Cannot edit applied debit note">
-                    <flux:button variant="ghost" icon="pencil" size="sm" disabled>Edit</flux:button>
-                </flux:tooltip>
-            @else
-                <flux:button variant="ghost" icon="pencil" size="sm" :href="route('supplier-debit-notes.edit', $debitNote)" wire:navigate>Edit</flux:button>
-            @endif
+            <flux:button variant="ghost" icon="pencil" size="sm" :href="route('supplier-debit-notes.edit', $debitNote)" wire:navigate>Edit</flux:button>
             @endcan
             <flux:button variant="ghost" icon="arrow-down-tray" size="sm" :href="route('supplier-debit-notes.pdf.download', $debitNote)">
                 Download PDF

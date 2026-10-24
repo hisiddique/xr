@@ -205,7 +205,24 @@ test('calculator rounds the trade discount down to the penny', function (float $
     'above half a penny' => [27.29, 0.54, 26.75],
 ]);
 
-test('a debit note re-prices the discounted invoice on the reduced net, discount before VAT', function () {
+test('a vat-inclusive amount is split into net and vat rounded to the penny', function () {
+    expect(SupplierInvoiceTotalsCalculator::splitInclusive(10.00, true, 20))->toBe(['net' => 8.33, 'vat' => 1.67])
+        ->and(SupplierInvoiceTotalsCalculator::splitInclusive(10.00, false, 20))->toBe(['net' => 10.0, 'vat' => 0.0]);
+});
+
+test('a debit note deduction uses stored vat so inclusive lines do not drift by a penny', function () {
+    $calculator = app(SupplierInvoiceTotalsCalculator::class);
+    $lines = [['line_total' => 8.33, 'vat_applicable' => true, 'vat_amount' => 1.67]];
+    $note = new SupplierDebitNote(['total' => 1.20]);
+    $note->id = 1;
+    $note->setRelation('items', collect([new SupplierDebitNoteItem(['total' => 1.00, 'vat_applicable' => true, 'vat_amount' => 0.20])]));
+
+    $deductions = $calculator->debitNoteDeductions($lines, 2.5, false, [$note], 20);
+
+    expect($deductions[1])->toBe(1.18);
+});
+
+test('a debit note deducts its net less its discount share plus its VAT, never more than its total', function () {
     $calculator = app(SupplierInvoiceTotalsCalculator::class);
     $lines = [['line_total' => 34.20, 'vat_applicable' => true]];
     $note = new SupplierDebitNote(['total' => 8.40]);
@@ -215,7 +232,9 @@ test('a debit note re-prices the discounted invoice on the reduced net, discount
     $payable = $calculator->calculate($lines, 2, false)['payable'];
     $deductions = $calculator->debitNoteDeductions($lines, 2, false, [$note]);
 
-    expect(round($payable - $deductions[1], 2))->toBe(31.99);
+    expect($deductions[1])->toBe(8.26)
+        ->and($deductions[1])->toBeLessThanOrEqual(8.40)
+        ->and(round($payable - $deductions[1], 2))->toBe(32.10);
 });
 
 test('line vat is rounded down to the penny', function () {
@@ -255,4 +274,30 @@ test('a debit note keeps its own total when the invoice has no trade discount', 
         ->debitNoteDeductions([['line_total' => 34.20, 'vat_applicable' => true]], 0, false, [$note]);
 
     expect($deductions[1])->toBe(8.40);
+});
+
+test('the deductions backfill command corrects a stale applied amount and leaves correct ones alone', function () {
+    $invoice = SupplierInvoice::factory()
+        ->has(SupplierInvoiceItem::factory()->state(['quantity' => 1, 'unit_amount' => 20, 'vat_applicable' => true, 'line_total' => 20]), 'items')
+        ->create(['created_by' => $this->user->id, 'trade_discount' => 10, 'discount_on_gross' => false]);
+
+    $note = SupplierDebitNote::create([
+        'supplier_id' => $invoice->supplier_id,
+        'supplier_invoice_id' => $invoice->id,
+        'doc_date' => now(),
+        'subtotal' => 1,
+        'vat_amount' => 0.20,
+        'total' => 1.20,
+        'created_by' => $this->user->id,
+    ]);
+    $note->items()->create(['description' => 'Returned', 'quantity' => 1, 'amount' => 1, 'total' => 1, 'vat_applicable' => true]);
+    $note->appliedInvoices()->attach($invoice->id, ['applied_amount' => 1.49, 'applied_at' => now()]);
+
+    $this->artisan('supplier-debit-notes:backfill-deductions', ['--dry-run' => true])->assertSuccessful();
+    expect((float) $note->appliedInvoices()->first()->pivot->applied_amount)->toBe(1.49);
+
+    $this->artisan('supplier-debit-notes:backfill-deductions')->expectsConfirmation('Apply these changes?', 'yes')->assertSuccessful();
+    expect((float) $note->appliedInvoices()->first()->pivot->applied_amount)->toBe(1.10);
+
+    $this->artisan('supplier-debit-notes:backfill-deductions')->expectsOutputToContain('Nothing to backfill')->assertSuccessful();
 });

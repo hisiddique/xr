@@ -6,8 +6,10 @@ use App\Models\LookupUnit;
 use App\Models\Setting;
 use App\Models\SupplierDebitNote;
 use App\Services\DocumentTotalsCalculator;
+use App\Services\SupplierInvoiceTotalsCalculator;
 use App\Support\Money;
 use Flux\Flux;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
@@ -26,8 +28,6 @@ new #[Title('Edit Debit Note')] class extends Component {
 
     public array $invoiceItemSuggestions = [];
 
-    public bool $isApplied = false;
-
     public float $vatRate = 20.0;
 
     public function mount(): void
@@ -35,7 +35,6 @@ new #[Title('Edit Debit Note')] class extends Component {
         $this->debitNote->load(['supplier', 'supplierInvoice', 'items']);
         $this->doc_date = $this->debitNote->doc_date->format('Y-m-d');
         $this->notes = $this->debitNote->notes ?? '';
-        $this->isApplied = $this->debitNote->isApplied();
         $this->vatRate = (float) ($this->debitNote->vat_rate ?? Setting::get('vat_rate', 20));
         $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
         $this->items = $this->debitNote->items->map(fn ($item) => [
@@ -47,79 +46,90 @@ new #[Title('Edit Debit Note')] class extends Component {
             'per' => $this->normalizeUnitCase($this->units, $item->per) ?? '',
             'discount_percent' => (float) ($item->discount_percent ?? 0),
             'vat_applicable' => (bool) $item->vat_applicable,
+            'net_override' => $item->net_override !== null ? (float) $item->net_override : null,
+            'vat_override' => $item->vat_override !== null ? (float) $item->vat_override : null,
         ])->toArray();
     }
 
     public function save(): void
     {
+        $this->items = array_values(array_filter($this->items, fn ($i) => trim((string) ($i['details'] ?? '')) !== ''
+            || (float) ($i['quantity'] ?? 0) > 0
+            || (float) ($i['price'] ?? 0) > 0
+            || trim((string) ($i['per'] ?? '')) !== ''
+        ));
+
         $rules = [
             'doc_date' => 'required|date',
             'notes' => 'nullable|string|max:1000',
-        ];
-
-        if (! $this->isApplied) {
-            $this->items = array_values(array_filter($this->items, fn ($i) => trim((string) ($i['details'] ?? '')) !== ''
-                || (float) ($i['quantity'] ?? 0) > 0
-                || (float) ($i['discount_percent'] ?? 0) > 0
-            ));
-
-            $rules += ['items.*.vat_applicable' => 'boolean'] + $this->documentItemRules();
-        }
+            'items.*.vat_applicable' => 'boolean',
+            'items.*.net_override' => 'nullable|numeric|min:0',
+            'items.*.vat_override' => 'nullable|numeric|min:0',
+        ] + $this->documentItemRules();
 
         $this->validate($rules, $this->documentItemMessages());
 
-        $this->debitNote->update([
-            'doc_date' => $this->doc_date,
-            'notes' => $this->notes ?: null,
-            'vat_rate' => $this->vatRate,
-        ]);
+        $subtotal = 0.0;
+        $vatAmount = 0.0;
+        $computed = [];
 
-        if (! $this->isApplied) {
-            $subtotal = 0.0;
-            $vatAmount = 0.0;
-            $computed = [];
+        foreach ($this->items as $idx => $item) {
+            $isNote = ! empty($item['is_note']);
+            $qty = $isNote ? 0.0 : (float) ($item['quantity'] ?? 0);
+            $price = $isNote ? 0.0 : (float) ($item['price'] ?? 0);
+            $per = $isNote ? null : ($item['per'] ?: null);
+            $discountPercent = $isNote ? 0.0 : (float) ($item['discount_percent'] ?? 0);
+            $vatApplicable = ! $isNote && (bool) ($item['vat_applicable'] ?? false);
 
-            foreach ($this->items as $idx => $item) {
-                $isNote = ! empty($item['is_note']);
-                $qty = $isNote ? 0.0 : (float) ($item['quantity'] ?? 0);
-                $price = $isNote ? 0.0 : (float) ($item['price'] ?? 0);
-                $per = $isNote ? null : ($item['per'] ?: null);
-                $discountPercent = $isNote ? 0.0 : (float) ($item['discount_percent'] ?? 0);
-                $vatApplicable = ! $isNote && (bool) ($item['vat_applicable'] ?? false);
+            $lineValue = $isNote ? 0.0 : Money::roundDown(DocumentTotalsCalculator::lineValue(['quantity' => $qty, 'price' => $price, 'per' => $per]));
+            $netOverride = $isNote || ($item['net_override'] ?? '') === '' ? null : (float) $item['net_override'];
+            $vatOverride = $isNote || ($item['vat_override'] ?? '') === '' ? null : (float) $item['vat_override'];
+            ['net' => $net, 'vat' => $itemVat] = $isNote
+                ? ['net' => 0.0, 'vat' => 0.0]
+                : SupplierInvoiceTotalsCalculator::debitNoteLine($lineValue, $discountPercent, $vatApplicable, (bool) $this->debitNote->vat_inclusive, $this->vatRate, $netOverride, $vatOverride);
 
-                $lineValue = $isNote ? 0.0 : Money::roundDown(DocumentTotalsCalculator::lineValue(['quantity' => $qty, 'price' => $price, 'per' => $per]));
-                $net = $isNote ? 0.0 : ($discountPercent > 0 ? Money::roundDown($lineValue * ($discountPercent / 100)) : $lineValue);
-                $itemVat = $vatApplicable ? Money::roundDown($net * $this->vatRate / 100) : 0.0;
+            $subtotal += $net;
+            $vatAmount += $itemVat;
 
-                $subtotal += $net;
-                $vatAmount += $itemVat;
+            $computed[] = [
+                'description' => (string) $item['details'],
+                'is_note' => $isNote,
+                'quantity' => $qty,
+                'amount' => $price,
+                'per' => $per,
+                'discount_percent' => $discountPercent,
+                'line_value' => $lineValue,
+                'vat_applicable' => $vatApplicable,
+                'net_override' => $netOverride,
+                'vat_override' => $vatApplicable ? $vatOverride : null,
+                'vat_amount' => $itemVat,
+                'total' => $net,
+                'sort_order' => $idx,
+            ];
+        }
 
-                $computed[] = [
-                    'description' => (string) $item['details'],
-                    'is_note' => $isNote,
-                    'quantity' => $qty,
-                    'amount' => $price,
-                    'per' => $per,
-                    'discount_percent' => $discountPercent,
-                    'line_value' => $lineValue,
-                    'vat_applicable' => $vatApplicable,
-                    'vat_amount' => $itemVat,
-                    'total' => $net,
-                    'sort_order' => $idx,
-                ];
-            }
+        $subtotal = round($subtotal, 2);
+        $vatAmount = round($vatAmount, 2);
+
+        DB::transaction(function () use ($computed, $subtotal, $vatAmount) {
+            $this->debitNote->update([
+                'doc_date' => $this->doc_date,
+                'notes' => $this->notes ?: null,
+                'vat_rate' => $this->vatRate,
+                'subtotal' => $subtotal,
+                'vat_amount' => $vatAmount,
+                'total' => round($subtotal + $vatAmount, 2),
+            ]);
 
             $this->debitNote->items()->delete();
             foreach ($computed as $row) {
                 $this->debitNote->items()->create($row);
             }
 
-            $this->debitNote->update([
-                'subtotal' => round($subtotal, 2),
-                'vat_amount' => round($vatAmount, 2),
-                'total' => round($subtotal + $vatAmount, 2),
-            ]);
-        }
+            foreach ($this->debitNote->appliedInvoices as $invoice) {
+                $invoice->resyncDebitNoteDeductions();
+            }
+        });
 
         Flux::toast(variant: 'success', text: 'Debit note updated.');
         $this->redirect(route('supplier-debit-notes.show', $this->debitNote), navigate: true);
@@ -139,19 +149,10 @@ new #[Title('Edit Debit Note')] class extends Component {
         </x-slot:action>
     </x-ui.page-header>
 
-    @if($isApplied)
-        <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-700/30 dark:bg-amber-500/5">
-            <div class="flex items-center gap-3">
-                <flux:icon.exclamation-triangle class="size-5 shrink-0 text-amber-600" />
-                <p class="text-sm text-amber-800 dark:text-amber-400">This debit note has been applied to an invoice. Line items cannot be edited.</p>
-            </div>
-        </div>
-    @endif
-
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
 
     <form
-        x-data="lineItemForm(@js($items), @js($this->units), '{{ route('supplier-debit-notes.show', $debitNote) }}', { line: { discount_percent: null, vat_applicable: true } })"
+        x-data="lineItemForm(@js($items), @js($this->units), '{{ route('supplier-debit-notes.show', $debitNote) }}', { @if($debitNote->vat_inclusive)vatInclusive: true, @endif netVatOverrides: true, line: { discount_percent: null, vat_applicable: true, net_override: null, vat_override: null } })"
         x-on:submit.prevent="submit()"
         x-on:keydown="handleKey($event)"
         x-on:exit-confirm-discard.window="cancel()"
@@ -202,12 +203,10 @@ new #[Title('Edit Debit Note')] class extends Component {
         <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06),0_1px_3px_rgba(16,24,40,0.10)] dark:border-white/10 dark:bg-zinc-900">
             <div class="flex items-center justify-between border-b border-zinc-200/70 px-6 py-4 dark:border-white/10">
                 <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Items</h2>
-                @unless($isApplied)
-                    <div class="flex items-center gap-2">
-                        <flux:button type="button" variant="ghost" icon="chat-bubble-left" size="sm" x-on:click="addNote()">Add Note <x-ui.kbd-hint keys="Shift+↵" /></flux:button>
-                        <flux:button type="button" variant="ghost" icon="plus" size="sm" x-on:click="add()">Add Line</flux:button>
-                    </div>
-                @endunless
+                <div class="flex items-center gap-2">
+                    <flux:button type="button" variant="ghost" icon="chat-bubble-left" size="sm" x-on:click="addNote()">Add Note <x-ui.kbd-hint keys="Shift+↵" /></flux:button>
+                    <flux:button type="button" variant="ghost" icon="plus" size="sm" x-on:click="add()">Add Line</flux:button>
+                </div>
             </div>
 
             <div class="overflow-x-auto" data-items-table>
@@ -221,97 +220,88 @@ new #[Title('Edit Debit Note')] class extends Component {
                             <th class="w-20 px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT</th>
                             <th class="w-24 px-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Disc %</th>
                             <th class="w-28 px-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Net Value</th>
-                            @unless($isApplied)<th class="w-8 px-2 py-3"></th>@endunless
+                            <th class="w-28 px-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">VAT Val.</th>
+                            <th class="w-8 px-2 py-3"></th>
                         </tr>
                     </thead>
                     <tbody x-ref="rowsBody" class="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                         <template x-for="(row, i) in rows" :key="i">
                             <tr :data-row-idx="i" :class="row.is_note ? 'bg-amber-50/50 dark:bg-amber-500/5' : ''">
-                                <td class="px-2 py-2.5" :colspan="row.is_note ? {{ $isApplied ? 6 : 7 }} : 1">
+                                <td class="px-2 py-2.5" :colspan="row.is_note ? 8 : 1">
                                     <div class="flex items-center gap-2">
                                         <flux:icon.chat-bubble-left x-show="row.is_note" class="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                                        @if($isApplied)
-                                            <span class="block px-1 py-1.5 text-sm font-semibold text-zinc-900 dark:text-white" :class="row.is_note ? 'italic font-normal' : ''" x-text="row.details"></span>
-                                        @else
-                                            <input
-                                                type="text"
-                                                data-row-details
-                                                x-model="row.details"
-                                                :placeholder="row.is_note ? '{{ __('Note…') }}' : '{{ __('Description…') }}'"
-                                                :class="row.is_note ? 'italic' : ''"
-                                                class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 placeholder:font-normal placeholder:text-zinc-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
-                                            />
-                                        @endif
+                                        <input
+                                            type="text"
+                                            data-row-details
+                                            x-model="row.details"
+                                            :placeholder="row.is_note ? '{{ __('Note…') }}' : '{{ __('Description…') }}'"
+                                            :class="row.is_note ? 'italic' : ''"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 placeholder:font-normal placeholder:text-zinc-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                                        />
                                     </div>
                                 </td>
                                 <template x-if="! row.is_note">
                                     <td class="px-2 py-2.5">
-                                        @if($isApplied)
-                                            <span class="font-mono tabular-nums text-zinc-700 dark:text-zinc-300" x-text="row.quantity"></span>
-                                        @else
-                                            <input type="number" min="0.01" step="0.01" data-row-qty x-model.number="row.quantity"
-                                                class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white" />
-                                        @endif
+                                        <input type="number" min="0.01" step="0.01" data-row-qty x-model.number="row.quantity"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white" />
                                     </td>
                                 </template>
                                 <template x-if="! row.is_note">
                                     <td class="px-2 py-2.5">
-                                        @if($isApplied)
-                                            <span class="font-mono tabular-nums text-zinc-700 dark:text-zinc-300">£<span x-text="Number(row.price).toFixed(2)"></span></span>
-                                        @else
-                                            <input type="number" min="0" step="0.01" x-model.number="row.price"
-                                                class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white" />
-                                        @endif
+                                        <input type="number" min="0" step="0.01" x-model.number="row.price"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white" />
                                     </td>
                                 </template>
                                 <template x-if="! row.is_note">
                                     <td class="px-2 py-2.5">
-                                        @if($isApplied)
-                                            <span class="text-zinc-700 dark:text-zinc-300" x-text="row.per || '—'"></span>
-                                        @else
-                                            <select x-model="row.per" @change.stop
-                                                class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white">
-                                                <option value="">—</option>
-                                                @foreach($units as $unit)
-                                                    <option value="{{ $unit }}">{{ $unit }}</option>
-                                                @endforeach
-                                            </select>
-                                        @endif
+                                        <select x-model="row.per" @change.stop
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white">
+                                            <option value="">—</option>
+                                            @foreach($units as $unit)
+                                                <option value="{{ $unit }}">{{ $unit }}</option>
+                                            @endforeach
+                                        </select>
                                     </td>
                                 </template>
                                 <template x-if="! row.is_note">
                                     <td class="px-2 py-2.5">
-                                        @if($isApplied)
-                                            <span class="text-zinc-700 dark:text-zinc-300" x-text="row.vat_applicable ? 'Yes' : 'No'"></span>
-                                        @else
-                                            <select x-model.boolean="row.vat_applicable" @change.stop
-                                                class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white">
-                                                <option :value="true">Yes</option>
-                                                <option :value="false">No</option>
-                                            </select>
-                                        @endif
+                                        <select x-model.boolean="row.vat_applicable" @change.stop
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white">
+                                            <option :value="true">Yes</option>
+                                            <option :value="false">No</option>
+                                        </select>
                                     </td>
                                 </template>
                                 <template x-if="! row.is_note">
                                     <td class="px-2 py-2.5 text-right">
-                                        @if($isApplied)
-                                            <span class="font-mono tabular-nums text-zinc-700 dark:text-zinc-300"><span x-text="Number(row.discount_percent || 0).toFixed(2)"></span>%</span>
-                                        @else
-                                            <input type="number" min="0" max="100" step="0.01" x-model.number="row.discount_percent"
-                                                class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white" />
-                                        @endif
+                                        <input type="number" min="0" max="100" step="0.01" x-model.number="row.discount_percent"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white" />
                                     </td>
                                 </template>
                                 <template x-if="! row.is_note">
-                                    <td class="px-2 py-2.5 text-right font-mono tabular-nums font-semibold text-zinc-900 dark:text-white">
-                                        £<span x-text="floorNet(row).toFixed(2)">0.00</span>
+                                    <td class="px-2 py-2.5">
+                                        <input type="number" min="0" step="0.01"
+                                            :value="displayAmount(floorNet(row), $el)"
+                                            @input="setNet(row, $event.target.value)"
+                                            @blur="$el.value = floorNet(row).toFixed(2)"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-right text-sm font-semibold tabular-nums text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white" />
+                                        <span x-show="netEdited(row)" class="mt-0.5 block text-right text-xs text-amber-600 dark:text-amber-400">edited</span>
                                     </td>
                                 </template>
-                                @unless($isApplied)
+                                <template x-if="! row.is_note">
                                     <td class="px-2 py-2.5">
-                                        <flux:button size="xs" variant="ghost" icon="x-mark" type="button" x-on:click="remove(i)" x-show="rows.length > 1" />
+                                        <input type="number" min="0" step="0.01"
+                                            :disabled="! row.vat_applicable"
+                                            :value="row.vat_applicable ? displayAmount(vatForRow(row, $wire.vatRate), $el) : ''"
+                                            @input="setVat(row, $event.target.value)"
+                                            @blur="$el.value = row.vat_applicable ? vatForRow(row, $wire.vatRate).toFixed(2) : ''"
+                                            class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-right text-sm font-semibold tabular-nums text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none disabled:opacity-50 dark:border-white/10 dark:bg-zinc-800 dark:text-white" />
+                                        <span x-show="vatEdited(row)" class="mt-0.5 block text-right text-xs text-amber-600 dark:text-amber-400">edited</span>
                                     </td>
-                                @endunless
+                                </template>
+                                <td class="px-2 py-2.5">
+                                    <flux:button size="xs" variant="ghost" icon="x-mark" type="button" x-on:click="remove(i)" x-show="rows.length > 1" />
+                                </td>
                             </tr>
                         </template>
                     </tbody>

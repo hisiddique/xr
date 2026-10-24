@@ -110,6 +110,32 @@ class SupplierInvoice extends Model
             ->withTimestamps();
     }
 
+    public function resyncDebitNoteDeductions(): void
+    {
+        $this->load(['items', 'debitNotes.items']);
+
+        $notes = $this->debitNotes
+            ->sortBy([fn ($a, $b) => [$a->pivot->applied_at, $a->id] <=> [$b->pivot->applied_at, $b->id]])
+            ->values();
+
+        $deductions = app(SupplierInvoiceTotalsCalculator::class)->debitNoteDeductions(
+            $this->items->map(fn ($item) => [
+                'line_total' => $item->line_total,
+                'vat_applicable' => $item->vat_applicable,
+                'vat_amount' => $item->vat_amount,
+                'gross_override' => $item->gross_override,
+            ]),
+            (float) $this->trade_discount,
+            (bool) $this->discount_on_gross,
+            $notes,
+            $this->vat_rate !== null ? (float) $this->vat_rate : null,
+        );
+
+        foreach ($notes as $note) {
+            $this->debitNotes()->updateExistingPivot($note->id, ['applied_amount' => $deductions[$note->id]]);
+        }
+    }
+
     public function getOutstandingAmountAttribute(): float
     {
         $paid = (float) $this->payoutAllocations->sum('allocated_amount');

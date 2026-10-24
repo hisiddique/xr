@@ -251,7 +251,7 @@ test('commitDebitNote ignores trailing empty rows and only stores filled items',
     expect((float) $note->total)->toBe(20.0);
 });
 
-test('commitDebitNote adds VAT for items marked vat_applicable', function () {
+test('commitDebitNote extracts VAT from the entered amount for items marked vat_applicable', function () {
     Setting::updateOrCreate(['key' => 'vat_rate'], ['key' => 'vat_rate', 'value' => '20', 'type' => 'integer']);
     Setting::flushCache();
 
@@ -268,13 +268,13 @@ test('commitDebitNote adds VAT for items marked vat_applicable', function () {
 
     $note = SupplierDebitNote::firstWhere('supplier_id', $supplier->id);
 
-    expect((float) $note->subtotal)->toBe(100.0);
-    expect((float) $note->vat_amount)->toBe(20.0);
-    expect((float) $note->total)->toBe(120.0);
+    expect((float) $note->subtotal)->toBe(83.33);
+    expect((float) $note->vat_amount)->toBe(16.67);
+    expect((float) $note->total)->toBe(100.0);
     expect($note->items->first()->vat_applicable)->toBeTrue();
 });
 
-test('commitDebitNote rounds the line value and its VAT down to the penny', function () {
+test('commitDebitNote floors the line value and rounds the extracted VAT to the penny', function () {
     Setting::updateOrCreate(['key' => 'vat_rate'], ['key' => 'vat_rate', 'value' => '20', 'type' => 'integer']);
     Setting::flushCache();
 
@@ -291,9 +291,9 @@ test('commitDebitNote rounds the line value and its VAT down to the penny', func
 
     $note = SupplierDebitNote::firstWhere('supplier_id', $supplier->id);
 
-    expect((float) $note->subtotal)->toBe(4.99);
-    expect((float) $note->vat_amount)->toBe(0.99);
-    expect((float) $note->total)->toBe(5.98);
+    expect((float) $note->subtotal)->toBe(4.16);
+    expect((float) $note->vat_amount)->toBe(0.83);
+    expect((float) $note->total)->toBe(4.99);
 });
 
 test('a floored debit note still reports the configured vat rate', function () {
@@ -310,12 +310,12 @@ test('a floored debit note still reports the configured vat rate', function () {
 
     $note = SupplierDebitNote::firstWhere('supplier_id', $supplier->id);
 
-    expect((float) $note->vat_amount)->toBe(0.99)
+    expect((float) $note->vat_amount)->toBe(0.83)
         ->and($note->effectiveVatRate())->toBe(20.0);
 
     Livewire::test('pages::supplier-debit-notes.show', ['debitNote' => $note])
-        ->assertSee('5.98')
-        ->assertSee('0.99');
+        ->assertSee('4.99')
+        ->assertSee('0.83');
 });
 
 test('commitDebitNote does not add VAT for items not marked vat_applicable', function () {
@@ -355,9 +355,9 @@ test('commitDebitNote mixes VAT and non-VAT items on the same note', function ()
 
     $note = SupplierDebitNote::firstWhere('supplier_id', $supplier->id);
 
-    expect((float) $note->subtotal)->toBe(150.0);
-    expect((float) $note->vat_amount)->toBe(20.0);
-    expect((float) $note->total)->toBe(170.0);
+    expect((float) $note->subtotal)->toBe(133.33);
+    expect((float) $note->vat_amount)->toBe(16.67);
+    expect((float) $note->total)->toBe(150.0);
 });
 
 test('commitDebitNote applies per divisor, lot pricing and per-line discount', function () {
@@ -374,7 +374,7 @@ test('commitDebitNote applies per divisor, lot pricing and per-line discount', f
             debitNoteRow(['details' => 'Pack line', 'quantity' => '10', 'price' => '100', 'per' => '5', 'vat_applicable' => true]),
             // lot: price only, qty ignored -> 250
             debitNoteRow(['details' => 'Lot line', 'quantity' => '3', 'price' => '250', 'per' => 'lot', 'vat_applicable' => false]),
-            // discount: 100 * 1 * 25% = 25
+            // discount: 100 * 1 less 25% = 75
             debitNoteRow(['details' => 'Discounted', 'quantity' => '1', 'price' => '100', 'per' => 'Each', 'discount_percent' => 25, 'vat_applicable' => false]),
             // note row: no qty/price
             debitNoteRow(['details' => 'Reason: short delivery', 'quantity' => '', 'price' => '', 'per' => '', 'is_note' => true]),
@@ -385,17 +385,17 @@ test('commitDebitNote applies per divisor, lot pricing and per-line discount', f
     $note = SupplierDebitNote::firstWhere('supplier_id', $supplier->id);
 
     expect($note->items)->toHaveCount(4);
-    expect((float) $note->subtotal)->toBe(475.0); // 200 + 250 + 25
-    expect((float) $note->vat_amount)->toBe(40.0); // 20% of the 200 line only
-    expect((float) $note->total)->toBe(515.0);
+    expect((float) $note->subtotal)->toBe(491.67); // 166.67 + 250 + 75
+    expect((float) $note->vat_amount)->toBe(33.33); // VAT extracted from the 200 gross line only
+    expect((float) $note->total)->toBe(525.0);
 
     $pack = $note->items->firstWhere('description', 'Pack line');
     expect((float) $pack->line_value)->toBe(200.0);
-    expect((float) $pack->total)->toBe(200.0);
+    expect((float) $pack->total)->toBe(166.67);
 
     $discounted = $note->items->firstWhere('description', 'Discounted');
     expect((float) $discounted->line_value)->toBe(100.0);
-    expect((float) $discounted->total)->toBe(25.0);
+    expect((float) $discounted->total)->toBe(75.0);
 
     $noteRow = $note->items->firstWhere('is_note', true);
     expect((float) $noteRow->total)->toBe(0.0);
