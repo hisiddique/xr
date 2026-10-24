@@ -56,6 +56,18 @@ new #[Title('Overhead Report')] class extends Component {
         $this->amountMax = '';
     }
 
+    public function exportUrl(string $format): string
+    {
+        $params = array_filter([
+            'dateFrom' => $this->dateFrom,
+            'dateTo' => $this->dateTo,
+            'amountMin' => $this->amountMin,
+            'amountMax' => $this->amountMax,
+        ], fn ($v) => $v !== '');
+
+        return route('reports.overheads.export', array_merge(['format' => $format], $params));
+    }
+
     protected function baseQuery()
     {
         return Overhead::query()
@@ -151,6 +163,14 @@ new #[Title('Overhead Report')] class extends Component {
             @if($preset || $dateFrom || $dateTo || $amountMin || $amountMax)
                 <flux:button wire:click="clearFilters" size="sm" variant="ghost" icon="x-mark">Clear</flux:button>
             @endif
+            <flux:dropdown class="ml-auto">
+                <flux:button size="sm" icon="arrow-down-tray" icon-trailing="chevron-down">{{ __('Export') }}</flux:button>
+                <flux:menu>
+                    <flux:menu.item icon="table-cells" :href="$this->exportUrl('csv')">CSV</flux:menu.item>
+                    <flux:menu.item icon="table-cells" :href="$this->exportUrl('xlsx')">Excel</flux:menu.item>
+                    <flux:menu.item icon="document-text" :href="$this->exportUrl('pdf')">PDF</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
         </div>
     </div>
 

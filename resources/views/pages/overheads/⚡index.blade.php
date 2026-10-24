@@ -2,6 +2,7 @@
 
 use App\Models\ExpenseCategory;
 use App\Models\Overhead;
+use App\Support\Search;
 use App\Livewire\Concerns\WithSorting;
 use App\Traits\WithPerPage;
 use Flux\Flux;
@@ -91,6 +92,21 @@ new #[Title('Overheads')] class extends Component {
         Flux::toast(variant: 'success', text: __('Overhead deleted.'));
     }
 
+    public function exportUrl(string $format): string
+    {
+        $params = array_filter([
+            'search' => $this->search,
+            'filterCategory' => $this->filterCategory,
+            'filterVat' => $this->filterVat,
+            'dateFrom' => $this->dateFrom,
+            'dateTo' => $this->dateTo,
+            'amountMin' => $this->amountMin,
+            'amountMax' => $this->amountMax,
+        ], fn ($v) => $v !== null && $v !== '');
+
+        return route('overheads.export', array_merge(['format' => $format], $params));
+    }
+
     #[Computed]
     public function categories()
     {
@@ -141,15 +157,14 @@ new #[Title('Overheads')] class extends Component {
     public function overheads()
     {
         $query = Overhead::with('category')
-            ->when($this->search, fn ($q) => $q->whereHas('category', fn ($q) => $q->where('name', 'like', "%{$this->search}%"))
-                ->orWhere('payment_method', 'like', "%{$this->search}%")
-            )
+            ->when($this->search, fn ($q) => Search::filter($q, $this->search, ['category.name', 'payment_method']))
             ->when($this->filterCategory, fn ($q) => $q->where('category_id', $this->filterCategory))
             ->when($this->filterVat !== '', fn ($q) => $q->where('has_vat', (bool) $this->filterVat))
             ->when($this->dateFrom, fn ($q) => $q->where('expense_date', '>=', $this->dateFrom))
             ->when($this->dateTo, fn ($q) => $q->where('expense_date', '<=', $this->dateTo))
             ->when($this->amountMin, fn ($q) => $q->where('amount', '>=', $this->amountMin))
-            ->when($this->amountMax, fn ($q) => $q->where('amount', '<=', $this->amountMax));
+            ->when($this->amountMax, fn ($q) => $q->where('amount', '<=', $this->amountMax))
+            ->when($this->search !== '' && $this->sortColumn === '', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['category.name', 'payment_method']));
 
         return $this->sortColumn === ''
             ? $this->applySort($query)->latest('expense_date')->paginate($this->perPage)
@@ -227,6 +242,15 @@ new #[Title('Overheads')] class extends Component {
                     <flux:select.option value="0">Ex. VAT</flux:select.option>
                 </flux:select>
                 <x-ui.per-page-select />
+
+                <flux:dropdown>
+                    <flux:button icon="arrow-down-tray" icon-trailing="chevron-down">{{ __('Export') }}</flux:button>
+                    <flux:menu>
+                        <flux:menu.item icon="table-cells" :href="$this->exportUrl('csv')">CSV</flux:menu.item>
+                        <flux:menu.item icon="table-cells" :href="$this->exportUrl('xlsx')">Excel</flux:menu.item>
+                        <flux:menu.item icon="document-text" :href="$this->exportUrl('pdf')">PDF</flux:menu.item>
+                    </flux:menu>
+                </flux:dropdown>
             </div>
         </div>
 

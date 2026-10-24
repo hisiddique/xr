@@ -6,6 +6,7 @@ use App\Http\Controllers\CustomerStatementController;
 use App\Http\Controllers\CustomerTurnoverExportController;
 use App\Http\Controllers\DocumentPdfController;
 use App\Http\Controllers\ExportDownloadController;
+use App\Http\Controllers\OverheadExportController;
 use App\Http\Controllers\SupplierDebitNotePdfController;
 use App\Http\Controllers\SupplierInvoiceAttachmentController;
 use App\Http\Controllers\SupplierPurchasingExportController;
@@ -97,6 +98,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('reports/customer-turnover/export/{format}', [CustomerTurnoverExportController::class, 'export'])
         ->where('format', 'csv|xlsx|pdf')
         ->name('reports.customer-turnover.export');
+    Route::get('reports/overheads/export/{format}', [OverheadExportController::class, 'export'])
+        ->defaults('scope', 'report')
+        ->where('format', 'csv|xlsx|pdf')
+        ->middleware('can:report-overheads')
+        ->name('reports.overheads.export');
+    Route::get('overheads-export/{format}', [OverheadExportController::class, 'export'])
+        ->defaults('scope', 'list')
+        ->where('format', 'csv|xlsx|pdf')
+        ->middleware('can:overhead-index')
+        ->name('overheads.export');
 
     // Exports
     Route::livewire('exports', 'pages::exports.index')->name('exports.index')->middleware('can:export-index');
