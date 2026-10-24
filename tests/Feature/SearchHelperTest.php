@@ -145,3 +145,31 @@ test('document search lists details that start with the term first', function ()
     expect(array_slice($details, 0, 2))->toEqualCanonicalizing(['Widget Small', 'Widget Large'])
         ->and($details[2])->toBe('Large Widget');
 });
+
+test('a null or blank search term leaves the query untouched', function () {
+    Customer::factory()->count(2)->create();
+
+    foreach ([null, '', '   '] as $term) {
+        $query = Customer::query();
+        Search::filter($query, $term, ['company_name']);
+        Search::rankStartsWithFirst($query, $term, ['company_name', 'title.name']);
+
+        expect($query->count())->toBe(2)
+            ->and($query->toSql())->not->toContain('case when');
+    }
+});
+
+test('clearing a column filter on customers and suppliers does not error', function () {
+    $this->actingAs(User::factory()->admin()->create(['email_verified_at' => now()]));
+    Customer::factory()->create();
+    Supplier::factory()->create();
+
+    foreach (['customers' => ['reference', 'company', 'email', 'contact'], 'suppliers' => ['reference', 'company']] as $page => $keys) {
+        foreach ($keys as $key) {
+            Livewire\Livewire::test("pages::{$page}.index")
+                ->set("filters.{$key}", 'a')
+                ->set("filters.{$key}", null)
+                ->assertHasNoErrors();
+        }
+    }
+});

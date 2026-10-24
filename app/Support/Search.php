@@ -29,8 +29,12 @@ class Search
      *
      * @param  array<int, string>  $columns
      */
-    public static function filter(Builder $query, string $term, array $columns): Builder
+    public static function filter(Builder $query, ?string $term, array $columns): Builder
     {
+        if (blank($term)) {
+            return $query;
+        }
+
         $like = self::contains($term);
         $grammar = $query->getQuery()->getGrammar();
 
@@ -59,8 +63,12 @@ class Search
      *
      * @param  array<int, string>  $columns
      */
-    public static function rankStartsWithFirst(Builder $query, string $term, array $columns): Builder
+    public static function rankStartsWithFirst(Builder $query, ?string $term, array $columns): Builder
     {
+        if (blank($term)) {
+            return $query;
+        }
+
         $pattern = $query->getConnection()->getPdo()->quote(self::startsWith($term));
         $grammar = $query->getQuery()->getGrammar();
         $escape = ' escape \''.self::ESCAPE.'\'';
