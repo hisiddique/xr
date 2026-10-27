@@ -205,3 +205,38 @@ test('the backfill recalculates a vat-inclusive note that was saved with the old
 
     $this->artisan('supplier-debit-notes:backfill-deductions')->expectsOutputToContain('Nothing to backfill')->assertSuccessful();
 });
+
+test('editing a debit note can move it to another invoice of the same supplier and resyncs both', function () {
+    $supplier = Supplier::factory()->create();
+    $makeInvoice = fn () => SupplierInvoice::factory()
+        ->has(SupplierInvoiceItem::factory()->state(['quantity' => 1, 'unit_amount' => 100, 'vat_applicable' => false, 'line_total' => 100]), 'items')
+        ->create(['supplier_id' => $supplier->id, 'created_by' => $this->user->id]);
+    $first = $makeInvoice();
+    $second = $makeInvoice();
+    $line = ['details' => 'Returned', 'quantity' => 1, 'price' => 10, 'per' => 'Lot', 'discount_percent' => 0, 'vat_applicable' => false];
+
+    Livewire::test('pages::supplier-debit-notes.create')
+        ->set('supplier_id', $supplier->id)
+        ->set('doc_date', '2026-01-15')
+        ->set('supplier_invoice_id', $first->id)
+        ->set('items', [$line])
+        ->call('commitDebitNote')
+        ->assertHasNoErrors();
+
+    $note = SupplierDebitNote::firstOrFail();
+
+    Livewire::test('pages::supplier-debit-notes.edit', ['debitNote' => $note])
+        ->assertSet('supplier_invoice_id', $first->id)
+        ->set('supplier_invoice_id', $second->id)
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect($note->refresh()->supplier_invoice_id)->toBe($second->id)
+        ->and($first->debitNotes()->count())->toBe(0)
+        ->and((float) $second->debitNotes()->first()->pivot->applied_amount)->toBe(10.0);
+
+    Livewire::test('pages::supplier-debit-notes.edit', ['debitNote' => $note])
+        ->set('supplier_invoice_id', SupplierInvoice::factory()->create()->id)
+        ->call('save')
+        ->assertHasErrors('supplier_invoice_id');
+});

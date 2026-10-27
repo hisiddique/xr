@@ -391,11 +391,11 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                                     <td class="px-2 py-2.5">
                                         <select
                                             x-model.boolean="row.vat_applicable"
-                                            @change.stop
+                                            @change.stop="if (! row.vat_applicable) row.vat_override = null"
                                             class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
                                         >
-                                            <option :value="true">Yes</option>
-                                            <option :value="false">No</option>
+                                            <option value="true">Yes</option>
+                                            <option value="false">No</option>
                                         </select>
                                     </td>
                                 </template>
@@ -419,6 +419,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                                     <td class="px-2 py-2.5">
                                         <input type="number" min="0" step="0.01"
                                             :disabled="! row.vat_applicable"
+                                            x-effect="if (! row.vat_applicable) $el.value = ''"
                                             :value="row.vat_applicable ? displayAmount(vatForRow(row, $wire.vatRate), $el) : ''"
                                             @input="setVat(row, $event.target.value)"
                                             @blur="$el.value = row.vat_applicable ? vatForRow(row, $wire.vatRate).toFixed(2) : ''"

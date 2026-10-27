@@ -129,6 +129,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::livewire('settings/crm', 'pages::settings.crm')->name('settings.crm')->middleware('can:settings-crm');
         Route::livewire('settings/legacy-migration', 'pages::settings.legacy-migration')->name('settings.legacy-migration')->middleware('can:settings-legacyMigration');
         Route::livewire('settings/archive', 'pages::settings.archive')->name('settings.archive')->middleware('can:settings-archive');
+        Route::livewire('settings/table-sorts', 'pages::settings.table-sorts')->name('settings.table-sorts')->middleware('can:settings-tableSorts');
         Route::livewire('settings/troubleshooting', 'pages::settings.troubleshooting')->name('settings.troubleshooting')->middleware('can:settings-troubleshooting');
 
         // Users

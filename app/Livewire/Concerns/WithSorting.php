@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Concerns;
 
+use App\Support\TableSorts;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Livewire\Attributes\Url;
 
@@ -44,18 +45,44 @@ trait WithSorting
         }
     }
 
+    /**
+     * Key in TableSorts whose configured default applies while the user has not picked a sort.
+     */
+    protected function defaultSortTable(): ?string
+    {
+        return null;
+    }
+
+    /**
+     * @return array{0: string, 1: string} column and direction, or an empty column when nothing applies
+     */
+    protected function effectiveSort(): array
+    {
+        if ($this->sortColumn !== '') {
+            return in_array($this->sortColumn, $this->sortableColumns(), true)
+                ? [$this->sortColumn, $this->sortDirection === 'desc' ? 'desc' : 'asc']
+                : ['', 'asc'];
+        }
+
+        $table = $this->defaultSortTable();
+        [$column, $direction] = $table === null ? ['', 'asc'] : TableSorts::for($table);
+
+        return in_array($column, $this->sortableColumns(), true) ? [$column, $direction] : ['', 'asc'];
+    }
+
     public function applySort(Builder $query): Builder
     {
-        if ($this->sortColumn === '' || ! in_array($this->sortColumn, $this->sortableColumns(), true)) {
+        [$column, $direction] = $this->effectiveSort();
+
+        if ($column === '') {
             return $query;
         }
 
-        $direction = $this->sortDirection === 'desc' ? 'desc' : 'asc';
-        $custom = $this->applyCustomSort($query, $this->sortColumn, $direction);
-        $query = $custom instanceof Builder ? $custom : $query->orderBy($this->sortColumn, $direction);
+        $custom = $this->applyCustomSort($query, $column, $direction);
+        $query = $custom instanceof Builder ? $custom : $query->orderBy($column, $direction);
 
         $secondary = $this->secondarySortColumn();
-        if ($secondary !== null && $secondary !== $this->sortColumn) {
+        if ($secondary !== null && $secondary !== $column) {
             $query->orderBy($secondary, $direction);
         }
 
@@ -78,10 +105,8 @@ trait WithSorting
 
     public function sortStateFor(string $column): ?string
     {
-        if ($this->sortColumn !== $column) {
-            return null;
-        }
+        [$active, $direction] = $this->effectiveSort();
 
-        return $this->sortDirection === 'desc' ? 'desc' : 'asc';
+        return $active === $column ? $direction : null;
     }
 }

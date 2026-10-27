@@ -20,6 +20,11 @@ new #[Title('Payments')] class extends Component
 
     protected array $sortable = ['reference', 'payment_date', 'amount'];
 
+    protected function defaultSortTable(): ?string
+    {
+        return 'payments';
+    }
+
     protected function secondarySortColumn(): ?string
     {
         return 'reference';

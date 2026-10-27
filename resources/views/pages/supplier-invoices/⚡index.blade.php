@@ -21,6 +21,11 @@ new #[Title('Supplier Invoices')] class extends Component {
 
     protected array $sortable = ['supplier_invoice_no', 'invoice_date', 'created_at', 'payable_total', 'vat_total', 'net_total', 'discount_amount', 'paid_status'];
 
+    protected function defaultSortTable(): ?string
+    {
+        return 'supplier-invoices';
+    }
+
     #[Url]
     public string $search = '';
 

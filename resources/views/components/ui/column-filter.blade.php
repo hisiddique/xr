@@ -5,7 +5,6 @@
 
 <flux:input
     wire:model.live.debounce.300ms="{{ $model }}"
-    type="search"
     size="sm"
     autocomplete="off"
     :placeholder="$placeholder"

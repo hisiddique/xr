@@ -204,3 +204,27 @@ test('typeahead with a single search column does not match unrelated rows', func
 
     expect(collect($labels)->pluck('label')->all())->toBe(['Acme Ltd']);
 });
+
+test('ranking lists exact matches, then starts with, then ends with, then contains', function () {
+    foreach (['xdcx', 'adc', 'dca', 'dc'] as $name) {
+        Customer::factory()->create(['company_name' => $name]);
+    }
+
+    $query = Customer::query();
+    Search::filter($query, 'dc', ['company_name']);
+    Search::rankStartsWithFirst($query, 'dc', ['company_name']);
+
+    expect($query->orderBy('company_name')->pluck('company_name')->all())->toBe(['dc', 'dca', 'adc', 'xdcx']);
+});
+
+test('typeahead lists exact, then starts with, then ends with, then contains', function () {
+    foreach (['xdcx', 'adc', 'dca', 'dc'] as $name) {
+        Customer::factory()->create(['company_name' => $name]);
+    }
+
+    $labels = Livewire\Livewire::test('pages::ui.typeahead', ['model' => Customer::class, 'column' => 'company_name', 'minChars' => 2])
+        ->set('search', 'dc')
+        ->instance()->suggestions;
+
+    expect(collect($labels)->pluck('label')->all())->toBe(['dc', 'dca', 'adc', 'xdcx']);
+});

@@ -5,11 +5,14 @@ use App\Livewire\Concerns\ValidatesDocumentItems;
 use App\Models\LookupUnit;
 use App\Models\Setting;
 use App\Models\SupplierDebitNote;
+use App\Models\SupplierInvoice;
 use App\Services\DocumentTotalsCalculator;
 use App\Services\SupplierInvoiceTotalsCalculator;
 use App\Support\Money;
 use Flux\Flux;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
@@ -19,6 +22,8 @@ new #[Title('Edit Debit Note')] class extends Component {
     public SupplierDebitNote $debitNote;
 
     public string $doc_date = '';
+
+    public ?int $supplier_invoice_id = null;
 
     public string $notes = '';
 
@@ -34,6 +39,7 @@ new #[Title('Edit Debit Note')] class extends Component {
     {
         $this->debitNote->load(['supplier', 'supplierInvoice', 'items']);
         $this->doc_date = $this->debitNote->doc_date->format('Y-m-d');
+        $this->supplier_invoice_id = $this->debitNote->supplier_invoice_id;
         $this->notes = $this->debitNote->notes ?? '';
         $this->vatRate = (float) ($this->debitNote->vat_rate ?? Setting::get('vat_rate', 20));
         $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
@@ -51,6 +57,24 @@ new #[Title('Edit Debit Note')] class extends Component {
         ])->toArray();
     }
 
+    #[Computed]
+    public function supplierInvoices(): array
+    {
+        return SupplierInvoice::where('supplier_id', $this->debitNote->supplier_id)
+            ->where(fn ($q) => $q
+                ->where('id', $this->debitNote->supplier_invoice_id)
+                ->orWhereRaw('
+                    (SELECT COALESCE(SUM(line_total), 0) FROM supplier_invoice_items WHERE supplier_invoice_id = supplier_invoices.id AND deleted_at IS NULL)
+                    - COALESCE(supplier_invoices.discount_amount, 0)
+                    - (SELECT COALESCE(SUM(allocated_amount), 0) FROM supplier_payout_allocations WHERE supplier_invoice_id = supplier_invoices.id)
+                    - (SELECT COALESCE(SUM(applied_amount), 0) FROM supplier_invoice_debit_notes WHERE supplier_invoice_id = supplier_invoices.id)
+                    > 0.001
+                '))
+            ->orderByDesc('invoice_date')
+            ->get(['id', 'supplier_invoice_no', 'supplier_ref_invoice_no'])
+            ->toArray();
+    }
+
     public function save(): void
     {
         $this->items = array_values(array_filter($this->items, fn ($i) => trim((string) ($i['details'] ?? '')) !== ''
@@ -61,6 +85,7 @@ new #[Title('Edit Debit Note')] class extends Component {
 
         $rules = [
             'doc_date' => 'required|date',
+            'supplier_invoice_id' => ['nullable', 'integer', Rule::exists('supplier_invoices', 'id')->where('supplier_id', $this->debitNote->supplier_id)],
             'notes' => 'nullable|string|max:1000',
             'items.*.vat_applicable' => 'boolean',
             'items.*.net_override' => 'nullable|numeric|min:0',
@@ -111,9 +136,14 @@ new #[Title('Edit Debit Note')] class extends Component {
         $subtotal = round($subtotal, 2);
         $vatAmount = round($vatAmount, 2);
 
-        DB::transaction(function () use ($computed, $subtotal, $vatAmount) {
+        $newInvoiceId = $this->supplier_invoice_id ?: null;
+        $previousInvoiceIds = $this->debitNote->appliedInvoices()->pluck('supplier_invoices.id')->all();
+        $invoiceChanged = $newInvoiceId !== $this->debitNote->supplier_invoice_id;
+
+        DB::transaction(function () use ($computed, $subtotal, $vatAmount, $newInvoiceId, $previousInvoiceIds, $invoiceChanged) {
             $this->debitNote->update([
                 'doc_date' => $this->doc_date,
+                'supplier_invoice_id' => $newInvoiceId,
                 'notes' => $this->notes ?: null,
                 'vat_rate' => $this->vatRate,
                 'subtotal' => $subtotal,
@@ -126,9 +156,17 @@ new #[Title('Edit Debit Note')] class extends Component {
                 $this->debitNote->items()->create($row);
             }
 
-            foreach ($this->debitNote->appliedInvoices as $invoice) {
-                $invoice->resyncDebitNoteDeductions();
+            if ($invoiceChanged) {
+                $this->debitNote->appliedInvoices()->detach();
+
+                if ($newInvoiceId !== null) {
+                    $this->debitNote->appliedInvoices()->attach($newInvoiceId, ['applied_amount' => 0, 'applied_at' => now()]);
+                }
             }
+
+            SupplierInvoice::whereIn('id', array_filter(array_unique([...$previousInvoiceIds, $newInvoiceId])))
+                ->get()
+                ->each->resyncDebitNoteDeductions();
         });
 
         Flux::toast(variant: 'success', text: 'Debit note updated.');
@@ -183,14 +221,13 @@ new #[Title('Edit Debit Note')] class extends Component {
                 <flux:input wire:model="doc_date" type="date" :label="__('Document Date')" required />
                 <div>
                     <flux:label>{{ __('Against Supplier Invoice') }}</flux:label>
-                    <div class="mt-1.5 flex items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-white/10 dark:bg-zinc-800">
-                        @if($debitNote->supplierInvoice)
-                            <span class="font-mono text-sm text-zinc-700 dark:text-zinc-300">{{ $debitNote->supplierInvoice->supplier_invoice_no }}</span>
-                        @else
-                            <span class="text-sm text-zinc-400">—</span>
-                        @endif
-                        <span class="ml-auto text-xs text-zinc-400">Read-only</span>
-                    </div>
+                    <flux:select wire:model="supplier_invoice_id" class="mt-1.5" x-on:focus="$el.showPicker?.()">
+                        <flux:select.option value="">— None —</flux:select.option>
+                        @foreach($this->supplierInvoices as $inv)
+                            <flux:select.option :value="$inv['id']">{{ $inv['supplier_invoice_no'] }}@if(! empty($inv['supplier_ref_invoice_no'])) ({{ $inv['supplier_ref_invoice_no'] }})@endif</flux:select.option>
+                        @endforeach
+                    </flux:select>
+                    @error('supplier_invoice_id') <flux:error>{{ $message }}</flux:error> @enderror
                 </div>
                 <div class="md:col-span-2">
                     <flux:input wire:model="notes" :label="__('Notes')" :placeholder="__('Optional notes for this debit note…')" />
@@ -265,10 +302,10 @@ new #[Title('Edit Debit Note')] class extends Component {
                                 </template>
                                 <template x-if="! row.is_note">
                                     <td class="px-2 py-2.5">
-                                        <select x-model.boolean="row.vat_applicable" @change.stop
+                                        <select x-model.boolean="row.vat_applicable" @change.stop="if (! row.vat_applicable) row.vat_override = null"
                                             class="block w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold text-zinc-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white">
-                                            <option :value="true">Yes</option>
-                                            <option :value="false">No</option>
+                                            <option value="true">Yes</option>
+                                            <option value="false">No</option>
                                         </select>
                                     </td>
                                 </template>
@@ -292,6 +329,7 @@ new #[Title('Edit Debit Note')] class extends Component {
                                     <td class="px-2 py-2.5">
                                         <input type="number" min="0" step="0.01"
                                             :disabled="! row.vat_applicable"
+                                            x-effect="if (! row.vat_applicable) $el.value = ''"
                                             :value="row.vat_applicable ? displayAmount(vatForRow(row, $wire.vatRate), $el) : ''"
                                             @input="setVat(row, $event.target.value)"
                                             @blur="$el.value = row.vat_applicable ? vatForRow(row, $wire.vatRate).toFixed(2) : ''"

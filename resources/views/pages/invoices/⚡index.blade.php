@@ -28,6 +28,11 @@ new #[Title('Invoices')] class extends Component
 
     protected array $sortable = ['doc_number', 'doc_date', 'status', 'total_value', 'assignee', 'order_no', 'created_at'];
 
+    protected function defaultSortTable(): ?string
+    {
+        return 'invoices';
+    }
+
     protected function secondarySortColumn(): ?string
     {
         return 'doc_number';

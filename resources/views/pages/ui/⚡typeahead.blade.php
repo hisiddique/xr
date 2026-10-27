@@ -74,26 +74,19 @@ new class extends Component {
             function () use ($modelClass, $column, $valueColumn, $searchColumns, $labelAccessor, $useAccessor, $limit, $term): array {
                 $columns = $useAccessor ? ['*'] : [$valueColumn, $column];
 
-                $grammar = $modelClass::query()->getQuery()->getGrammar();
-                $prefixPattern = Search::startsWith($term);
-                $startsWith = function ($query, array $cols) use ($grammar, $prefixPattern) {
-                    return $query->where(function ($q) use ($cols, $grammar, $prefixPattern): void {
-                        foreach ($cols as $col) {
-                            $q->orWhereRaw(
-                                $grammar->wrap($q->getModel()->qualifyColumn($col))." like ? escape '!'",
-                                [$prefixPattern],
-                            );
-                        }
-                    });
-                };
-
                 $otherColumns = array_values(array_diff($searchColumns, [$column]));
 
-                $tiers = array_values(array_filter([
-                    fn ($q) => $startsWith($q, [$column]),
-                    $otherColumns !== [] ? fn ($q) => $startsWith($q, $otherColumns) : null,
-                    fn ($q) => Search::filter($q, $term, $searchColumns),
-                ]));
+                $tiers = [];
+
+                foreach ([Search::EXACT, Search::STARTS, Search::ENDS] as $mode) {
+                    $tiers[] = fn ($q) => Search::filter($q, $term, [$column], $mode);
+
+                    if ($otherColumns !== []) {
+                        $tiers[] = fn ($q) => Search::filter($q, $term, $otherColumns, $mode);
+                    }
+                }
+
+                $tiers[] = fn ($q) => Search::filter($q, $term, $searchColumns);
 
                 $results = collect();
 

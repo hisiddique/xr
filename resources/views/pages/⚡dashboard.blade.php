@@ -90,6 +90,7 @@ new #[Title('Dashboard')] class extends Component {
                 ['label' => 'Data Archive',      'icon' => 'archive-box',    'href' => route('settings.archive'), 'can' => 'settings-archive'],
                 ['label' => 'Legacy Migration',  'icon' => 'circle-stack',   'href' => route('settings.legacy-migration'), 'can' => 'settings-legacyMigration'],
                 ['label' => 'Troubleshooting',   'icon' => 'wrench-screwdriver', 'href' => route('settings.troubleshooting'), 'can' => 'settings-troubleshooting'],
+                ['label' => 'Table Sorting',     'icon' => 'bars-arrow-down', 'href' => route('settings.table-sorts'), 'can' => 'settings-tableSorts'],
             ],
         ] : null,
         $isAdmin ? [

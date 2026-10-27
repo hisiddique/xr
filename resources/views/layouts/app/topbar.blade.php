@@ -238,7 +238,7 @@
                         @endcanany
 
                         {{-- Operations dropdown --}}
-                        @canany(['statementdispatch-view', 'export-index', 'settings-archive', 'settings-legacyMigration', 'settings-troubleshooting'])
+                        @canany(['statementdispatch-view', 'export-index', 'settings-archive', 'settings-legacyMigration', 'settings-troubleshooting', 'settings-tableSorts'])
                         <flux:dropdown>
                             <button
                                 type="button"
@@ -271,6 +271,9 @@
                                 @endcan
                                 @can('settings-troubleshooting')
                                 <flux:menu.item :href="route('settings.troubleshooting')" icon="wrench-screwdriver" wire:navigate>Troubleshooting</flux:menu.item>
+                                @endcan
+                                @can('settings-tableSorts')
+                                <flux:menu.item :href="route('settings.table-sorts')" icon="bars-arrow-down" wire:navigate>Table Sorting</flux:menu.item>
                                 @endcan
                             </flux:menu>
                         </flux:dropdown>
@@ -868,7 +871,7 @@
                                 </a>
                             </li>
                             @endcan
-                            @canany(['statementdispatch-view', 'export-index', 'settings-archive', 'settings-legacyMigration', 'settings-troubleshooting'])
+                            @canany(['statementdispatch-view', 'export-index', 'settings-archive', 'settings-legacyMigration', 'settings-troubleshooting', 'settings-tableSorts'])
                             <li class="pt-2">
                                 <p class="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Operations</p>
                             </li>
@@ -965,6 +968,22 @@
                                 >
                                     <flux:icon.wrench-screwdriver class="size-5 shrink-0" />
                                     Troubleshooting
+                                </a>
+                            </li>
+                            @endcan
+                            @can('settings-tableSorts')
+                            <li>
+                                <a
+                                    href="{{ route('settings.table-sorts') }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                        'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' => request()->routeIs('settings.table-sorts'),
+                                        'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5' => !request()->routeIs('settings.table-sorts'),
+                                    ])
+                                >
+                                    <flux:icon.bars-arrow-down class="size-5 shrink-0" />
+                                    Table Sorting
                                 </a>
                             </li>
                             @endcan

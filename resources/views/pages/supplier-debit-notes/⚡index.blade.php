@@ -2,6 +2,7 @@
 
 use App\Models\SupplierDebitNote;
 use App\Support\Search;
+use App\Support\TableSorts;
 use App\Traits\WithPerPage;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -36,6 +37,11 @@ new #[Title('Supplier Debit Notes')] class extends Component {
     public int $perPage = 25;
 
     public ?int $deletingId = null;
+
+    public function mount(): void
+    {
+        [$this->sortBy, $this->sortDir] = TableSorts::for('supplier-debit-notes');
+    }
 
     public function updatedSearch(): void
     {
@@ -92,7 +98,7 @@ new #[Title('Supplier Debit Notes')] class extends Component {
             ->when($this->dateTo, fn ($q) => $q->whereDate('doc_date', '<=', $this->dateTo))
             ->when($this->amountMin !== '', fn ($q) => $q->where('total', '>=', $this->amountMin))
             ->when($this->amountMax !== '', fn ($q) => $q->where('total', '<=', $this->amountMax))
-            ->when($this->search !== '' && $this->sortBy === 'reference' && $this->sortDir === 'desc', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['reference', 'supplier.company_name', 'supplierInvoice.supplier_ref_invoice_no']))
+            ->when($this->search !== '', fn ($q) => Search::rankStartsWithFirst($q, $this->search, ['reference', 'supplier.company_name', 'supplierInvoice.supplier_ref_invoice_no']))
             ->orderBy($this->sortBy, $this->sortDir)
             ->paginate($this->perPage);
     }

@@ -18,6 +18,11 @@ new #[Title('Overheads')] class extends Component {
 
     protected array $sortable = ['expense_date', 'net_total', 'vat_total', 'gross_total', 'payment_method'];
 
+    protected function defaultSortTable(): ?string
+    {
+        return 'overheads';
+    }
+
     #[Url]
     public string $search = '';
 

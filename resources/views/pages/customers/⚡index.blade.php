@@ -16,6 +16,11 @@ new #[Title('Customers')] class extends Component {
 
     protected array $sortable = ['company_name', 'reference', 'email_1', 'created_at'];
 
+    protected function defaultSortTable(): ?string
+    {
+        return 'customers';
+    }
+
     #[Url]
     public string $search = '';
 
