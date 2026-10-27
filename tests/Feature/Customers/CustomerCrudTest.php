@@ -135,3 +135,16 @@ test('vat column filter narrows customers by registration status', function () {
         ->assertSeeText('Unregistered Co')
         ->assertDontSeeText('Registered Co');
 });
+
+test('customer list deletes through its single shared modal', function () {
+    $user = User::factory()->admin()->create(['email_verified_at' => now()]);
+    $customer = Customer::factory()->create();
+
+    Livewire::actingAs($user)
+        ->test('pages::customers.index')
+        ->set('deletingId', $customer->id)
+        ->call('deleteCustomer')
+        ->assertSet('deletingId', null);
+
+    $this->assertSoftDeleted('customers', ['id' => $customer->id]);
+});

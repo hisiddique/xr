@@ -4,6 +4,7 @@ use App\Livewire\Concerns\WithSorting;
 use App\Models\Customer;
 use App\Support\Search;
 use App\Traits\WithPerPage;
+use Flux\Flux;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -47,6 +48,35 @@ new #[Title('Customers')] class extends Component {
     public function hasActiveFilter(): bool
     {
         return $this->search !== '' || collect($this->filters)->filter(fn ($v) => $v !== '')->isNotEmpty();
+    }
+
+    public ?int $deletingId = null;
+
+    #[Computed]
+    public function deletingCustomer(): ?Customer
+    {
+        return $this->deletingId ? Customer::find($this->deletingId) : null;
+    }
+
+    public function deleteCustomer(): void
+    {
+        abort_unless(auth()->user()->can('customer-delete'), 403);
+
+        $customer = $this->deletingCustomer;
+
+        if ($customer === null) {
+            return;
+        }
+
+        if ($message = $customer->deletionBlockedMessage($customer->company_name)) {
+            Flux::toast(heading: __('Cannot Delete Customer'), text: $message, variant: 'danger', duration: 0);
+        } else {
+            $customer->delete();
+            Flux::toast(variant: 'success', text: __('Customer deleted successfully.'));
+        }
+
+        $this->deletingId = null;
+        Flux::modal('delete-customer')->close();
     }
 
     public int $perPage = 25;
@@ -173,7 +203,7 @@ new #[Title('Customers')] class extends Component {
                                 data-row-index="{{ $loop->index }}"
                                 @can('customer-show') data-view-url="{{ route('customers.show', $customer) }}" @endcan
                                 @can('customer-edit') data-edit-url="{{ route('customers.edit', $customer) }}" @endcan
-                                @can('customer-delete') data-delete-modal="delete-customer-{{ $customer->id }}" @endcan
+                                @can('customer-delete') data-delete-modal="delete-customer" data-delete-id="{{ $customer->id }}" @endcan
                                 @class([
                                     'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
                                     'sticky bottom-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_-1px_0_0_theme(--color-zinc-100)] dark:shadow-[0_-1px_0_0_theme(--color-white/0.06)]' => false && $loop->last, // sticky first/last row disabled
@@ -222,7 +252,16 @@ new #[Title('Customers')] class extends Component {
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('customers.edit', $customer)" wire:navigate data-row-action="edit" />
                                         @endcan
                                         @can('customer-delete')
-                                        <livewire:pages::customers.delete-modal :customer="$customer" :key="'delete-'.$customer->id" />
+                                        <flux:button
+                                            size="xs"
+                                            variant="ghost"
+                                            icon="trash"
+                                            wire:click="$set('deletingId', {{ $customer->id }})"
+                                            x-on:click="$flux.modal('delete-customer').show()"
+                                            class="text-red-500 hover:text-red-700"
+                                            :title="__('Delete')"
+                                            data-row-action="delete"
+                                        />
                                         @endcan
                                     </div>
                                 </td>
@@ -250,5 +289,31 @@ new #[Title('Customers')] class extends Component {
     </div>
 
     <div x-data x-init="$nextTick(() => Alpine.store('hotkeys').focusZone('table'))"></div>
+
+    <flux:modal name="delete-customer" focusable class="max-w-md" @close="$wire.set('deletingId', null)">
+        @if($this->deletingCustomer)
+            <div class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ __('Delete Customer') }}</flux:heading>
+                    <flux:subheading>
+                        {{ __('Are you sure you want to delete :company? This action cannot be undone.', ['company' => $this->deletingCustomer->company_name]) }}
+                    </flux:subheading>
+                    @if($this->deletingCustomer->deletionBlockers() === [])
+                        <flux:text class="mt-2 text-emerald-600 dark:text-emerald-400">{{ $this->deletingCustomer->noRelatedRecordsMessage($this->deletingCustomer->company_name) }}</flux:text>
+                    @endif
+                </div>
+
+                <div class="flex justify-end gap-3">
+                    <flux:modal.close>
+                        <flux:button variant="filled">{{ __('Cancel') }}</flux:button>
+                    </flux:modal.close>
+
+                    <flux:button variant="danger" wire:click="deleteCustomer" wire:loading.attr="disabled">
+                        {{ __('Delete Customer') }}
+                    </flux:button>
+                </div>
+            </div>
+        @endif
+    </flux:modal>
 
 </div>

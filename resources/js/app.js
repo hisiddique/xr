@@ -966,6 +966,7 @@ document.addEventListener('alpine:init', () => {
                 convertModal: tr.dataset.convertModal || null,
                 convertId: tr.dataset.convertId ? Number(tr.dataset.convertId) : null,
                 deleteModal: tr.dataset.deleteModal || null,
+                deleteId: tr.dataset.deleteId ? Number(tr.dataset.deleteId) : null,
                 actions: Array.from(tr.querySelectorAll('[data-row-action]')).map((el) => ({
                     kind: el.dataset.rowAction,
                     el,
@@ -1003,6 +1004,7 @@ document.addEventListener('alpine:init', () => {
         deleteRow(i) {
             const row = this._zoneRows[i];
             if (row?.deleteModal) {
+                if (row.deleteId !== null) this.$wire.set('deletingId', row.deleteId);
                 Alpine.store('hotkeys').openModalWithConfirm(row.deleteModal);
             }
         },
