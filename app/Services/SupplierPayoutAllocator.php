@@ -25,10 +25,10 @@ class SupplierPayoutAllocator
         $rows = [];
 
         foreach ($invoices as $invoice) {
-            $grossTotal = $invoice->grossTotal;
+            $payableTotal = $invoice->payableTotal;
             $paid = (float) $invoice->payoutAllocations->sum('allocated_amount');
             $deducted = (float) $invoice->debitNotes->sum(fn ($dn) => (float) $dn->pivot->applied_amount);
-            $effective = max(0, $grossTotal - $paid - $deducted);
+            $effective = max(0, $payableTotal - $paid - $deducted);
 
             if ($effective <= 0 || $remaining <= 0) {
                 continue;

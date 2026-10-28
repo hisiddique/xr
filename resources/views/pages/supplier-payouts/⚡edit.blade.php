@@ -48,10 +48,10 @@ new #[Title('Edit Payout')] class extends Component {
                 if (! $invoice) {
                     continue;
                 }
-                $grossTotal = $invoice->grossTotal;
+                $payableTotal = $invoice->payableTotal;
                 $paid = (float) $invoice->payoutAllocations->sum('allocated_amount');
                 $deducted = (float) $invoice->debitNotes->sum(fn ($dn) => (float) $dn->pivot->applied_amount);
-                $effective = max(0, $grossTotal - $paid - $deducted);
+                $effective = max(0, $payableTotal - $paid - $deducted);
                 $existing = (float) $allocation->allocated_amount;
 
                 $rows[] = [
@@ -59,7 +59,7 @@ new #[Title('Edit Payout')] class extends Component {
                     'reference' => $invoice->supplier_invoice_no,
                     'supplier_ref' => $invoice->supplier_ref_invoice_no,
                     'invoice_date' => $invoice->invoice_date->format('d M Y'),
-                    'original_amount' => $grossTotal,
+                    'original_amount' => $payableTotal,
                     'debit_note_ref' => $allocation->supplierDebitNote?->reference,
                     'debit_note_id' => $allocation->supplier_debit_note_id,
                     'deductions' => $deducted,

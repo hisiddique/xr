@@ -73,7 +73,7 @@ new #[Title('Supplier Details')] class extends Component
             ->with(['items', 'payoutAllocations', 'debitNotes'])
             ->get();
 
-        $totalInvoiceAmount = (float) $invoices->sum(fn ($inv) => $inv->grossTotal);
+        $totalInvoiceAmount = (float) $invoices->sum(fn ($inv) => $inv->payableTotal);
         $totalPaid = (float) $invoices->sum(fn ($inv) => (float) $inv->payoutAllocations->sum('allocated_amount'));
         $outstandingAmount = (float) $invoices->sum(fn ($inv) => $inv->outstandingAmount);
         $invoicesPaidCount = $invoices->filter(fn ($inv) => $inv->outstandingAmount <= 0.001)->count();
@@ -722,7 +722,7 @@ new #[Title('Supplier Details')] class extends Component
                             <tr class="border-b border-zinc-100 dark:border-white/[0.06]">
                                 <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Invoice No</th>
                                 <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Date</th>
-                                <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Gross (£)</th>
+                                <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Payable (£)</th>
                                 <th class="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Status</th>
                                 <th class="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Files</th>
                             </tr>
@@ -736,7 +736,7 @@ new #[Title('Supplier Details')] class extends Component
                                         </a>@if($inv->supplier_ref_invoice_no) <span class="font-mono text-zinc-400 dark:text-zinc-500">({{ $inv->supplier_ref_invoice_no }})</span>@endif
                                     </td>
                                     <td class="py-2.5 pr-4 text-zinc-600 dark:text-zinc-400">{{ $inv->invoice_date->format('d M Y') }}</td>
-                                    <td class="py-2.5 pr-4 font-mono text-zinc-900 dark:text-white">£{{ number_format($inv->grossTotal, 2) }}</td>
+                                    <td class="py-2.5 pr-4 font-mono text-zinc-900 dark:text-white">£{{ number_format($inv->payableTotal, 2) }}</td>
                                     <td class="py-2.5 pr-4">
                                         <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ $inv->status->ringColor() }}">
                                             {{ $inv->status->label() }}

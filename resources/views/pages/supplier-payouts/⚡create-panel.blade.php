@@ -150,10 +150,10 @@ new class extends Component {
                 ->with(['items', 'payoutAllocations', 'debitNotes'])
                 ->get()
                 ->each(function (SupplierInvoice $invoice) use ($linkedByInvoice, &$rows) {
-                    $grossTotal = $invoice->grossTotal;
+                    $payableTotal = $invoice->payableTotal;
                     $paid = (float) $invoice->payoutAllocations->sum('allocated_amount');
                     $deducted = (float) $invoice->debitNotes->sum(fn ($dn) => (float) $dn->pivot->applied_amount);
-                    $effective = max(0, $grossTotal - $paid - $deducted);
+                    $effective = max(0, $payableTotal - $paid - $deducted);
 
                     if ($effective <= 0.001) {
                         return;
@@ -167,7 +167,7 @@ new class extends Component {
                         'reference' => $invoice->supplier_invoice_no,
                         'supplier_ref' => $invoice->supplier_ref_invoice_no,
                         'invoice_date' => $invoice->invoice_date->format('d M Y'),
-                        'original_amount' => $grossTotal,
+                        'original_amount' => $payableTotal,
                         'debit_note_ref' => $firstDn?->reference,
                         'debit_note_id' => $firstDn?->id,
                         'deductions' => $deducted,
@@ -203,10 +203,10 @@ new class extends Component {
             ->with(['items', 'payoutAllocations', 'debitNotes'])
             ->get()
             ->map(function (SupplierInvoice $invoice) {
-                $grossTotal = $invoice->grossTotal;
+                $payableTotal = $invoice->payableTotal;
                 $paid = (float) $invoice->payoutAllocations->sum('allocated_amount');
                 $deducted = (float) $invoice->debitNotes->sum(fn ($dn) => (float) $dn->pivot->applied_amount);
-                $effective = max(0, $grossTotal - $paid - $deducted);
+                $effective = max(0, $payableTotal - $paid - $deducted);
                 $debitNote = $invoice->debitNotes->first();
 
                 return [
@@ -214,7 +214,7 @@ new class extends Component {
                     'reference' => $invoice->supplier_invoice_no,
                     'supplier_ref' => $invoice->supplier_ref_invoice_no,
                     'invoice_date' => $invoice->invoice_date->format('d M Y'),
-                    'original_amount' => $grossTotal,
+                    'original_amount' => $payableTotal,
                     'debit_note_ref' => $debitNote?->reference,
                     'debit_note_id' => $debitNote?->id,
                     'deductions' => $deducted,

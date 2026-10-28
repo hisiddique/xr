@@ -139,3 +139,20 @@ test('autoAllocate on edit excludes payout own existing allocations from already
     expect((float) $byInvoice[$inv1->id]['allocated_amount'])->toBe(100.0);
     expect((float) $byInvoice[$inv2->id]['allocated_amount'])->toBe(50.0);
 });
+
+test('autoAllocate uses the invoice total after trade discount', function () {
+    $invoice = makeInvoice($this->supplier, $this->user, 100, '2024-01-01');
+    $invoice->update(['trade_discount' => 10]);
+
+    $payout = SupplierPayout::create([
+        'supplier_id' => $this->supplier->id,
+        'amount' => 500,
+        'payout_date' => now(),
+        'created_by' => $this->user->id,
+    ]);
+
+    $rows = $this->allocator->autoAllocate($payout);
+
+    expect($rows)->toHaveCount(1);
+    expect($rows[0]['allocated_amount'])->toBe(90.0);
+});
