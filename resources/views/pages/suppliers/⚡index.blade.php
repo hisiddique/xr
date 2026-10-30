@@ -4,6 +4,7 @@ use App\Livewire\Concerns\WithSorting;
 use App\Models\Supplier;
 use App\Support\Search;
 use App\Traits\WithPerPage;
+use Flux\Flux;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -46,6 +47,35 @@ new #[Title('Suppliers')] class extends Component {
     public function updatedPerPage(): void
     {
         $this->resetPage();
+    }
+
+    public ?int $deletingId = null;
+
+    #[Computed]
+    public function deletingSupplier(): ?Supplier
+    {
+        return $this->deletingId ? Supplier::find($this->deletingId) : null;
+    }
+
+    public function deleteSupplier(): void
+    {
+        abort_unless(auth()->user()->can('supplier-delete'), 403);
+
+        $supplier = $this->deletingSupplier;
+
+        if ($supplier === null) {
+            return;
+        }
+
+        if ($message = $supplier->deletionBlockedMessage($supplier->company_name)) {
+            Flux::toast(heading: __('Cannot Delete Supplier'), text: $message, variant: 'danger', duration: 0);
+        } else {
+            $supplier->delete();
+            Flux::toast(variant: 'success', text: __('Supplier deleted successfully.'));
+        }
+
+        $this->deletingId = null;
+        Flux::modal('delete-supplier')->close();
     }
 
     #[Computed]
@@ -170,7 +200,7 @@ new #[Title('Suppliers')] class extends Component {
                                 data-row-index="{{ $loop->index }}"
                                 @can('supplier-show') data-view-url="{{ route('suppliers.show', $supplier) }}" @endcan
                                 @can('supplier-edit') data-edit-url="{{ route('suppliers.edit', $supplier) }}" @endcan
-                                @can('supplier-delete') data-delete-modal="delete-supplier-{{ $supplier->id }}" @endcan
+                                @can('supplier-delete') data-delete-modal="delete-supplier" data-delete-id="{{ $supplier->id }}" @endcan
                                 @class([
                                     'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
                                     'sticky bottom-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_-1px_0_0_theme(--color-zinc-100)] dark:shadow-[0_-1px_0_0_theme(--color-white/0.06)]' => false && $loop->last, // sticky first/last row disabled
@@ -251,7 +281,16 @@ new #[Title('Suppliers')] class extends Component {
                                         <flux:button size="xs" variant="ghost" icon="pencil" :href="route('suppliers.edit', $supplier)" wire:navigate data-row-action="edit" />
                                         @endcan
                                         @can('supplier-delete')
-                                        <livewire:pages::suppliers.delete-modal :supplier="$supplier" :key="'delete-'.$supplier->id" />
+                                        <flux:button
+                                            size="xs"
+                                            variant="ghost"
+                                            icon="trash"
+                                            wire:click="$set('deletingId', {{ $supplier->id }})"
+                                            x-on:click="$flux.modal('delete-supplier').show()"
+                                            class="text-red-500 hover:text-red-700"
+                                            :title="__('Delete')"
+                                            data-row-action="delete"
+                                        />
                                         @endcan
                                     </div>
                                 </td>
@@ -269,5 +308,31 @@ new #[Title('Suppliers')] class extends Component {
     </div>
 
     <div x-data x-init="$nextTick(() => Alpine.store('hotkeys').focusZone('table'))"></div>
+
+    <flux:modal name="delete-supplier" focusable class="max-w-md" @close="$wire.set('deletingId', null)">
+        @if($this->deletingSupplier)
+            <div class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ __('Delete Supplier') }}</flux:heading>
+                    <flux:subheading>
+                        {{ __('Are you sure you want to delete :company? This action cannot be undone.', ['company' => $this->deletingSupplier->company_name]) }}
+                    </flux:subheading>
+                    @if($this->deletingSupplier->deletionBlockers() === [])
+                        <flux:text class="mt-2 text-emerald-600 dark:text-emerald-400">{{ $this->deletingSupplier->noRelatedRecordsMessage($this->deletingSupplier->company_name) }}</flux:text>
+                    @endif
+                </div>
+
+                <div class="flex justify-end gap-3">
+                    <flux:modal.close>
+                        <flux:button variant="filled">{{ __('Cancel') }}</flux:button>
+                    </flux:modal.close>
+
+                    <flux:button variant="danger" wire:click="deleteSupplier" wire:loading.attr="disabled">
+                        {{ __('Delete Supplier') }}
+                    </flux:button>
+                </div>
+            </div>
+        @endif
+    </flux:modal>
 
 </div>

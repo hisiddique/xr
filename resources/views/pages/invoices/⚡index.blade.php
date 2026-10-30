@@ -125,6 +125,37 @@ new #[Title('Invoices')] class extends Component
 
     public ?int $emailingDocumentId = null;
 
+    public ?int $deletingDocumentId = null;
+
+    #[Computed]
+    public function deletingDocument(): ?Document
+    {
+        return $this->deletingDocumentId ? Document::invoices()->with('convertedFrom')->find($this->deletingDocumentId) : null;
+    }
+
+    public function deleteDocument(): void
+    {
+        abort_unless(auth()->user()->can('invoice-delete'), 403);
+
+        $document = $this->deletingDocument;
+
+        if ($document !== null) {
+            DB::transaction(function () use ($document) {
+                $source = $document->convertedFrom;
+
+                $document->delete();
+
+                if ($source && $source->status === DocumentStatus::Converted) {
+                    $source->update(['status' => DocumentStatus::Active]);
+                }
+            });
+        }
+
+        $this->deletingDocumentId = null;
+        Flux::toast(variant: 'success', text: __('Invoice deleted successfully.'));
+        Flux::modal('delete-document')->close();
+    }
+
     /** @return Document|null */
     #[Computed]
     public function emailingDocument(): ?Document
@@ -605,7 +636,16 @@ new #[Title('Invoices')] class extends Component
                                                 @endif
                                             </span>
                                             @can('invoice-delete')
-                                            <livewire:pages::invoices.delete-modal :document="$invoice" :key="'delete-'.$invoice->id" />
+                                            <flux:button
+                                                size="xs"
+                                                variant="ghost"
+                                                icon="trash"
+                                                wire:click="$set('deletingDocumentId', {{ $invoice->id }})"
+                                                x-on:click="$flux.modal('delete-document').show()"
+                                                class="text-red-500 hover:text-red-700"
+                                                :title="__('Delete')"
+                                                data-row-action="delete"
+                                            />
                                             @endcan
                                         @endif
                                     </div>
@@ -675,5 +715,36 @@ new #[Title('Invoices')] class extends Component
     @endif
 
     <x-ui.clone-confirm-modal />
+
+    <flux:modal name="delete-document" focusable class="max-w-md" @close="$wire.set('deletingDocumentId', null)">
+        @if($this->deletingDocument)
+            <div class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ __('Delete Invoice') }}</flux:heading>
+                    <flux:subheading>
+                        {{ __('Are you sure you want to delete :number? This will also delete all line items.', ['number' => $this->deletingDocument->doc_number]) }}
+                        @if($this->deletingDocument->convertedFrom)
+                            <span class="mt-2 block text-xs text-violet-600 dark:text-violet-400">
+                                {{ __('Source delivery note :dn will be reverted to Active so it can be re-converted.', ['dn' => $this->deletingDocument->convertedFrom->doc_number]) }}
+                            </span>
+                        @endif
+                        <span class="mt-2 block text-xs text-zinc-500">
+                            {{ __('Deleted invoices can be restored from the Trash filter on the Invoices list.') }}
+                        </span>
+                    </flux:subheading>
+                </div>
+
+                <div class="flex justify-end gap-3">
+                    <flux:modal.close>
+                        <flux:button variant="filled">{{ __('Cancel') }}</flux:button>
+                    </flux:modal.close>
+
+                    <flux:button variant="danger" wire:click="deleteDocument" wire:loading.attr="disabled">
+                        {{ __('Delete Invoice') }}
+                    </flux:button>
+                </div>
+            </div>
+        @endif
+    </flux:modal>
 
 </div>

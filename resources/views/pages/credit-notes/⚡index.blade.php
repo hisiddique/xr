@@ -121,6 +121,25 @@ new #[Title('Credit Notes')] class extends Component
 
     public ?int $emailingDocumentId = null;
 
+    public ?int $deletingDocumentId = null;
+
+    #[Computed]
+    public function deletingDocument(): ?Document
+    {
+        return $this->deletingDocumentId ? Document::creditNotes()->find($this->deletingDocumentId) : null;
+    }
+
+    public function deleteDocument(): void
+    {
+        abort_unless(auth()->user()->can('creditnote-delete'), 403);
+
+        $this->deletingDocument?->delete();
+
+        $this->deletingDocumentId = null;
+        Flux::toast(variant: 'success', text: __('Credit note deleted successfully.'));
+        Flux::modal('delete-document')->close();
+    }
+
     /** @return Document|null */
     #[Computed]
     public function emailingDocument(): ?Document
@@ -596,7 +615,16 @@ new #[Title('Credit Notes')] class extends Component
                                                 @endif
                                             </span>
                                             @can('creditnote-delete')
-                                            <livewire:pages::credit-notes.delete-modal :document="$creditNote" :key="'delete-'.$creditNote->id" />
+                                            <flux:button
+                                                size="xs"
+                                                variant="ghost"
+                                                icon="trash"
+                                                wire:click="$set('deletingDocumentId', {{ $creditNote->id }})"
+                                                x-on:click="$flux.modal('delete-document').show()"
+                                                class="text-red-500 hover:text-red-700"
+                                                :title="__('Delete')"
+                                                data-row-action="delete"
+                                            />
                                             @endcan
                                         @endif
                                     </div>
@@ -664,5 +692,31 @@ new #[Title('Credit Notes')] class extends Component
             :autoOpen="true"
             :key="'email-'.$emailingDocumentId" />
     @endif
+
+    <flux:modal name="delete-document" focusable class="max-w-md" @close="$wire.set('deletingDocumentId', null)">
+        @if($this->deletingDocument)
+            <div class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ __('Delete Credit Note') }}</flux:heading>
+                    <flux:subheading>
+                        {{ __('Are you sure you want to delete :number? This will also delete all line items.', ['number' => $this->deletingDocument->doc_number]) }}
+                        <span class="mt-2 block text-xs text-zinc-500">
+                            {{ __('Deleted credit notes can be restored from the Trash filter on the Credit Notes list.') }}
+                        </span>
+                    </flux:subheading>
+                </div>
+
+                <div class="flex justify-end gap-3">
+                    <flux:modal.close>
+                        <flux:button variant="filled">{{ __('Cancel') }}</flux:button>
+                    </flux:modal.close>
+
+                    <flux:button variant="danger" wire:click="deleteDocument" wire:loading.attr="disabled">
+                        {{ __('Delete Credit Note') }}
+                    </flux:button>
+                </div>
+            </div>
+        @endif
+    </flux:modal>
 
 </div>

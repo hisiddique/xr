@@ -70,6 +70,25 @@ new #[Title('Delivery Notes')] class extends Component
 
     public ?int $emailingDocumentId = null;
 
+    public ?int $deletingDocumentId = null;
+
+    #[Computed]
+    public function deletingDocument(): ?Document
+    {
+        return $this->deletingDocumentId ? Document::deliveryNotes()->find($this->deletingDocumentId) : null;
+    }
+
+    public function deleteDocument(): void
+    {
+        abort_unless(auth()->user()->can('deliverynote-delete'), 403);
+
+        $this->deletingDocument?->delete();
+
+        $this->deletingDocumentId = null;
+        Flux::toast(variant: 'success', text: __('Delivery note deleted successfully.'));
+        Flux::modal('delete-document')->close();
+    }
+
     /** @return Document|null */
     #[Computed]
     public function emailingDocument(): ?Document
@@ -532,7 +551,7 @@ new #[Title('Delivery Notes')] class extends Component
                                 @can('deliverynote-edit') data-edit-url="{{ route('delivery-notes.edit', $note) }}" @endcan
                                 data-email-modal="email-document-{{ $note->id }}"
                                 @if($note->status === DocumentStatus::Active) data-convert-modal="convert-dn" data-convert-id="{{ $note->id }}" @endif
-                                @can('deliverynote-delete') data-delete-modal="delete-document-{{ $note->id }}" @endcan
+                                @can('deliverynote-delete') data-delete-modal="delete-document" data-delete-id="{{ $note->id }}" @endcan
                                 @class([
                                     'transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5',
                                     'sticky bottom-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_-1px_0_0_theme(--color-zinc-100)] dark:shadow-[0_-1px_0_0_theme(--color-white/0.06)]' => false && $loop->last, // sticky first/last row disabled
@@ -645,7 +664,16 @@ new #[Title('Delivery Notes')] class extends Component
                                             />
                                         @endif
                                         @can('deliverynote-delete')
-                                        <livewire:pages::delivery-notes.delete-modal :document="$note" :key="'delete-'.$note->id" />
+                                        <flux:button
+                                            size="xs"
+                                            variant="ghost"
+                                            icon="trash"
+                                            wire:click="$set('deletingDocumentId', {{ $note->id }})"
+                                            x-on:click="$flux.modal('delete-document').show()"
+                                            class="text-red-500 hover:text-red-700"
+                                            :title="__('Delete')"
+                                            data-row-action="delete"
+                                        />
                                         @endcan
                                     </div>
                                 </td>
@@ -803,5 +831,28 @@ new #[Title('Delivery Notes')] class extends Component
     @endif
 
     <x-ui.clone-confirm-modal />
+
+    <flux:modal name="delete-document" focusable class="max-w-md" @close="$wire.set('deletingDocumentId', null)">
+        @if($this->deletingDocument)
+            <div class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ __('Delete Delivery Note') }}</flux:heading>
+                    <flux:subheading>
+                        {{ __('Are you sure you want to delete :number? This will also delete all line items. This action cannot be undone.', ['number' => $this->deletingDocument->doc_number]) }}
+                    </flux:subheading>
+                </div>
+
+                <div class="flex justify-end gap-3">
+                    <flux:modal.close>
+                        <flux:button variant="filled">{{ __('Cancel') }}</flux:button>
+                    </flux:modal.close>
+
+                    <flux:button variant="danger" wire:click="deleteDocument" wire:loading.attr="disabled">
+                        {{ __('Delete Delivery Note') }}
+                    </flux:button>
+                </div>
+            </div>
+        @endif
+    </flux:modal>
 
 </div>

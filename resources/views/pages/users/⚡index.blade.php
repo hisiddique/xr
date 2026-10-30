@@ -3,6 +3,7 @@
 use App\Models\User;
 use App\Support\Search;
 use App\UserRole;
+use Flux\Flux;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -26,6 +27,37 @@ new #[Title('Users')] class extends Component {
     public function updatedRole(): void
     {
         $this->resetPage();
+    }
+
+    public ?int $deletingId = null;
+
+    #[Computed]
+    public function deletingUser(): ?User
+    {
+        return $this->deletingId ? User::find($this->deletingId) : null;
+    }
+
+    public function deleteUser(): void
+    {
+        abort_unless(auth()->user()->can('user-delete'), 403);
+
+        $user = $this->deletingUser;
+
+        if ($user === null) {
+            return;
+        }
+
+        if ($user->id === auth()->id()) {
+            Flux::toast(variant: 'danger', text: __('You cannot delete your own account.'));
+        } elseif ($user->role === UserRole::Admin && User::where('role', 'admin')->count() <= 1) {
+            Flux::toast(variant: 'danger', text: __('At least one admin must remain.'));
+        } else {
+            $user->delete();
+            Flux::toast(variant: 'success', text: __('User :name deleted.', ['name' => $user->name]));
+        }
+
+        $this->deletingId = null;
+        Flux::modal('delete-user')->close();
     }
 
     #[Computed]
@@ -130,7 +162,7 @@ new #[Title('Users')] class extends Component {
                             <tr
                                 data-row-index="{{ $loop->index }}"
                                 @can('user-edit') data-edit-url="{{ route('users.edit', $user) }}" @endcan
-                                @if($user->id !== auth()->id()) @can('user-delete') data-delete-modal="delete-user-{{ $user->id }}" @endcan @endif
+                                @if($user->id !== auth()->id()) @can('user-delete') data-delete-modal="delete-user" data-delete-id="{{ $user->id }}" @endcan @endif
                                 class="transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-500/5"
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
@@ -166,7 +198,16 @@ new #[Title('Users')] class extends Component {
                                         @endcan
                                         @if($user->id !== auth()->id())
                                             @can('user-delete')
-                                            <livewire:pages::users.delete-modal :user="$user" :key="'delete-'.$user->id" />
+                                            <flux:button
+                                                size="xs"
+                                                variant="ghost"
+                                                icon="trash"
+                                                wire:click="$set('deletingId', {{ $user->id }})"
+                                                x-on:click="$flux.modal('delete-user').show()"
+                                                class="text-red-500 hover:text-red-700"
+                                                :title="__('Delete')"
+                                                data-row-action="delete"
+                                            />
                                             @endcan
                                         @endif
                                     </div>
@@ -184,5 +225,28 @@ new #[Title('Users')] class extends Component {
     </div>
 
     <div x-data x-init="$nextTick(() => Alpine.store('hotkeys').focusZone('table'))"></div>
+
+    <flux:modal name="delete-user" focusable class="max-w-md" @close="$wire.set('deletingId', null)">
+        @if($this->deletingUser)
+            <div class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ __('Delete User') }}</flux:heading>
+                    <flux:subheading>
+                        {{ __('Are you sure you want to delete :name? This action cannot be undone.', ['name' => $this->deletingUser->name]) }}
+                    </flux:subheading>
+                </div>
+
+                <div class="flex justify-end gap-3">
+                    <flux:modal.close>
+                        <flux:button variant="filled">{{ __('Cancel') }}</flux:button>
+                    </flux:modal.close>
+
+                    <flux:button variant="danger" wire:click="deleteUser" wire:loading.attr="disabled">
+                        {{ __('Delete User') }}
+                    </flux:button>
+                </div>
+            </div>
+        @endif
+    </flux:modal>
 
 </div>
