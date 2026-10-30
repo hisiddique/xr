@@ -1141,6 +1141,12 @@ document.addEventListener('alpine:init', () => {
                     this.moveFormField(e.target, 'linear', 1);
                     return;
                 }
+                const rowFields = Array.from(tr.querySelectorAll('input:not([type=hidden]), select')).filter((el) => el.offsetParent !== null);
+                const nextInRow = rowFields[rowFields.indexOf(e.target) + 1];
+                if (nextInRow) {
+                    this._focusWithRetry(nextInRow);
+                    return;
+                }
                 const rowIdx = parseInt(tr.dataset.rowIdx, 10);
                 const nextTr = this.$refs.rowsBody?.querySelector(`tr[data-row-idx="${rowIdx + 1}"]`);
                 if (nextTr) {
@@ -2020,11 +2026,11 @@ document.addEventListener('alpine:init', () => {
 
         handleShortcut(e) {
             if (e.ctrlKey || e.metaKey || e.altKey) return;
-            const map = { s: 0, p: 1, c: 2 };
-            const idx = map[e.key.toLowerCase()];
-            if (idx === undefined) return;
+            const key = e.key.toLowerCase();
+            const button = this._buttons().find((b) => b.querySelector('u')?.textContent.toLowerCase() === key);
+            if (!button) return;
             e.preventDefault();
-            this._buttons()[idx]?.click();
+            button.click();
         },
     }));
 

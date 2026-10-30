@@ -61,6 +61,7 @@ class SupplierStatementService
     public function buildDebitNoteRows(Supplier $supplier, array $filters): array
     {
         return $supplier->debitNotes()
+            ->external()
             ->when($filters['dateFrom'] ?? '', fn ($q, $date) => $q->whereDate('doc_date', '>=', $date))
             ->when($filters['dateTo'] ?? '', fn ($q, $date) => $q->whereDate('doc_date', '<=', $date))
             ->orderBy('doc_date')

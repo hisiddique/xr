@@ -29,6 +29,8 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
 
     public string $notes = '';
 
+    public bool $is_internal = false;
+
     public array $items = [];
 
     public array $units = [];
@@ -78,6 +80,13 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
         $this->dispatch('debit-note-discount-default', percent: $this->tradeDiscount);
     }
 
+    public function updatedIsInternal(): void
+    {
+        if ($this->is_internal) {
+            $this->supplier_invoice_id = null;
+        }
+    }
+
     private function tradeDiscountFor(Supplier $supplier): ?float
     {
         $discount = (float) $supplier->trade_discount;
@@ -107,6 +116,11 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
 
     public function commitDebitNote(bool $moveToPayout = false): void
     {
+        if ($this->is_internal) {
+            $this->supplier_invoice_id = null;
+            $moveToPayout = false;
+        }
+
         $this->items = array_values(array_filter($this->items, fn ($i) => trim((string) ($i['details'] ?? '')) !== ''
             || (float) ($i['quantity'] ?? 0) > 0
             || (float) ($i['price'] ?? 0) > 0
@@ -175,6 +189,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                 'doc_date' => $this->doc_date,
                 'supplier_invoice_id' => $this->supplier_invoice_id ?: null,
                 'notes' => $this->notes ?: null,
+                'is_internal' => $this->is_internal,
                 'vat_rate' => $this->vatRate,
                 'vat_inclusive' => true,
                 'subtotal' => $subtotal,
@@ -187,7 +202,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                 $dn->items()->create($row);
             }
 
-            if ($this->supplier_invoice_id) {
+            if (! $this->is_internal && $this->supplier_invoice_id) {
                 $invoice = SupplierInvoice::with(['items', 'debitNotes.items'])->find($this->supplier_invoice_id);
                 $dn->load('items');
                 $priorNotes = $invoice->debitNotes->push($dn);
@@ -229,6 +244,7 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
         $this->doc_date = now()->format('Y-m-d');
         $this->supplier_invoice_id = null;
         $this->notes = '';
+        $this->is_internal = false;
         $this->items = [
             ['id' => null, 'details' => '', 'quantity' => '', 'price' => '', 'per' => '', 'is_note' => false, 'discount_percent' => null, 'vat_applicable' => true, 'net_override' => null, 'vat_override' => null],
         ];
@@ -290,19 +306,24 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                     </div>
                 </div>
                 <flux:input wire:model="doc_date" type="date" :label="__('Document Date')" required />
-                <div>
-                    <flux:label>{{ __('Against Supplier Invoice') }}</flux:label>
-                    <flux:select wire:model="supplier_invoice_id" class="mt-1.5" :disabled="! $supplier_id" x-on:focus="$el.showPicker?.()">
-                        <flux:select.option value="">— None —</flux:select.option>
-                        @foreach($this->supplierInvoices as $inv)
-                            <flux:select.option :value="$inv['id']">{{ $inv['supplier_invoice_no'] }}@if(! empty($inv['supplier_ref_invoice_no'])) ({{ $inv['supplier_ref_invoice_no'] }})@endif</flux:select.option>
-                        @endforeach
-                    </flux:select>
-                    @error('supplier_invoice_id') <flux:error>{{ $message }}</flux:error> @enderror
-                </div>
+                @if(! $is_internal)
+                    <div>
+                        <flux:label>{{ __('Against Supplier Invoice') }}</flux:label>
+                        <flux:select wire:model="supplier_invoice_id" class="mt-1.5" :disabled="! $supplier_id" x-on:focus="$el.showPicker?.()">
+                            <flux:select.option value="">— None —</flux:select.option>
+                            @foreach($this->supplierInvoices as $inv)
+                                <flux:select.option :value="$inv['id']">{{ $inv['supplier_invoice_no'] }}@if(! empty($inv['supplier_ref_invoice_no'])) ({{ $inv['supplier_ref_invoice_no'] }})@endif</flux:select.option>
+                            @endforeach
+                        </flux:select>
+                        @error('supplier_invoice_id') <flux:error>{{ $message }}</flux:error> @enderror
+                    </div>
+                @endif
                 <div class="md:col-span-2">
                     <flux:input wire:model="notes" :label="__('Notes')" :placeholder="__('Optional notes for this debit note…')" />
                     @error('notes') <flux:error>{{ $message }}</flux:error> @enderror
+                </div>
+                <div class="md:col-span-2">
+                    <flux:checkbox wire:model.live="is_internal" :label="__('Internal (record only)')" />
                 </div>
             </div>
         </div>
@@ -496,7 +517,9 @@ new #[Title('Issue Supplier Debit Note')] class extends Component {
                 class="flex flex-col gap-2 [&_button:focus]:ring-2 [&_button:focus]:ring-indigo-500 [&_button:focus]:ring-offset-2 [&_button:focus]:outline-none dark:[&_button:focus]:ring-offset-zinc-900"
             >
                 <flux:button variant="primary" class="justify-start" wire:click="commitDebitNote(false)" data-dn-commit-btn><div><u>S</u>ave debit note</div></flux:button>
-                <flux:button class="justify-start" wire:click="commitDebitNote(true)"><div>Save &amp; move to <u>p</u>ayout</div></flux:button>
+                @if(! $is_internal)
+                    <flux:button class="justify-start" wire:click="commitDebitNote(true)"><div>Save &amp; move to <u>p</u>ayout</div></flux:button>
+                @endif
                 <flux:button variant="ghost" class="justify-start" x-on:click="$flux.modal('confirm-commit-debit-note').close()"><div><u>C</u>ancel</div></flux:button>
             </div>
         </div>

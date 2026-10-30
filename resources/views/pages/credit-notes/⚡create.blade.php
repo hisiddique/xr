@@ -24,6 +24,7 @@ new #[Title('New Credit Note')] class extends Component {
     public string $doc_date = '';
     public string $notes = '';
     public ?int $credited_invoice_id = null;
+    public bool $is_internal = false;
     public array $items = [];
     public array $units = [];
     public array $users = [];
@@ -57,6 +58,14 @@ new #[Title('New Credit Note')] class extends Component {
     public function updatedCreditedInvoiceId(?int $value): void
     {
         $this->invoiceItemSuggestions = $this->buildInvoiceSuggestions($value);
+    }
+
+    public function updatedIsInternal(bool $value): void
+    {
+        if ($value) {
+            $this->credited_invoice_id = null;
+            $this->invoiceItemSuggestions = [];
+        }
     }
 
     private function buildInvoiceSuggestions(?int $invoiceId): array
@@ -166,8 +175,9 @@ new #[Title('New Credit Note')] class extends Component {
             'doc_number'          => $docNumber,
             'doc_date'            => $this->doc_date,
             'notes'               => $this->notes ?: null,
-            'credited_invoice_id' => $this->credited_invoice_id ?: null,
-            'subtotal'            => $totals['subtotal'],
+            'is_internal'         => $this->is_internal,
+            'credited_invoice_id' => $this->is_internal ? null : ($this->credited_invoice_id ?: null),
+            'subtotal'           => $totals['subtotal'],
             'trade_discount'      => 0,
             'discount_amount'     => 0,
             'vat_amount'          => $totals['vat'],
@@ -265,19 +275,27 @@ new #[Title('New Credit Note')] class extends Component {
                     </flux:select>
                     @error('assigned_to') <flux:error>{{ $message }}</flux:error> @enderror
                 </div>
-                <div>
-                    <flux:label>{{ __('Against Invoice') }}</flux:label>
-                    <flux:select wire:model.live="credited_invoice_id" class="mt-1.5" :disabled="! $customer_id" x-on:focus="$el.showPicker?.()">
-                        <flux:select.option value="">— None —</flux:select.option>
-                        @foreach($this->customerInvoices as $inv)
-                            <flux:select.option :value="$inv['id']">{{ $inv['doc_number'] }}</flux:select.option>
-                        @endforeach
-                    </flux:select>
-                    @error('credited_invoice_id') <flux:error>{{ $message }}</flux:error> @enderror
-                </div>
-                <div>
-                    <flux:input wire:model="notes" :label="__('Notes')" :placeholder="__('Optional notes for this credit note…')" />
-                    @error('notes') <flux:error>{{ $message }}</flux:error> @enderror
+                @if(! $is_internal)
+                    <div>
+                        <flux:label>{{ __('Against Invoice') }}</flux:label>
+                        <flux:select wire:model.live="credited_invoice_id" class="mt-1.5" :disabled="! $customer_id" x-on:focus="$el.showPicker?.()">
+                            <flux:select.option value="">— None —</flux:select.option>
+                            @foreach($this->customerInvoices as $inv)
+                                <flux:select.option :value="$inv['id']">{{ $inv['doc_number'] }}</flux:select.option>
+                            @endforeach
+                        </flux:select>
+                        @error('credited_invoice_id') <flux:error>{{ $message }}</flux:error> @enderror
+                    </div>
+                @endif
+                <div class="flex flex-col gap-3">
+                    <div>
+                        <flux:input wire:model="notes" :label="__('Notes')" :placeholder="__('Optional notes for this credit note…')" />
+                        @error('notes') <flux:error>{{ $message }}</flux:error> @enderror
+                    </div>
+                    <flux:checkbox
+                        wire:model.live="is_internal"
+                        :label="__('Internal (record only)')"
+                    />
                 </div>
             </div>
         </div>

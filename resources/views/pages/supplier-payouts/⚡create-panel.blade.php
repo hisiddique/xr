@@ -62,7 +62,7 @@ new class extends Component {
             return;
         }
 
-        $debitNotes = SupplierDebitNote::whereIn('id', $ids)->get();
+        $debitNotes = SupplierDebitNote::external()->whereIn('id', $ids)->get();
 
         if ($debitNotes->count() !== $ids->count() || $debitNotes->pluck('supplier_id')->unique()->count() !== 1) {
             $this->dn = '';

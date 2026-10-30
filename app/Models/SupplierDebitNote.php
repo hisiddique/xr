@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\SupplierDebitNoteStatus;
 use App\Support\Money;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -29,6 +30,7 @@ class SupplierDebitNote extends Model
         'vat_inclusive',
         'total',
         'status',
+        'is_internal',
         'created_by',
         'deleted_at',
     ];
@@ -68,7 +70,13 @@ class SupplierDebitNote extends Model
             'vat_inclusive' => 'boolean',
             'total' => 'decimal:2',
             'status' => SupplierDebitNoteStatus::class,
+            'is_internal' => 'boolean',
         ];
+    }
+
+    public function scopeExternal(Builder $query): Builder
+    {
+        return $query->where('is_internal', false);
     }
 
     public function supplier(): BelongsTo

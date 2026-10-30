@@ -106,7 +106,7 @@ new #[Title('Customer Details')] class extends Component
     #[Computed]
     public function creditNotes()
     {
-        return $this->customer->creditNotes()->with(['assignee', 'creditedInvoice'])->orderByDesc('doc_date')->orderByDesc('doc_number')->paginate(100, pageName: 'cn_page');
+        return $this->customer->creditNotes()->external()->with(['assignee', 'creditedInvoice'])->orderByDesc('doc_date')->orderByDesc('doc_number')->paginate(100, pageName: 'cn_page');
     }
 
     #[Computed]
@@ -336,6 +336,7 @@ new #[Title('Customer Details')] class extends Component
         }
 
         $creditNotes = $this->customer->creditNotes()
+            ->external()
             ->with(['assignee', 'creditedInvoice', 'creditAllocations.invoice'])
             ->withSum('creditAllocations as applied_total', 'amount')
             ->get();

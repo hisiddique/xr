@@ -42,6 +42,7 @@ class Document extends Model
         'converted_from_id',
         'credited_invoice_id',
         'notes',
+        'is_internal',
         'deleted_at',
     ];
 
@@ -61,6 +62,7 @@ class Document extends Model
             'status' => DocumentStatus::class,
             'is_settled' => 'boolean',
             'legacy_confirmed_paid' => 'boolean',
+            'is_internal' => 'boolean',
         ];
     }
 
@@ -118,6 +120,11 @@ class Document extends Model
     public function scopeCreditNotes(Builder $query): Builder
     {
         return $query->where('type', DocumentType::CreditNote);
+    }
+
+    public function scopeExternal(Builder $query): Builder
+    {
+        return $query->where('is_internal', false);
     }
 
     public function scopeOrderByNumberPart(Builder $query, string $direction = 'asc'): Builder
@@ -183,6 +190,7 @@ class Document extends Model
     public static function availableCreditForCustomer(int $customerId): float
     {
         return (float) self::creditNotes()
+            ->external()
             ->where('customer_id', $customerId)
             ->withSum('creditAllocations', 'amount')
             ->get()

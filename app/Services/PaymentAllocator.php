@@ -311,6 +311,7 @@ class PaymentAllocator
 
             $creditNotes = Document::whereIn('id', $creditNoteIds)
                 ->where('type', DocumentType::CreditNote)
+                ->external()
                 ->where('customer_id', $payment->customer_id)
                 ->withSum(['creditAllocations' => fn ($query) => $query
                     ->where(fn ($q) => $q->whereNull('payment_id')->orWhere('payment_id', '!=', $payment->id))], 'amount')

@@ -28,7 +28,7 @@ new #[Title('Dashboard')] class extends Component {
     #[Computed]
     public function creditNoteCount(): int
     {
-        return Document::creditNotes()->count();
+        return Document::creditNotes()->external()->count();
     }
 
     #[Computed]

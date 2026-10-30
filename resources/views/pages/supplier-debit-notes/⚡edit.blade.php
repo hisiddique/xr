@@ -6,6 +6,7 @@ use App\Models\LookupUnit;
 use App\Models\Setting;
 use App\Models\SupplierDebitNote;
 use App\Models\SupplierInvoice;
+use App\Models\SupplierPayoutAllocation;
 use App\Services\DocumentTotalsCalculator;
 use App\Services\SupplierInvoiceTotalsCalculator;
 use App\Support\Money;
@@ -27,6 +28,8 @@ new #[Title('Edit Debit Note')] class extends Component {
 
     public string $notes = '';
 
+    public bool $is_internal = false;
+
     public array $items = [];
 
     public array $units = [];
@@ -41,6 +44,7 @@ new #[Title('Edit Debit Note')] class extends Component {
         $this->doc_date = $this->debitNote->doc_date->format('Y-m-d');
         $this->supplier_invoice_id = $this->debitNote->supplier_invoice_id;
         $this->notes = $this->debitNote->notes ?? '';
+        $this->is_internal = (bool) $this->debitNote->is_internal;
         $this->vatRate = (float) ($this->debitNote->vat_rate ?? Setting::get('vat_rate', 20));
         $this->units = LookupUnit::orderBy('name')->get(['id', 'name'])->pluck('name')->toArray();
         $this->items = $this->debitNote->items->map(fn ($item) => [
@@ -55,6 +59,20 @@ new #[Title('Edit Debit Note')] class extends Component {
             'net_override' => $item->net_override !== null ? (float) $item->net_override : null,
             'vat_override' => $item->vat_override !== null ? (float) $item->vat_override : null,
         ])->toArray();
+    }
+
+    public function updatedIsInternal(): void
+    {
+        if ($this->is_internal) {
+            $this->supplier_invoice_id = null;
+        }
+    }
+
+    #[Computed]
+    public function hasLinkedRecords(): bool
+    {
+        return $this->debitNote->appliedInvoices()->exists()
+            || SupplierPayoutAllocation::where('supplier_debit_note_id', $this->debitNote->id)->exists();
     }
 
     #[Computed]
@@ -77,6 +95,14 @@ new #[Title('Edit Debit Note')] class extends Component {
 
     public function save(): void
     {
+        if ($this->hasLinkedRecords) {
+            $this->is_internal = (bool) $this->debitNote->is_internal;
+        }
+
+        if ($this->is_internal) {
+            $this->supplier_invoice_id = null;
+        }
+
         $this->items = array_values(array_filter($this->items, fn ($i) => trim((string) ($i['details'] ?? '')) !== ''
             || (float) ($i['quantity'] ?? 0) > 0
             || (float) ($i['price'] ?? 0) > 0
@@ -145,6 +171,7 @@ new #[Title('Edit Debit Note')] class extends Component {
                 'doc_date' => $this->doc_date,
                 'supplier_invoice_id' => $newInvoiceId,
                 'notes' => $this->notes ?: null,
+                'is_internal' => $this->is_internal,
                 'vat_rate' => $this->vatRate,
                 'subtotal' => $subtotal,
                 'vat_amount' => $vatAmount,
@@ -219,19 +246,24 @@ new #[Title('Edit Debit Note')] class extends Component {
                     </div>
                 </div>
                 <flux:input wire:model="doc_date" type="date" :label="__('Document Date')" required />
-                <div>
-                    <flux:label>{{ __('Against Supplier Invoice') }}</flux:label>
-                    <flux:select wire:model="supplier_invoice_id" class="mt-1.5" x-on:focus="$el.showPicker?.()">
-                        <flux:select.option value="">— None —</flux:select.option>
-                        @foreach($this->supplierInvoices as $inv)
-                            <flux:select.option :value="$inv['id']">{{ $inv['supplier_invoice_no'] }}@if(! empty($inv['supplier_ref_invoice_no'])) ({{ $inv['supplier_ref_invoice_no'] }})@endif</flux:select.option>
-                        @endforeach
-                    </flux:select>
-                    @error('supplier_invoice_id') <flux:error>{{ $message }}</flux:error> @enderror
-                </div>
+                @if(! $is_internal)
+                    <div>
+                        <flux:label>{{ __('Against Supplier Invoice') }}</flux:label>
+                        <flux:select wire:model="supplier_invoice_id" class="mt-1.5" x-on:focus="$el.showPicker?.()">
+                            <flux:select.option value="">— None —</flux:select.option>
+                            @foreach($this->supplierInvoices as $inv)
+                                <flux:select.option :value="$inv['id']">{{ $inv['supplier_invoice_no'] }}@if(! empty($inv['supplier_ref_invoice_no'])) ({{ $inv['supplier_ref_invoice_no'] }})@endif</flux:select.option>
+                            @endforeach
+                        </flux:select>
+                        @error('supplier_invoice_id') <flux:error>{{ $message }}</flux:error> @enderror
+                    </div>
+                @endif
                 <div class="md:col-span-2">
                     <flux:input wire:model="notes" :label="__('Notes')" :placeholder="__('Optional notes for this debit note…')" />
                     @error('notes') <flux:error>{{ $message }}</flux:error> @enderror
+                </div>
+                <div class="md:col-span-2">
+                    <flux:checkbox wire:model.live="is_internal" :disabled="$this->hasLinkedRecords" :label="__('Internal (record only)')" />
                 </div>
             </div>
         </div>

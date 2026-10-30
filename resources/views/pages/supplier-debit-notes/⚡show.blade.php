@@ -63,6 +63,7 @@ new #[Title('Supplier Debit Note')] class extends Component {
             @can('supplierdebitnote-edit')
             <flux:button variant="ghost" icon="pencil" size="sm" :href="route('supplier-debit-notes.edit', $debitNote)" wire:navigate>Edit</flux:button>
             @endcan
+            @unless($debitNote->is_internal)
             <flux:button variant="ghost" icon="arrow-down-tray" size="sm" :href="route('supplier-debit-notes.pdf.download', $debitNote)">
                 Download PDF
             </flux:button>
@@ -80,6 +81,7 @@ new #[Title('Supplier Debit Note')] class extends Component {
             >
                 Send Email
             </flux:button>
+            @endunless
             @can('supplierdebitnote-delete')
             <flux:button
                 size="sm"
@@ -111,6 +113,11 @@ new #[Title('Supplier Debit Note')] class extends Component {
                         <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset {{ $debitNote->status->ringColor() }}">
                             {{ $debitNote->status->label() }}
                         </span>
+                        @if($debitNote->is_internal)
+                            <flux:tooltip content="Internal">
+                                <flux:icon.eye-slash variant="mini" class="size-5 text-zinc-400" />
+                            </flux:tooltip>
+                        @endif
                     </div>
                     <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
                         {{ $debitNote->supplier->company_name }} &middot; {{ $debitNote->doc_date->format('d M Y') }}
@@ -296,6 +303,7 @@ new #[Title('Supplier Debit Note')] class extends Component {
         </x-ui.section-card>
     @endif
 
+    @unless($debitNote->is_internal)
     {{-- Email History --}}
     <x-ui.section-card title="Email History">
         @if($debitNote->emailLogs->isEmpty())
@@ -330,6 +338,7 @@ new #[Title('Supplier Debit Note')] class extends Component {
             </ul>
         @endif
     </x-ui.section-card>
+    @endunless
 
     {{-- Delete modal --}}
     <flux:modal name="delete-debit-note" class="max-w-sm">
@@ -345,6 +354,8 @@ new #[Title('Supplier Debit Note')] class extends Component {
         </div>
     </flux:modal>
 
-    <livewire:pages::supplier-debit-notes.email-modal :debitNote="$debitNote" :key="'email-'.$debitNote->id" />
+    @unless($debitNote->is_internal)
+        <livewire:pages::supplier-debit-notes.email-modal :debitNote="$debitNote" :key="'email-'.$debitNote->id" />
+    @endunless
 
 </div>

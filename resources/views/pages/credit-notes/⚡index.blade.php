@@ -520,7 +520,8 @@ new #[Title('Credit Notes')] class extends Component
                                         />
                                     @endif
                                 </td>
-                                <td class="px-4 py-2">
+                                <td class="min-w-36 whitespace-nowrap px-4 py-2">
+                                    <div class="flex items-center gap-1.5">
                                     @can('creditnote-show')
                                     <a href="{{ route('credit-notes.show', $creditNote) }}" wire:navigate @class([
                                         'inline-flex items-center rounded-md px-2 py-0.5 font-mono text-sm font-semibold text-indigo-700 hover:underline dark:text-indigo-300',
@@ -540,6 +541,12 @@ new #[Title('Credit Notes')] class extends Component
                                         <x-ui.highlight :text="$creditNote->doc_number" :term="$search" />
                                     </span>
                                     @endcan
+                                    @if($creditNote->is_internal)
+                                        <flux:tooltip content="Internal">
+                                            <flux:icon.eye-slash variant="micro" class="size-4 shrink-0 text-zinc-400" />
+                                        </flux:tooltip>
+                                    @endif
+                                    </div>
                                 </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center gap-2.5">

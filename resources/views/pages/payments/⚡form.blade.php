@@ -297,6 +297,7 @@ new #[Title('Payment')] class extends Component {
         $paymentId = $this->payment?->id;
 
         return Document::creditNotes()
+            ->external()
             ->where('customer_id', $customerId)
             ->withSum(['creditAllocations' => function ($query) use ($paymentId) {
                 if ($paymentId) {

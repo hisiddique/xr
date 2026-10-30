@@ -34,13 +34,19 @@ new #[Title('Credit Note')] class extends Component
 
 <div
     class="flex flex-col gap-6"
-    x-data="showPageKeys({
-        f8: () => Flux.modal('email-document-{{ $document->id }}').show(),
-        edit: () => Livewire.navigate('{{ route('credit-notes.edit', $document) }}'),
-        viewPdf: () => window.open('{{ route('documents.pdf', $document) }}', '_blank'),
-        downloadPdf: () => window.location.href = '{{ route('documents.pdf.download', $document) }}',
-    })"
-    x-init="window.dnRunPostCreate('{{ route('documents.pdf', $document) }}', 'email-document-{{ $document->id }}', '{{ route('documents.record-print', $document) }}')"
+    @if($document->is_internal)
+        x-data="showPageKeys({
+            edit: () => Livewire.navigate('{{ route('credit-notes.edit', $document) }}'),
+        })"
+    @else
+        x-data="showPageKeys({
+            f8: () => Flux.modal('email-document-{{ $document->id }}').show(),
+            edit: () => Livewire.navigate('{{ route('credit-notes.edit', $document) }}'),
+            viewPdf: () => window.open('{{ route('documents.pdf', $document) }}', '_blank'),
+            downloadPdf: () => window.location.href = '{{ route('documents.pdf.download', $document) }}',
+        })"
+        x-init="window.dnRunPostCreate('{{ route('documents.pdf', $document) }}', 'email-document-{{ $document->id }}', '{{ route('documents.record-print', $document) }}')"
+    @endif
 >
 
     {{-- Back link --}}
@@ -65,6 +71,11 @@ new #[Title('Credit Note')] class extends Component
                     <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset {{ $document->status->ringColor() }}">
                         {{ $document->status->label() }}
                     </span>
+                    @if($document->is_internal)
+                        <flux:tooltip content="Internal">
+                            <flux:icon.eye-slash variant="mini" class="size-5 text-zinc-400" />
+                        </flux:tooltip>
+                    @endif
                     <span class="text-sm text-zinc-500 dark:text-zinc-400">{{ $document->doc_date->format('d F Y') }}</span>
                     @if($document->creator)
                         <span class="text-sm text-zinc-500 dark:text-zinc-400">· {{ __('Created by :name', ['name' => $document->creator->name]) }}</span>
@@ -81,6 +92,7 @@ new #[Title('Credit Note')] class extends Component
                     @can('creditnote-delete')
                     <livewire:pages::credit-notes.delete-modal :document="$document" :key="'delete-'.$document->id" />
                     @endcan
+                    @unless($document->is_internal)
                     <flux:button variant="ghost" icon="arrow-down-tray" size="sm" :href="route('documents.pdf.download', $document)">
                         Download PDF
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 text-[10px] font-mono text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">⇧P</kbd>
@@ -101,6 +113,7 @@ new #[Title('Credit Note')] class extends Component
                         Send Email
                         <kbd x-show="$store.hotkeys.showLabels" x-cloak class="ml-1.5 rounded border border-indigo-300 bg-indigo-50 px-1 py-0.5 text-[10px] font-mono text-indigo-600 dark:border-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">F8</kbd>
                     </flux:button>
+                    @endunless
                 </div>
             </div>
 
@@ -233,6 +246,7 @@ new #[Title('Credit Note')] class extends Component
             @endif
 
             {{-- Email History --}}
+            @unless($document->is_internal)
             <x-ui.section-card title="Email History">
                 @if($document->emailLogs->isEmpty())
                     <x-ui.empty-state
@@ -266,10 +280,13 @@ new #[Title('Credit Note')] class extends Component
                     </ul>
                 @endif
             </x-ui.section-card>
+            @endunless
 
         </div>
     </div>
 
+    @unless($document->is_internal)
     <livewire:pages::documents.email-modal :document="$document" :key="'email-'.$document->id" />
+    @endunless
 
 </div>

@@ -49,6 +49,7 @@ new #[Title('Supplier Details')] class extends Component
     {
         return $this->supplier
             ->debitNotes()
+            ->external()
             ->with('supplierInvoice')
             ->orderByDesc('doc_date')
             ->orderByDesc('reference')
@@ -255,6 +256,7 @@ new #[Title('Supplier Details')] class extends Component
         }
 
         $debitNotes = $this->supplier->debitNotes()
+            ->external()
             ->with(['supplierInvoice', 'appliedInvoices'])
             ->get();
 

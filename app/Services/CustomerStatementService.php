@@ -65,6 +65,7 @@ class CustomerStatementService
     public function buildCreditNoteRows(Customer $customer, array $filters): array
     {
         return $customer->creditNotes()
+            ->external()
             ->when($filters['dateFrom'] ?? '', fn ($q, $date) => $q->whereDate('doc_date', '>=', $date))
             ->when($filters['dateTo'] ?? '', fn ($q, $date) => $q->whereDate('doc_date', '<=', $date))
             ->orderBy('doc_date')

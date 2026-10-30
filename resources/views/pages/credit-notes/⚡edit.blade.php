@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\LookupUnit;
 use App\Services\DocumentTotalsCalculator;
 use Flux\Flux;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
@@ -17,6 +18,7 @@ new #[Title('Edit Credit Note')] class extends Component {
     public string $order_no = '';
     public string $notes = '';
     public ?int $credited_invoice_id = null;
+    public bool $is_internal = false;
     public ?int $assigned_to = null;
     public string $assigneeName = '';
     public array $items = [];
@@ -32,6 +34,7 @@ new #[Title('Edit Credit Note')] class extends Component {
         $this->order_no = $this->document->order_no ?? '';
         $this->notes = $this->document->notes ?? '';
         $this->credited_invoice_id = $this->document->credited_invoice_id;
+        $this->is_internal = (bool) $this->document->is_internal;
         $this->assigned_to = $this->document->assigned_to ?? $this->document->created_by;
         $this->assigneeName = $this->document->assignee?->name ?? $this->document->creator?->name ?? '';
         $this->vatRegistered = (bool) $this->document->customer->vat_registered;
@@ -50,6 +53,12 @@ new #[Title('Edit Credit Note')] class extends Component {
         $this->users = \App\Models\User::orderBy('name')->get(['id', 'name', 'status'])->toArray();
     }
 
+    #[Computed]
+    public function hasCreditAllocations(): bool
+    {
+        return $this->document->creditAllocations()->exists();
+    }
+
     public function save(): void
     {
         $this->items = array_values(array_filter($this->items, fn ($i) =>
@@ -65,7 +74,13 @@ new #[Title('Edit Credit Note')] class extends Component {
 
         $totals = \App\Services\DocumentTotalsCalculator::creditNoteTotal(collect($this->items), $this->document->customer, $this->document->vat_rate !== null ? (float) $this->document->vat_rate : null);
 
+        $isInternal = $this->hasCreditAllocations
+            ? (bool) $this->document->is_internal
+            : $this->is_internal;
+
         $this->document->update([
+            'is_internal' => $isInternal,
+            'credited_invoice_id' => $isInternal ? null : $this->document->credited_invoice_id,
             'doc_date' => $this->doc_date,
             'order_no' => $this->order_no ?: null,
             'notes' => $this->notes ?: null,
@@ -186,6 +201,12 @@ new #[Title('Edit Credit Note')] class extends Component {
                 <div class="md:col-span-2">
                     <flux:input wire:model="notes" :label="__('Notes')" :placeholder="__('Optional notes for this credit note…')" />
                     @error('notes') <flux:error>{{ $message }}</flux:error> @enderror
+                    <flux:checkbox
+                        class="mt-3"
+                        wire:model.live="is_internal"
+                        :disabled="$this->hasCreditAllocations"
+                        :label="__('Internal (record only)')"
+                    />
                 </div>
             </div>
         </div>

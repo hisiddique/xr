@@ -189,7 +189,8 @@ new #[Title('Supplier Debit Notes')] class extends Component {
                                 ])
                                 :class="{ '!bg-indigo-50 dark:!bg-indigo-500/10 ring-2 ring-inset ring-indigo-500/30': $store.hotkeys.selectedRow === {{ $loop->index }} }"
                             >
-                                <td class="px-4 py-2">
+                                <td class="min-w-36 whitespace-nowrap px-4 py-2">
+                                    <div class="flex items-center gap-2">
                                     @can('supplierdebitnote-show')
                                     <a href="{{ route('supplier-debit-notes.show', $note) }}" wire:navigate class="font-mono text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
                                         {{ $note->reference }}
@@ -199,6 +200,12 @@ new #[Title('Supplier Debit Notes')] class extends Component {
                                         {{ $note->reference }}
                                     </span>
                                     @endcan
+                                    @if($note->is_internal)
+                                        <flux:tooltip content="Internal">
+                                            <flux:icon.eye-slash variant="micro" class="size-4 shrink-0 text-zinc-400" />
+                                        </flux:tooltip>
+                                    @endif
+                                    </div>
                                 </td>
                                 <td class="px-4 py-2 font-medium text-zinc-900 dark:text-white">
                                     {{ $note->supplier?->company_name ?? '—' }}
